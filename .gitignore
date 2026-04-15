@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Graphify build output
+graphify-out/
+
+# Obsidian
+.obsidian/
+
+# OS
+.DS_Store
