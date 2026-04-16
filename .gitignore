@@ -9,11 +9,11 @@ wheels/
 # Virtual environments
 .venv
 
-# Graphify build output
-graphify-out/
-
 # Obsidian
 .obsidian/
 
 # OS
 .DS_Store
+
+# Content repo (separate git in data/)
+data/

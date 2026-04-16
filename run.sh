@@ -4,4 +4,4 @@ ANTHROPIC_AUTH_TOKEN=token-abc123 \
 ANTHROPIC_DEFAULT_OPUS_MODEL=chat_model \
 ANTHROPIC_DEFAULT_SONNET_MODEL=chat_model \
 ANTHROPIC_DEFAULT_HAIKU_MODEL=chat_model \
-claude
+claude --dangerously-skip-permissions #-p "/graphify raw/ --update --wiki --obsidian --obsidian-dir ."

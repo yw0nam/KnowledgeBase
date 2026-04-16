@@ -6,8 +6,9 @@
 set -euo pipefail
 
 BASEDIR="$(cd "$(dirname "$0")/.." && pwd)"
-CLAUDE_MD_DIR="$BASEDIR/raw/github/claude-md"
-ISSUES_DIR="$BASEDIR/raw/github/issues"
+DATADIR="$BASEDIR/data"
+CLAUDE_MD_DIR="$DATADIR/raw/github/claude-md"
+ISSUES_DIR="$DATADIR/raw/github/issues"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 if [ $# -eq 0 ]; then
