@@ -11,7 +11,7 @@ wheels/
 
 # Obsidian
 .obsidian/
-
+graphify-out/
 # OS
 .DS_Store
 

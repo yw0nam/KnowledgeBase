@@ -21,19 +21,21 @@ KnowledgeBase/          ← root git (scripts, config — 공개 가능)
     │   ├── web/            Web clippings
     │   └── manual/         Anything dropped by hand
     ├── wiki/
-    │   ├── entities/       Named objects (projects, tools, people)
+    │   ├── entities/       Named objects ({subject}/{YYYY-MM}/)
     │   ├── concepts/       Abstract ideas (patterns, protocols)
-    │   ├── summaries/      Time/project rollups
+    │   ├── summaries/      Time/subject rollups
     │   ├── decisions/      Architecture Decision Records
     │   └── questions/      Saved Q&A
+    ├── graphify-out/       Build artifacts (gitignored)
+    │   └── graph.json      Knowledge graph
     └── log.md
 ```
 
 ## Pipeline
 
 ```
-1.INGEST → 2.FILL → 3.LINT → 4.LOG
-(script)    (LLM)  (script)  (LLM)
+1.INGEST → 2.GRAPH → 3.FILL → 4.LINT → 5.LOG
+(script)  (graphify)  (LLM)  (script)  (LLM)
 ```
 
 ### 1. Ingest
@@ -43,18 +45,27 @@ KnowledgeBase/          ← root git (scripts, config — 공개 가능)
 # or drop files into data/raw/manual/
 ```
 
-### 2. Fill
+### 2. Graph
 
-`git -C data/ status`로 새 raw 파일 파악 후 Claude가 직접 wiki 페이지 작성.
+```
+/graphify data/raw/ --update --no-viz
+```
 
-### 3. Lint
+`--update`: 새 파일만 재추출 (캐시 활용). `--no-viz`: HTML 스킵.
+결과: `data/graphify-out/graph.json`
+
+### 3. Fill
+
+`git -C data/ status`로 새 raw 파일 파악 → `data/graphify-out/graph.json` 참조 → Claude가 wiki 페이지 작성.
+
+### 4. Lint
 
 ```bash
 uv run python3 scripts/lint-wiki.py               # errors = fail
 uv run python3 scripts/lint-wiki.py --strict      # warnings = fail too
 ```
 
-### 4. Log + Commit
+### 5. Log + Commit
 
 ```bash
 # LLM appends to data/log.md after lint passes
@@ -96,7 +107,7 @@ tags: [architecture, entity, project]
 ### Naming
 
 - Raw: `{repo}_{number}.md`, `chat_{timestamp}.md`, `event_{date}_{slug}.md`
-- Wiki entities: `{project}/{YYYY-MM}/PascalCase.md`
+- Wiki entities: `{subject}/{YYYY-MM}/PascalCase.md`
 - Wiki concepts: `Snake_Case.md` (flat)
 - Summaries: ISO (`2026-W16.md`, `2026-04.md`)
 
@@ -112,5 +123,6 @@ tags: [architecture, entity, project]
 | `CLAUDE.md` | Schema + pipeline definition |
 | `data/log.md` | Append-only operation record |
 | `data/wiki/index.md` | Entry point |
+| `data/graphify-out/graph.json` | Knowledge graph (build artifact) |
 | `scripts/ingest-github.sh` | Step 1: GitHub data collection |
-| `scripts/lint-wiki.py` | Step 3: validation |
+| `scripts/lint-wiki.py` | Step 4: validation |

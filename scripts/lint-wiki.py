@@ -29,8 +29,8 @@ WIKI_DIR = DATADIR / "wiki"
 RAW_DIR = DATADIR / "raw"
 
 REQUIRED_FM_FIELDS = {
-    "entity": ["type", "created", "updated", "sources", "graph_nodes", "tags"],
-    "concept": ["type", "created", "updated", "sources", "graph_nodes", "tags"],
+    "entity": ["type", "created", "updated", "sources", "tags"],
+    "concept": ["type", "created", "updated", "sources", "tags"],
     "decision": ["type", "created", "updated", "sources", "tags"],
     "summary": ["type", "created", "updated", "sources", "tags"],
     "question": ["type", "created", "updated", "sources", "tags"],
@@ -208,12 +208,6 @@ def lint(result: LintResult):
             if field not in fm:
                 result.error(rel, f"missing frontmatter field: {field}")
 
-        # Empty graph_nodes (non-index pages)
-        if page_type in ("entity", "concept"):
-            gn = fm.get("graph_nodes", [])
-            if not gn or gn == []:
-                result.warn(rel, "graph_nodes is empty")
-
         # ── 7. Empty relation parens ────────────────────────────────────
         if "## Relationships" in body:
             rel_section = body.split("## Relationships")[1].split("##")[0]
@@ -236,7 +230,7 @@ def lint(result: LintResult):
         if isinstance(sources, list):
             for src in sources:
                 if isinstance(src, str) and src:
-                    src_path = BASEDIR / src
+                    src_path = DATADIR / src
                     if not src_path.exists():
                         result.error(rel, f"source file not found: {src}")
 

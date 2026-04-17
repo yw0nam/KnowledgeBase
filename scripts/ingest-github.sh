@@ -11,6 +11,8 @@ CLAUDE_MD_DIR="$DATADIR/raw/github/claude-md"
 ISSUES_DIR="$DATADIR/raw/github/issues"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+mkdir -p "$CLAUDE_MD_DIR" "$ISSUES_DIR"
+
 if [ $# -eq 0 ]; then
     echo "Usage: $0 owner/repo [owner/repo2 ...]"
     exit 1
@@ -52,6 +54,7 @@ for REPO in "$@"; do
     gh issue list --repo "$REPO" --state all --limit 30 \
         --json number,title,body,state,labels,createdAt,author \
         --jq '.[] | @base64' 2>/dev/null | while read -r ITEM; do
+        [ -z "$ITEM" ] && continue
         DECODED=$(echo "$ITEM" | base64 --decode)
         NUM=$(echo "$DECODED" | jq -r '.number')
         TITLE=$(echo "$DECODED" | jq -r '.title')
@@ -89,6 +92,7 @@ for REPO in "$@"; do
     gh pr list --repo "$REPO" --state all --limit 30 \
         --json number,title,body,state,labels,createdAt,author \
         --jq '.[] | @base64' 2>/dev/null | while read -r ITEM; do
+        [ -z "$ITEM" ] && continue
         DECODED=$(echo "$ITEM" | base64 --decode)
         NUM=$(echo "$DECODED" | jq -r '.number')
         TITLE=$(echo "$DECODED" | jq -r '.title')
