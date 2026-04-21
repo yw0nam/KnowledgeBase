@@ -12,11 +12,44 @@ ISSUES_DIR="$DATADIR/raw/github/issues"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 mkdir -p "$CLAUDE_MD_DIR" "$ISSUES_DIR"
-
 if [ $# -eq 0 ]; then
     echo "Usage: $0 owner/repo [owner/repo2 ...]"
     exit 1
 fi
+
+# Write file only if content changed (ignoring captured_at line)
+write_if_changed() {
+    local dest="$1" tmp="$2"
+    # Normalize to LF before storing
+    tr -d '\r' < "$tmp" > "${tmp}.lf" && mv "${tmp}.lf" "$tmp"
+    if [ -f "$dest" ]; then
+        local tmp_dest tmp_new
+        tmp_dest=$(mktemp)
+        tmp_new=$(mktemp)
+        grep -v '^captured_at:' "$dest" | tr -d '\r' > "$tmp_dest"
+        grep -v '^captured_at:' "$tmp"               > "$tmp_new"
+        if diff "$tmp_dest" "$tmp_new" > /dev/null 2>&1; then
+            rm "$tmp" "$tmp_dest" "$tmp_new"
+            return
+        fi
+        rm "$tmp_dest" "$tmp_new"
+    fi
+    mv "$tmp" "$dest"
+}
+
+# Fetch last comment body for an issue/PR number (empty string if none)
+last_comment() {
+    local repo="$1" num="$2"
+    gh api "repos/$repo/issues/$num/comments" --jq '.[-1].body // ""' 2>/dev/null \
+        | tr -d '\000-\011\013-\037' \
+        || echo ""
+}
+
+last_comment_author() {
+    local repo="$1" num="$2"
+    gh api "repos/$repo/issues/$num/comments" --jq '.[-1].user.login // ""' 2>/dev/null \
+        || echo ""
+}
 
 for REPO in "$@"; do
     OWNER=$(echo "$REPO" | cut -d/ -f1)
@@ -31,6 +64,7 @@ for REPO in "$@"; do
 
     if [ -n "$CONTENT" ]; then
         COMMIT=$(gh api "repos/$REPO/commits?path=CLAUDE.md&per_page=1" --jq '.[0].sha' 2>/dev/null || echo "unknown")
+        TMP=$(mktemp)
         {
             echo "---"
             echo "source_url: \"https://github.com/$REPO/blob/main/CLAUDE.md\""
@@ -43,7 +77,8 @@ for REPO in "$@"; do
             echo "---"
             echo ""
             echo "$CONTENT" | base64 --decode
-        } > "$OUTFILE"
+        } > "$TMP"
+        write_if_changed "$OUTFILE" "$TMP"
         echo "  CLAUDE.md -> $OUTFILE"
     else
         echo "  CLAUDE.md not found in $REPO, skipping"
@@ -52,8 +87,9 @@ for REPO in "$@"; do
     # --- Issues ---
     echo "  Fetching issues..."
     gh issue list --repo "$REPO" --state all --limit 30 \
-        --json number,title,body,state,labels,createdAt,author \
-        --jq '.[] | @base64' 2>/dev/null | while read -r ITEM; do
+        --json number,title,body,state,labels,createdAt,author 2>/dev/null \
+        | jq '[.[] | walk(if type == "string" then (explode | map(select(. == 10 or (. > 31 and . != 127))) | implode) else . end)]' \
+        | jq -r '.[] | @base64' | while read -r ITEM; do
         [ -z "$ITEM" ] && continue
         DECODED=$(echo "$ITEM" | base64 --decode)
         NUM=$(echo "$DECODED" | jq -r '.number')
@@ -64,7 +100,11 @@ for REPO in "$@"; do
         AUTHOR=$(echo "$DECODED" | jq -r '.author.login // "unknown"')
         LABELS=$(echo "$DECODED" | jq -r '[.labels[].name] | join(", ")')
 
+        LAST_COMMENT=$(last_comment "$REPO" "$NUM")
+        LAST_COMMENT_AUTHOR=$(last_comment_author "$REPO" "$NUM")
+
         ISSUE_FILE="$ISSUES_DIR/${NAME}_${NUM}.md"
+        TMP=$(mktemp)
         {
             echo "---"
             echo "source_url: \"https://github.com/$REPO/issues/$NUM\""
@@ -83,26 +123,45 @@ for REPO in "$@"; do
             echo "# $TITLE"
             echo ""
             echo "$BODY"
-        } > "$ISSUE_FILE"
+            if [ -n "$LAST_COMMENT" ]; then
+                echo ""
+                echo "## Last Comment ($LAST_COMMENT_AUTHOR)"
+                echo ""
+                echo "$LAST_COMMENT"
+            fi
+        } > "$TMP"
+        write_if_changed "$ISSUE_FILE" "$TMP"
     done
     echo "  Issues done."
 
     # --- PRs ---
     echo "  Fetching PRs..."
     gh pr list --repo "$REPO" --state all --limit 30 \
-        --json number,title,body,state,labels,createdAt,author \
-        --jq '.[] | @base64' 2>/dev/null | while read -r ITEM; do
+        --json number,title,body,state,labels,createdAt,author,mergedAt 2>/dev/null \
+        | jq '[.[] | walk(if type == "string" then (explode | map(select(. == 10 or (. > 31 and . != 127))) | implode) else . end)]' \
+        | jq -r '.[] | @base64' | while read -r ITEM; do
         [ -z "$ITEM" ] && continue
         DECODED=$(echo "$ITEM" | base64 --decode)
         NUM=$(echo "$DECODED" | jq -r '.number')
         TITLE=$(echo "$DECODED" | jq -r '.title')
         BODY=$(echo "$DECODED" | jq -r '.body // ""')
-        STATE=$(echo "$DECODED" | jq -r '.state')
+        MERGED_AT=$(echo "$DECODED" | jq -r '.mergedAt // ""')
         CREATED=$(echo "$DECODED" | jq -r '.createdAt')
         AUTHOR=$(echo "$DECODED" | jq -r '.author.login // "unknown"')
         LABELS=$(echo "$DECODED" | jq -r '[.labels[].name] | join(", ")')
 
+        # Derive state: MERGED > OPEN/CLOSED
+        if [ -n "$MERGED_AT" ]; then
+            STATE="MERGED"
+        else
+            STATE=$(echo "$DECODED" | jq -r '.state')
+        fi
+
+        LAST_COMMENT=$(last_comment "$REPO" "$NUM")
+        LAST_COMMENT_AUTHOR=$(last_comment_author "$REPO" "$NUM")
+
         PR_FILE="$ISSUES_DIR/${NAME}_PR${NUM}.md"
+        TMP=$(mktemp)
         {
             echo "---"
             echo "source_url: \"https://github.com/$REPO/pull/$NUM\""
@@ -110,6 +169,10 @@ for REPO in "$@"; do
             echo "repo: \"$REPO\""
             echo "pr_number: $NUM"
             echo "state: \"$STATE\""
+            echo "merged: $([ -n "$MERGED_AT" ] && echo 'true' || echo 'false')"
+            if [ -n "$MERGED_AT" ]; then
+                echo "merged_at: \"$MERGED_AT\""
+            fi
             echo "labels: \"$LABELS\""
             echo "captured_at: \"$NOW\""
             echo "created_at: \"$CREATED\""
@@ -121,7 +184,14 @@ for REPO in "$@"; do
             echo "# PR #$NUM: $TITLE"
             echo ""
             echo "$BODY"
-        } > "$PR_FILE"
+            if [ -n "$LAST_COMMENT" ]; then
+                echo ""
+                echo "## Last Comment ($LAST_COMMENT_AUTHOR)"
+                echo ""
+                echo "$LAST_COMMENT"
+            fi
+        } > "$TMP"
+        write_if_changed "$PR_FILE" "$TMP"
     done
     echo "  PRs done."
 
