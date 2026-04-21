@@ -1,0 +1,43 @@
+{
+  "directed": true,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "id": "n1",
+      "label": "TTS engine",
+      "source_file": "raw/manual/tts.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "n2",
+      "label": "PR 42 add TTS support",
+      "source_file": "raw/github/issues/repo_PR42.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "n3",
+      "label": "voice synthesis",
+      "source_file": "raw/manual/voice.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "n4",
+      "label": "unrelated widget",
+      "source_file": "raw/manual/widget.md",
+      "source_location": "L1"
+    },
+    {
+      "id": "n5",
+      "label": "audio pipeline",
+      "source_file": "raw/manual/audio.md",
+      "source_location": "L1"
+    }
+  ],
+  "links": [
+    {"source": "n1", "target": "n2", "relation": "mentioned_in", "confidence": 0.9},
+    {"source": "n1", "target": "n3", "relation": "related_to", "confidence": 0.8},
+    {"source": "n3", "target": "n5", "relation": "part_of", "confidence": 0.7},
+    {"source": "n2", "target": "n5", "relation": "uses", "confidence": 0.6}
+  ]
+}
