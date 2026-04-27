@@ -144,9 +144,8 @@ def extract_links(content: str) -> list[str]:
     return re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", content)
 
 
-def lint(result: LintResult, wiki_dir: Path = None, raw_dir: Path = None) -> None:
+def lint(result: LintResult, wiki_dir: Path = None) -> None:
     wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
-    raw_dir = raw_dir if raw_dir is not None else RAW_DIR
     # data_dir is wiki_dir.parent so that frontmatter `sources:` (relative to data/)
     # resolve correctly even when tests pass a tmp wiki_dir.
     data_dir = wiki_dir.parent
@@ -247,13 +246,18 @@ def lint(result: LintResult, wiki_dir: Path = None, raw_dir: Path = None) -> Non
                         result.error(rel, f"source file not found: {src}")
 
         # ── 11. Stub pages ──────────────────────────────────────────────
-        # _index.md hub pages are excluded — they're allowed to be short,
-        # check_index_sync handles them separately.
-        if stem != "_index" and len(body.strip()) < STUB_THRESHOLD_CHARS:
-            result.warn(
-                rel,
-                f"stub page — body {len(body.strip())} chars (< {STUB_THRESHOLD_CHARS})",
-            )
+        # Subject hubs at entities/{subject}/_index.md are excluded — they're
+        # allowed to be short, check_index_sync handles them separately. Other
+        # files happening to be named _index.md (outside entities/) still get
+        # the stub check.
+        rel_posix = rel.replace("\\", "/")
+        is_subject_hub = stem == "_index" and "entities/" in rel_posix
+        if not is_subject_hub:
+            if len(body.strip()) < STUB_THRESHOLD_CHARS:
+                result.warn(
+                    rel,
+                    f"stub page — body {len(body.strip())} chars (< {STUB_THRESHOLD_CHARS})",
+                )
 
     # ── 10. Orphan pages ────────────────────────────────────────────────
     for stem in all_stems:
@@ -281,6 +285,13 @@ def check_index_sync(result: LintResult, wiki_dir: Path = None) -> None:
     For every entities/{subject}/_index.md:
       - listed_but_missing → ERROR (broken hub)
       - on_disk_not_listed → WARN  (page exists but not advertised in the hub)
+
+    Scope constraint: wikilinks are extracted ONLY from the ``## Pages``
+    section, after fenced code blocks (``` ... ``` and ~~~ ... ~~~) are
+    stripped. Links elsewhere in the hub body (notes, references, prompt
+    templates) are intentionally ignored to avoid false positives. If the hub
+    has no ``## Pages`` heading, the sync check is skipped entirely for that
+    hub — empty/template hubs shouldn't flood the output.
     """
     wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
     entities_root = wiki_dir / "entities"
@@ -292,7 +303,30 @@ def check_index_sync(result: LintResult, wiki_dir: Path = None) -> None:
         subject = subject_dir.name
         rel_index = str(index_file.relative_to(wiki_dir))
 
-        listed_stems = set(extract_links(index_file.read_text()))
+        raw_text = index_file.read_text()
+
+        # Strip fenced code blocks so wikilinks inside templates / examples
+        # are not mistaken for hub entries.
+        stripped = re.sub(r"```.*?```", "", raw_text, flags=re.DOTALL)
+        stripped = re.sub(r"~~~.*?~~~", "", stripped, flags=re.DOTALL)
+
+        # Limit scope to the ## Pages section (heading inclusive, up to the
+        # next ## heading or EOF). If the hub has no Pages heading at all,
+        # skip sync entirely.
+        pages_match = re.search(r"^##\s+Pages\b.*$", stripped, re.MULTILINE)
+        if not pages_match:
+            continue
+
+        section_start = pages_match.end()
+        next_heading = re.search(r"^##\s+", stripped[section_start:], re.MULTILINE)
+        section_end = (
+            section_start + next_heading.start()
+            if next_heading
+            else len(stripped)
+        )
+        pages_section = stripped[section_start:section_end]
+
+        listed_stems = set(extract_links(pages_section))
 
         on_disk_stems = {
             f.stem

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Iterable
 
@@ -76,38 +77,17 @@ def _cjk_aware_match(target: str, query: str) -> bool:
     )
 
 
-def _collect_index_titles(wiki_dir: Path) -> list[str]:
-    """Recursively read every `_index.md` under wiki_dir, extract wikilinks
-    [[Stem]] or [[Stem|Display]], return both stem and display strings as
-    candidate match titles. For [[Stem|Display]] both surface forms are
-    appended consecutively so callers can pair them. Empty list if wiki_dir
-    doesn't exist.
-    """
-    if not wiki_dir.exists():
-        return []
-    titles: list[str] = []
-    for f in wiki_dir.rglob("_index.md"):
-        try:
-            content = f.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for stem, display in _WIKILINK_RE.findall(content):
-            stem = stem.strip()
-            if stem:
-                titles.append(stem)
-            if display:
-                display = display.strip()
-                if display:
-                    titles.append(display)
-    return titles
-
-
 def _collect_index_aliases(wiki_dir: Path) -> list[tuple[str, str]]:
-    """Like _collect_index_titles but returns (surface_title, target_stem)
-    pairs. surface_title is what we match against the query; target_stem is
-    what we substring-match against graph node labels. For plain [[Stem]]
-    both fields are equal. For [[Stem|Display]] we emit (Stem, Stem) and
+    """Recursively read every `_index.md` under wiki_dir, extract wikilinks
+    [[Stem]] or [[Stem|Display]], and return (surface_title, target_stem)
+    pairs.
+
+    surface_title is what we match against the query; target_stem is what
+    we substring-match against graph node labels. For plain [[Stem]] both
+    fields are equal. For [[Stem|Display]] we emit (Stem, Stem) and
     (Display, Stem) so a Korean alias still boosts the Latin-stem node.
+    Empty list if wiki_dir doesn't exist. Files we can't read (bad encoding,
+    permissions) are skipped with a stderr note.
     """
     if not wiki_dir.exists():
         return []
@@ -115,7 +95,8 @@ def _collect_index_aliases(wiki_dir: Path) -> list[tuple[str, str]]:
     for f in wiki_dir.rglob("_index.md"):
         try:
             content = f.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"kb_search: skipping unreadable {f}: {e}", file=sys.stderr)
             continue
         for stem, display in _WIKILINK_RE.findall(content):
             stem = stem.strip()
@@ -129,35 +110,15 @@ def _collect_index_aliases(wiki_dir: Path) -> list[tuple[str, str]]:
     return pairs
 
 
-def _collect_questions_titles(wiki_dir: Path) -> list[str]:
-    """Read every *.md under wiki_dir/questions/, return both file stem
-    and first H1 (`# ...`) text as candidate match titles. Empty list if
-    questions/ doesn't exist.
-    """
-    questions_dir = wiki_dir / "questions"
-    if not questions_dir.exists():
-        return []
-    titles: list[str] = []
-    for f in questions_dir.glob("*.md"):
-        titles.append(f.stem)
-        try:
-            content = f.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        for line in content.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("# ") and not stripped.startswith("## "):
-                h1 = stripped[2:].strip()
-                if h1:
-                    titles.append(h1)
-                break
-    return titles
-
-
 def _collect_questions_aliases(wiki_dir: Path) -> list[tuple[str, str]]:
-    """Like _collect_questions_titles but returns (surface_title, file_stem)
-    pairs. Both stem and H1 map back to the file stem so a CJK H1 still
-    boosts a Latin-stem-named graph node.
+    """Read every *.md under wiki_dir/questions/, returning (surface_title,
+    file_stem) pairs.
+
+    Both the file stem and the first H1 (`# ...`) line of the file map back
+    to the file stem, so a CJK H1 still boosts a Latin-stem-named graph
+    node. Empty list if questions/ doesn't exist. Files we can't read (bad
+    encoding, permissions) contribute their stem but no H1, with a stderr
+    note.
     """
     questions_dir = wiki_dir / "questions"
     if not questions_dir.exists():
@@ -168,7 +129,8 @@ def _collect_questions_aliases(wiki_dir: Path) -> list[tuple[str, str]]:
         pairs.append((stem, stem))
         try:
             content = f.read_text(encoding="utf-8")
-        except OSError:
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"kb_search: skipping unreadable {f}: {e}", file=sys.stderr)
             continue
         for line in content.splitlines():
             stripped = line.strip()
@@ -183,6 +145,7 @@ def _collect_questions_aliases(wiki_dir: Path) -> list[tuple[str, str]]:
 def find_start_nodes(
     G: nx.DiGraph,
     question: str,
+    *,
     wiki_dir: Path | None = None,
     top_n: int = 3,
 ) -> list[str]:

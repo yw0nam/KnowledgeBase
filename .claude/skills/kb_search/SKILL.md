@@ -94,7 +94,7 @@ body 구조:
 
 저장 후 lint를 따로 돌리지 않음 (다음 kb_update가 처리). 저장 후 한 줄 출력: `저장됨: data/wiki/questions/<Slug>.md`
 
-저장된 페이지는 이후 `find_start_nodes`의 wiki expansion(kb_search 보강 후)에서 picked up되어, 다음 검색의 entry point로 작동한다.
+저장된 페이지는 다음 kb_search 호출에서 `find_start_nodes`의 wiki expansion에 자동으로 entry point 후보로 들어간다.
 
 ### 답변 형식
 

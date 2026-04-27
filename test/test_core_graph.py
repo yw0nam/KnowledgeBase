@@ -255,3 +255,72 @@ def test_find_start_nodes_no_wiki_dir_backward_compat():
     # Korean query without wiki_dir cannot match a Latin-only label.
     start_cjk = find_start_nodes(G, "트랜스포머 어텐션")
     assert start_cjk == []
+
+
+def test_search_auto_derives_wiki_dir_from_graph_path(tmp_path):
+    """search() with no wiki_dir should derive `<graph.parent.parent>/wiki`.
+
+    Regression guard: if the auto-derivation regressed to `path.parent /
+    "wiki"` (one level up instead of two), the FooPage alias would not be
+    picked up and the start label would not appear in the output.
+    """
+    import json
+    from networkx.readwrite import json_graph
+    from kb_mcp.core.graph import search
+
+    graph_dir = tmp_path / "data" / "graphify-out"
+    graph_dir.mkdir(parents=True)
+    graph_path = graph_dir / "graph.json"
+
+    G = _build_graph([
+        ("foo", "FooPage analysis"),
+        ("other", "irrelevant node"),
+    ])
+    data = json_graph.node_link_data(G, edges="links")
+    graph_path.write_text(json.dumps(data), encoding="utf-8")
+
+    questions_dir = tmp_path / "data" / "wiki" / "questions"
+    questions_dir.mkdir(parents=True)
+    (questions_dir / "FooPage.md").write_text(
+        "# 한글 답변\n\nbody text\n",
+        encoding="utf-8",
+    )
+
+    out = search(question="한글 답변", graph_path=graph_path)
+
+    # FooPage node must surface in the start-label list of the output.
+    assert "FooPage analysis" in out
+
+
+def test_find_start_nodes_alias_boost_outranks_direct(tmp_path):
+    """Wiki alias boost (+5) should rank a node higher than a node that only
+    matches by label (+1), and ordering should reflect that.
+    """
+    from kb_mcp.core.graph import find_start_nodes
+
+    wiki_dir = tmp_path / "wiki"
+    entities = wiki_dir / "entities" / "Foo"
+    entities.mkdir(parents=True)
+    (entities / "_index.md").write_text(
+        "# Foo\n\n- [[BarPage|바 페이지]] — bar entry\n",
+        encoding="utf-8",
+    )
+
+    G = _build_graph([
+        ("direct_node", "transformer notes"),
+        ("boosted_node", "BarPage transformer"),
+    ])
+
+    # Both nodes match "transformer" by label (+1). boosted_node also
+    # contains "BarPage", which is the target_stem for the "바 페이지" alias
+    # in the wiki, so it gets +5 on top.
+    start = find_start_nodes(
+        G, "transformer 바 페이지", wiki_dir=wiki_dir, top_n=2
+    )
+    assert start[0] == "boosted_node"
+    assert start[1] == "direct_node"
+
+    # Without wiki_dir: only label match counts (likely tied at +1 each).
+    start_no_wiki = find_start_nodes(G, "transformer 바 페이지", top_n=2)
+    assert "boosted_node" in start_no_wiki
+    assert "direct_node" in start_no_wiki
