@@ -152,3 +152,175 @@ def test_search_invalid_mode_raises(sample_graph_path):
             budget=2000,
             graph_path=sample_graph_path,
         )
+
+
+def _build_graph(nodes: list[tuple[str, str]]):
+    """Helper: build a minimal nx.DiGraph from (id, label) pairs."""
+    import networkx as nx
+
+    G = nx.DiGraph()
+    for nid, label in nodes:
+        G.add_node(nid, label=label)
+    return G
+
+
+def test_find_start_nodes_latin_word_match():
+    from kb_mcp.core.graph import find_start_nodes
+
+    G = _build_graph([
+        ("a", "Transformer Attention Mechanism"),
+        ("b", "unrelated widget"),
+    ])
+
+    start = find_start_nodes(G, "transformer attention", top_n=3)
+
+    assert "a" in start
+    assert "b" not in start
+
+
+def test_find_start_nodes_cjk_bigram_match():
+    from kb_mcp.core.graph import find_start_nodes
+
+    G = _build_graph([
+        ("a", "지식 그래프 빌드 파이프라인"),
+        ("b", "음성 합성 엔진"),
+    ])
+
+    start = find_start_nodes(G, "지식 그래프 빌드 어떻게", top_n=3)
+
+    assert "a" in start
+    assert "b" not in start
+
+
+def test_find_start_nodes_index_expansion(tmp_path):
+    from kb_mcp.core.graph import find_start_nodes
+
+    wiki_dir = tmp_path / "wiki"
+    entities = wiki_dir / "entities" / "Foo"
+    entities.mkdir(parents=True)
+    (entities / "_index.md").write_text(
+        "# Foo\n\n- [[BarPage|바 페이지]] — bar entry\n",
+        encoding="utf-8",
+    )
+
+    G = _build_graph([
+        ("bar", "BarPage Implementation"),
+        ("other", "unrelated node"),
+    ])
+
+    # With wiki_dir: BarPage gets a +5 boost via the matched display title.
+    start = find_start_nodes(G, "바 페이지 어떻게", wiki_dir=wiki_dir, top_n=3)
+    assert "bar" in start
+
+    # Without wiki_dir: no Latin word len>2 matches "바 페이지 어떻게".
+    start_no_wiki = find_start_nodes(G, "바 페이지 어떻게", top_n=3)
+    assert start_no_wiki == []
+
+
+def test_find_start_nodes_questions_expansion(tmp_path):
+    from kb_mcp.core.graph import find_start_nodes
+
+    wiki_dir = tmp_path / "wiki"
+    questions = wiki_dir / "questions"
+    questions.mkdir(parents=True)
+    (questions / "QuxPage.md").write_text(
+        "# 쿡스 답변\n\nbody text\n",
+        encoding="utf-8",
+    )
+
+    G = _build_graph([
+        ("qux", "QuxPage subgraph"),
+        ("other", "irrelevant"),
+    ])
+
+    start = find_start_nodes(G, "쿡스", wiki_dir=wiki_dir, top_n=3)
+
+    assert "qux" in start
+    assert "other" not in start
+
+
+def test_find_start_nodes_no_wiki_dir_backward_compat():
+    from kb_mcp.core.graph import find_start_nodes
+
+    G = _build_graph([
+        ("a", "Transformer Attention Mechanism"),
+        ("b", "unrelated widget"),
+    ])
+
+    # Old 2-arg call signature still works; only label-based matching.
+    start = find_start_nodes(G, "transformer attention")
+    assert "a" in start
+    assert "b" not in start
+
+    # Korean query without wiki_dir cannot match a Latin-only label.
+    start_cjk = find_start_nodes(G, "트랜스포머 어텐션")
+    assert start_cjk == []
+
+
+def test_search_auto_derives_wiki_dir_from_graph_path(tmp_path):
+    """search() with no wiki_dir should derive `<graph.parent.parent>/wiki`.
+
+    Regression guard: if the auto-derivation regressed to `path.parent /
+    "wiki"` (one level up instead of two), the FooPage alias would not be
+    picked up and the start label would not appear in the output.
+    """
+    import json
+    from networkx.readwrite import json_graph
+    from kb_mcp.core.graph import search
+
+    graph_dir = tmp_path / "data" / "graphify-out"
+    graph_dir.mkdir(parents=True)
+    graph_path = graph_dir / "graph.json"
+
+    G = _build_graph([
+        ("foo", "FooPage analysis"),
+        ("other", "irrelevant node"),
+    ])
+    data = json_graph.node_link_data(G, edges="links")
+    graph_path.write_text(json.dumps(data), encoding="utf-8")
+
+    questions_dir = tmp_path / "data" / "wiki" / "questions"
+    questions_dir.mkdir(parents=True)
+    (questions_dir / "FooPage.md").write_text(
+        "# 한글 답변\n\nbody text\n",
+        encoding="utf-8",
+    )
+
+    out = search(question="한글 답변", graph_path=graph_path)
+
+    # FooPage node must surface in the start-label list of the output.
+    assert "FooPage analysis" in out
+
+
+def test_find_start_nodes_alias_boost_outranks_direct(tmp_path):
+    """Wiki alias boost (+5) should rank a node higher than a node that only
+    matches by label (+1), and ordering should reflect that.
+    """
+    from kb_mcp.core.graph import find_start_nodes
+
+    wiki_dir = tmp_path / "wiki"
+    entities = wiki_dir / "entities" / "Foo"
+    entities.mkdir(parents=True)
+    (entities / "_index.md").write_text(
+        "# Foo\n\n- [[BarPage|바 페이지]] — bar entry\n",
+        encoding="utf-8",
+    )
+
+    G = _build_graph([
+        ("direct_node", "transformer notes"),
+        ("boosted_node", "BarPage transformer"),
+    ])
+
+    # Both nodes match "transformer" by label (+1). boosted_node also
+    # contains "BarPage", which is the target_stem for the "바 페이지" alias
+    # in the wiki, so it gets +5 on top.
+    start = find_start_nodes(
+        G, "transformer 바 페이지", wiki_dir=wiki_dir, top_n=2
+    )
+    assert start[0] == "boosted_node"
+    assert start[1] == "direct_node"
+
+    # Without wiki_dir: only label match counts (likely tied at +1 each).
+    start_no_wiki = find_start_nodes(G, "transformer 바 페이지", top_n=2)
+    assert "boosted_node" in start_no_wiki
+    assert "direct_node" in start_no_wiki
