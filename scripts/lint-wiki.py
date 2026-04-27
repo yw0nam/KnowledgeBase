@@ -13,6 +13,8 @@ Checks:
   8. Missing frontmatter entirely
   9. Empty sections (heading with no content before next heading)
  10. Stale pages (sources reference non-existent raw files)
+ 11. Stub pages (body length below STUB_THRESHOLD_CHARS)
+ 12. Subject _index.md ↔ disk sync (listed pages exist, on-disk pages listed)
 
 Usage:
     python3 scripts/lint-wiki.py           # full lint
@@ -27,6 +29,9 @@ BASEDIR = Path(__file__).parent.parent
 DATADIR = BASEDIR / "data"
 WIKI_DIR = DATADIR / "wiki"
 RAW_DIR = DATADIR / "raw"
+
+# Body length (after frontmatter) below this is flagged as a stub page.
+STUB_THRESHOLD_CHARS = 100
 
 REQUIRED_FM_FIELDS = {
     "entity": ["type", "created", "updated", "sources", "tags"],
@@ -125,10 +130,11 @@ def get_raw_frontmatter(content: str) -> str:
     return parts[1] if len(parts) >= 3 else ""
 
 
-def collect_pages() -> dict[str, str]:
+def collect_pages(wiki_dir: Path = None) -> dict[str, str]:
     """Collect all wiki pages: {stem: content}."""
+    wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
     pages = {}
-    for f in WIKI_DIR.rglob("*.md"):
+    for f in wiki_dir.rglob("*.md"):
         pages[f.stem] = f.read_text()
     return pages
 
@@ -138,15 +144,21 @@ def extract_links(content: str) -> list[str]:
     return re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", content)
 
 
-def lint(result: LintResult):
-    pages = collect_pages()
+def lint(result: LintResult, wiki_dir: Path = None, raw_dir: Path = None) -> None:
+    wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
+    raw_dir = raw_dir if raw_dir is not None else RAW_DIR
+    # data_dir is wiki_dir.parent so that frontmatter `sources:` (relative to data/)
+    # resolve correctly even when tests pass a tmp wiki_dir.
+    data_dir = wiki_dir.parent
+
+    pages = collect_pages(wiki_dir)
     all_stems = set(pages.keys())
 
     # Build inbound link map for orphan detection
     inbound: dict[str, set[str]] = {stem: set() for stem in all_stems}
 
     for stem, content in pages.items():
-        rel = _find_relative(stem)
+        rel = _find_relative(stem, wiki_dir)
         links = extract_links(content)
         fm_raw = get_raw_frontmatter(content)
         fm = parse_frontmatter(content)
@@ -230,24 +242,87 @@ def lint(result: LintResult):
         if isinstance(sources, list):
             for src in sources:
                 if isinstance(src, str) and src:
-                    src_path = DATADIR / src
+                    src_path = data_dir / src
                     if not src_path.exists():
                         result.error(rel, f"source file not found: {src}")
+
+        # ── 11. Stub pages ──────────────────────────────────────────────
+        # _index.md hub pages are excluded — they're allowed to be short,
+        # check_index_sync handles them separately.
+        if stem != "_index" and len(body.strip()) < STUB_THRESHOLD_CHARS:
+            result.warn(
+                rel,
+                f"stub page — body {len(body.strip())} chars (< {STUB_THRESHOLD_CHARS})",
+            )
 
     # ── 10. Orphan pages ────────────────────────────────────────────────
     for stem in all_stems:
         if stem == "index":
             continue
         if not inbound.get(stem):
-            result.warn(_find_relative(stem), "orphan page — no inbound links")
+            result.warn(_find_relative(stem, wiki_dir), "orphan page — no inbound links")
+
+    # ── 12. Subject _index.md ↔ disk sync ───────────────────────────────
+    check_index_sync(result, wiki_dir)
 
 
-def _find_relative(stem: str) -> str:
+def _find_relative(stem: str, wiki_dir: Path = None) -> str:
     """Find relative path for a page stem."""
-    for f in WIKI_DIR.rglob("*.md"):
+    wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
+    for f in wiki_dir.rglob("*.md"):
         if f.stem == stem:
-            return str(f.relative_to(WIKI_DIR))
+            return str(f.relative_to(wiki_dir))
     return stem
+
+
+def check_index_sync(result: LintResult, wiki_dir: Path = None) -> None:
+    """Verify that each subject's _index.md lists exactly the pages that exist on disk.
+
+    For every entities/{subject}/_index.md:
+      - listed_but_missing → ERROR (broken hub)
+      - on_disk_not_listed → WARN  (page exists but not advertised in the hub)
+    """
+    wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
+    entities_root = wiki_dir / "entities"
+    if not entities_root.exists():
+        return
+
+    for index_file in entities_root.rglob("_index.md"):
+        subject_dir = index_file.parent
+        subject = subject_dir.name
+        rel_index = str(index_file.relative_to(wiki_dir))
+
+        listed_stems = set(extract_links(index_file.read_text()))
+
+        on_disk_stems = {
+            f.stem
+            for f in subject_dir.rglob("*.md")
+            if f.stem != "_index"
+        }
+
+        # Filter wikilinks to only those that look like they target a subject
+        # page (no "/" in the link → simple stem reference).
+        # Also drop self-link to _index.
+        listed_stems = {
+            link for link in listed_stems
+            if "/" not in link and link != "_index"
+        }
+
+        listed_but_missing = listed_stems - on_disk_stems
+        on_disk_not_listed = on_disk_stems - listed_stems
+
+        for stem in sorted(listed_but_missing):
+            result.error(
+                rel_index,
+                f"_index.md lists [[{stem}]] but no file with that stem under {subject_dir.relative_to(wiki_dir)}",
+            )
+
+        for stem in sorted(on_disk_not_listed):
+            page_rel = _find_relative(stem, wiki_dir)
+            result.warn(
+                page_rel,
+                f"page not listed in {subject}/_index.md",
+            )
 
 
 def main():
