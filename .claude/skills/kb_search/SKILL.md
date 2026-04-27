@@ -1,6 +1,6 @@
 ---
 name: kb_search
-description: KnowledgeBase 지식 그래프 기반 질문 답변 스킬. data/graphify-out/graph.json을 traversal해 답변을 생성한다. 사용자가 `/kb_search <질문>`을 입력하거나 KnowledgeBase에 저장된 내용에 대해 "~가 뭐야", "~는 어떻게 연결돼", "~에 대해 알려줘" 등을 요청할 때 사용한다.
+description: KnowledgeBase 지식 그래프 기반 질문 답변 스킬. data/graphify-out/graph.json을 traversal해 답변을 생성하고, 사용자 확인 시 답변을 wiki/questions/ 에 저장한다. 사용자가 `/kb_search <질문>`을 입력하거나 KnowledgeBase에 저장된 내용에 대해 "~가 뭐야", "~는 어떻게 연결돼", "~에 대해 알려줘" 등을 요청할 때 사용한다.
 ---
 
 # kb_search
@@ -48,6 +48,53 @@ traversal 결과를 바탕으로 답변 작성:
 - 관련 wiki 페이지가 있으면 `[[WikiPageName]]` 형식으로 참조.
 - 출처가 있는 사실은 raw 파일 경로 인용 (`source_file`).
 - 답변 끝에 자연스러운 후속 질문 하나 제안.
+
+### Step 4 — 답변 저장 (사용자 확인 후)
+
+답변 출력 후 사용자에게 묻는다:
+
+```
+이 답변을 wiki/questions/ 에 저장할까요?
+```
+
+사용자가 `yes` / `저장해` / `save` 답하면 `data/wiki/questions/<PascalCaseSlug>.md` 작성. 아니라고 하거나 답이 없으면 저장하지 않고 종료.
+
+Slug 규칙: 질문 핵심을 PascalCase 영어로 5단어 이내. 한글 질문이면 LLM이 의미 추출해 영어 PascalCase로 변환. 예: "TTS 파이프라인 어떻게 구현됐어?" → `TTSPipelineImplementation.md`. 다른 KB 페이지처럼 PascalCase.
+
+frontmatter (block-style YAML, dates quoted, scalars unquoted):
+
+```yaml
+---
+type: question
+created: "YYYY-MM-DD"
+updated: "YYYY-MM-DD"
+sources:
+  - raw/...        # traversal에서 만난 raw 파일들 (graph node의 source_file)
+aliases: []
+tags:
+  - question
+---
+```
+
+body 구조:
+
+```markdown
+# {원본 질문}
+
+## 답변
+[답변 본문]
+
+## Related
+- [[WikiPageA]]
+- [[WikiPageB]]
+
+## Sources
+- raw/github/issues/...
+```
+
+저장 후 lint를 따로 돌리지 않음 (다음 kb_update가 처리). 저장 후 한 줄 출력: `저장됨: data/wiki/questions/<Slug>.md`
+
+저장된 페이지는 이후 `find_start_nodes`의 wiki expansion(kb_search 보강 후)에서 picked up되어, 다음 검색의 entry point로 작동한다.
 
 ### 답변 형식
 
