@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Iterable
 
@@ -10,6 +11,8 @@ from networkx.readwrite import json_graph
 
 
 DEFAULT_GRAPH_PATH = Path("data/graphify-out/graph.json")
+
+_WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 
 
 def load_graph(path: str | Path) -> nx.DiGraph:
@@ -36,18 +39,189 @@ def _tokens(question: str) -> list[str]:
     return [t.lower() for t in question.split() if len(t) > 1]
 
 
-def find_start_nodes(G: nx.DiGraph, question: str, top_n: int = 3) -> list[str]:
-    terms = _tokens(question)
-    if not terms:
+def _is_cjk_char(ch: str) -> bool:
+    # CJK Unified Ideographs (U+4E00-U+9FFF) plus Hangul syllables
+    # (U+AC00-U+D7AF), since Korean queries are the common case here.
+    return ("一" <= ch <= "鿿") or ("가" <= ch <= "힯")
+
+
+def _has_cjk(s: str) -> bool:
+    return any(_is_cjk_char(ch) for ch in s)
+
+
+def _cjk_aware_match(target: str, query: str) -> bool:
+    """True if target has a meaningful match in query.
+
+    - If target contains CJK chars (CJK Ideographs U+4E00-U+9FFF or Hangul
+      syllables U+AC00-U+D7AF), use 2-char sliding window bigram match (any
+      2-char window from target containing a CJK char and present in
+      query → match).
+    - Otherwise (Latin/etc): any whitespace-split word from target with
+      len > 2 present in query (case-insensitive).
+    """
+    if not target or not query:
+        return False
+    target_lower = target.lower()
+    query_lower = query.lower()
+    if _has_cjk(target):
+        return any(
+            target_lower[j : j + 2] in query_lower
+            for j in range(len(target_lower) - 1)
+            if any(_is_cjk_char(c) for c in target_lower[j : j + 2])
+        )
+    return any(
+        word in query_lower
+        for word in target_lower.split()
+        if len(word) > 2
+    )
+
+
+def _collect_index_titles(wiki_dir: Path) -> list[str]:
+    """Recursively read every `_index.md` under wiki_dir, extract wikilinks
+    [[Stem]] or [[Stem|Display]], return both stem and display strings as
+    candidate match titles. For [[Stem|Display]] both surface forms are
+    appended consecutively so callers can pair them. Empty list if wiki_dir
+    doesn't exist.
+    """
+    if not wiki_dir.exists():
         return []
-    scored: list[tuple[int, str]] = []
+    titles: list[str] = []
+    for f in wiki_dir.rglob("_index.md"):
+        try:
+            content = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for stem, display in _WIKILINK_RE.findall(content):
+            stem = stem.strip()
+            if stem:
+                titles.append(stem)
+            if display:
+                display = display.strip()
+                if display:
+                    titles.append(display)
+    return titles
+
+
+def _collect_index_aliases(wiki_dir: Path) -> list[tuple[str, str]]:
+    """Like _collect_index_titles but returns (surface_title, target_stem)
+    pairs. surface_title is what we match against the query; target_stem is
+    what we substring-match against graph node labels. For plain [[Stem]]
+    both fields are equal. For [[Stem|Display]] we emit (Stem, Stem) and
+    (Display, Stem) so a Korean alias still boosts the Latin-stem node.
+    """
+    if not wiki_dir.exists():
+        return []
+    pairs: list[tuple[str, str]] = []
+    for f in wiki_dir.rglob("_index.md"):
+        try:
+            content = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for stem, display in _WIKILINK_RE.findall(content):
+            stem = stem.strip()
+            if not stem:
+                continue
+            pairs.append((stem, stem))
+            if display:
+                display = display.strip()
+                if display:
+                    pairs.append((display, stem))
+    return pairs
+
+
+def _collect_questions_titles(wiki_dir: Path) -> list[str]:
+    """Read every *.md under wiki_dir/questions/, return both file stem
+    and first H1 (`# ...`) text as candidate match titles. Empty list if
+    questions/ doesn't exist.
+    """
+    questions_dir = wiki_dir / "questions"
+    if not questions_dir.exists():
+        return []
+    titles: list[str] = []
+    for f in questions_dir.glob("*.md"):
+        titles.append(f.stem)
+        try:
+            content = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("# ") and not stripped.startswith("## "):
+                h1 = stripped[2:].strip()
+                if h1:
+                    titles.append(h1)
+                break
+    return titles
+
+
+def _collect_questions_aliases(wiki_dir: Path) -> list[tuple[str, str]]:
+    """Like _collect_questions_titles but returns (surface_title, file_stem)
+    pairs. Both stem and H1 map back to the file stem so a CJK H1 still
+    boosts a Latin-stem-named graph node.
+    """
+    questions_dir = wiki_dir / "questions"
+    if not questions_dir.exists():
+        return []
+    pairs: list[tuple[str, str]] = []
+    for f in questions_dir.glob("*.md"):
+        stem = f.stem
+        pairs.append((stem, stem))
+        try:
+            content = f.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("# ") and not stripped.startswith("## "):
+                h1 = stripped[2:].strip()
+                if h1:
+                    pairs.append((h1, stem))
+                break
+    return pairs
+
+
+def find_start_nodes(
+    G: nx.DiGraph,
+    question: str,
+    wiki_dir: Path | None = None,
+    top_n: int = 3,
+) -> list[str]:
+    if not question:
+        return []
+
+    scored: dict[str, int] = {}
+
+    # 1. Score graph nodes by direct CJK-aware label match.
     for nid, ndata in G.nodes(data=True):
-        label = ndata.get("label", "").lower()
-        score = sum(1 for t in terms if t in label)
-        if score > 0:
-            scored.append((score, nid))
-    scored.sort(reverse=True)
-    return [nid for _, nid in scored[:top_n]]
+        label = ndata.get("label", "")
+        if _cjk_aware_match(label, question):
+            scored[nid] = scored.get(nid, 0) + 1
+
+    # 2. Wiki-driven expansion: alias pairs from _index.md and questions/*.md.
+    #    Each pair is (surface_title, target_stem). We match surface against
+    #    the query but substring-test target_stem against node labels, so a
+    #    CJK display alias can still boost a Latin-stem-named node.
+    if wiki_dir is not None and wiki_dir.exists():
+        pairs: list[tuple[str, str]] = []
+        pairs.extend(_collect_index_aliases(wiki_dir))
+        pairs.extend(_collect_questions_aliases(wiki_dir))
+        matched_targets = {
+            target for surface, target in pairs
+            if _cjk_aware_match(surface, question)
+        }
+        if matched_targets:
+            for nid, ndata in G.nodes(data=True):
+                label_lower = ndata.get("label", "").lower()
+                for target in matched_targets:
+                    if target.lower() in label_lower:
+                        scored[nid] = scored.get(nid, 0) + 5
+                        break
+
+    if not scored:
+        return []
+
+    ranked = sorted(scored.items(), key=lambda kv: kv[1], reverse=True)
+    return [nid for nid, score in ranked[:top_n] if score > 0]
 
 
 def bfs(
@@ -97,11 +271,9 @@ def format_output(
     subgraph_edges: list[tuple[str, str]],
     budget: int,
 ) -> str:
-    terms = _tokens(question)
-
     def relevance(nid: str) -> int:
-        label = G.nodes[nid].get("label", "").lower()
-        return sum(1 for t in terms if t in label)
+        label = G.nodes[nid].get("label", "")
+        return 1 if _cjk_aware_match(label, question) else 0
 
     ranked_nodes = sorted(subgraph_nodes, key=relevance, reverse=True)
     start_labels = [G.nodes[n].get("label", n) for n in start_nodes]
@@ -136,6 +308,7 @@ def search(
     mode: str = "bfs",
     budget: int = 2000,
     graph_path: str | Path | None = None,
+    wiki_dir: str | Path | None = None,
 ) -> str:
     if mode not in ("bfs", "dfs"):
         raise ValueError(f"mode must be 'bfs' or 'dfs', got {mode!r}")
@@ -143,7 +316,14 @@ def search(
     path = Path(graph_path) if graph_path is not None else DEFAULT_GRAPH_PATH
     G = load_graph(path)
 
-    start_nodes = find_start_nodes(G, question)
+    if wiki_dir is None:
+        derived = path.parent.parent / "wiki"
+        wiki_path: Path | None = derived if derived.exists() else None
+    else:
+        wp = Path(wiki_dir)
+        wiki_path = wp if wp.exists() else None
+
+    start_nodes = find_start_nodes(G, question, wiki_dir=wiki_path)
     if not start_nodes:
         return f"No matching nodes found for: {question}"
 
