@@ -31,3 +31,5 @@ build-backend = "hatchling.build"
 
 [project.scripts]
 kb-mcp = "kb_mcp.server:main"
+kb-lint-wiki = "kb_mcp.cli.lint_wiki:main"
+kb-graph-query = "kb_mcp.cli.graph_query:main"

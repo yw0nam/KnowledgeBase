@@ -65,7 +65,7 @@ fail() { log "ERROR: $1"; exit "${2:-4}"; }
 
 command -v "$CLAUDE_BIN" >/dev/null 2>&1 || fail "claude CLI not found ($CLAUDE_BIN)" 5
 [ -d "$DATA_DIR/.git" ]                 || fail "data/ is not a git repo at $DATA_DIR" 4
-[ -f scripts/lint-wiki.py ]             || fail "scripts/lint-wiki.py missing" 4
+[ -f src/kb_mcp/cli/lint_wiki.py ]      || fail "src/kb_mcp/cli/lint_wiki.py missing" 4
 
 # =============================================================================
 # Step 1 — detect new/changed raw files
@@ -278,7 +278,7 @@ while :; do
   attempt=$((attempt + 1))
   log "  lint attempt $attempt/$MAX_LINT_RETRIES"
 
-  if uv run python3 scripts/lint-wiki.py >"$LINT_LOG" 2>&1; then
+  if uv run kb-lint-wiki >"$LINT_LOG" 2>&1; then
     cat "$LINT_LOG" >&2
     log "lint PASSED on attempt $attempt"
     break
