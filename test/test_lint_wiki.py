@@ -1,28 +1,16 @@
-"""Tests for scripts/lint-wiki.py — stub + index sync checks."""
+"""Tests for src/kb_mcp/cli/lint_wiki.py — stub + index sync checks."""
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
 
-REPO_ROOT = Path(__file__).parent.parent
-LINT_PATH = REPO_ROOT / "scripts" / "lint-wiki.py"
-
-
-def _load_lint_module():
-    """Load scripts/lint-wiki.py as a module (filename has a hyphen)."""
-    spec = importlib.util.spec_from_file_location("lint_wiki", LINT_PATH)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["lint_wiki"] = module
-    spec.loader.exec_module(module)
-    return module
+import kb_mcp.cli.lint_wiki as lint_mod_module
 
 
 @pytest.fixture(scope="module")
 def lint_mod():
-    return _load_lint_module()
+    return lint_mod_module
 
 
 # ── helpers to build a tmp wiki tree ─────────────────────────────────

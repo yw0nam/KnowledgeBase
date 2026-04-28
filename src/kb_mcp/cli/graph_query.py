@@ -10,10 +10,7 @@ import argparse
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT / "src"))
-
-from kb_mcp.core.graph import search  # noqa: E402
+from kb_mcp.core.graph import search
 
 
 def main() -> None:
