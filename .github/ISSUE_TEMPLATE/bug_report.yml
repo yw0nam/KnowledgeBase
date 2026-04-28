@@ -1,0 +1,101 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in KnowledgeBase
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please include as much detail as possible
+        about which pipeline step failed and what the output looked like.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear description of what went wrong.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Pipeline Step
+      description: Which part of the pipeline does this bug involve?
+      options:
+        - "1. Ingest (scripts/ingest-github.sh)"
+        - "2. Graph (graphify / graph.json)"
+        - "3. Fill (LLM wiki writing)"
+        - "4. Lint (scripts/lint.sh / kb-lint-wiki)"
+        - "5. Log (data/log.md)"
+        - "src/kb_mcp — MCP server / core / tools"
+        - "Other (specify below)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this behavior?
+      placeholder: |
+        1. Run ./scripts/ingest-github.sh owner/repo
+        2. Run /kb_update
+        3. See error ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs / Lint Output
+      description: |
+        Paste any relevant output. For lint errors, paste the full lint report.
+        **Redact any sensitive information.**
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: KnowledgeBase Version / Commit
+      description: Run `git rev-parse --short HEAD` in the KnowledgeBase repo.
+      placeholder: e.g., 94fb005
+    validations:
+      required: true
+
+  - type: dropdown
+    id: python_version
+    attributes:
+      label: Python Version
+      options:
+        - "3.11"
+        - "3.12"
+        - "3.13"
+        - Other (specify below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other (specify below)
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other context, screenshots, or information that might help.

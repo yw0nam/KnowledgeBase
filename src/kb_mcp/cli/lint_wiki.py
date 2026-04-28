@@ -25,7 +25,7 @@ import re
 import sys
 from pathlib import Path
 
-BASEDIR = Path(__file__).parent.parent
+BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
 DATADIR = BASEDIR / "data"
 WIKI_DIR = DATADIR / "wiki"
 RAW_DIR = DATADIR / "raw"
