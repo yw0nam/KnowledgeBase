@@ -4,31 +4,29 @@ Personal LLM Wiki. Raw sources go in, LLM writes wiki pages, lint keeps them hon
 
 ## Architecture
 
-두 개의 git repo로 분리.
-
 ```
-KnowledgeBase/          ← root git (scripts, config — 공개 가능)
+KnowledgeBase/
 ├── scripts/
 │   ├── ingest-github.sh
 │   └── lint-wiki.py
+├── src/kb_mcp/          MCP server + CLI tools
+├── raw/
+│   ├── github/          CLAUDE.md, Issues, PRs
+│   ├── conversations/   Desktop Chatbot history
+│   ├── calendar/        Calendar events
+│   ├── web/             Web clippings
+│   └── manual/          Anything dropped by hand
+├── wiki/
+│   ├── entities/        Named objects ({subject}/{YYYY-MM}/)
+│   ├── concepts/        Abstract ideas (patterns, protocols)
+│   ├── summaries/       Time/subject rollups
+│   ├── decisions/       Architecture Decision Records
+│   └── questions/       Saved Q&A
+├── graphify-out/        Build artifacts (gitignored)
+│   └── graph.json       Knowledge graph
+├── log.md
 ├── CLAUDE.md
-├── README.md
-└── data/               ← 별도 git (content — 로컬 전용)
-    ├── raw/
-    │   ├── github/         CLAUDE.md, Issues, PRs
-    │   ├── conversations/  Desktop Chatbot history
-    │   ├── calendar/       Calendar events
-    │   ├── web/            Web clippings
-    │   └── manual/         Anything dropped by hand
-    ├── wiki/
-    │   ├── entities/       Named objects ({subject}/{YYYY-MM}/)
-    │   ├── concepts/       Abstract ideas (patterns, protocols)
-    │   ├── summaries/      Time/subject rollups
-    │   ├── decisions/      Architecture Decision Records
-    │   └── questions/      Saved Q&A
-    ├── graphify-out/       Build artifacts (gitignored)
-    │   └── graph.json      Knowledge graph
-    └── log.md
+└── README.md
 ```
 
 ## Pipeline
@@ -42,21 +40,21 @@ KnowledgeBase/          ← root git (scripts, config — 공개 가능)
 
 ```bash
 ./scripts/ingest-github.sh owner/repo    # GitHub CLAUDE.md + Issues + PRs
-# or drop files into data/raw/manual/
+# or drop files into raw/manual/
 ```
 
 ### 2. Graph
 
 ```
-/graphify data/raw/ --update --no-viz
+/graphify raw/ --update --no-viz
 ```
 
-`--update`: 새 파일만 재추출 (캐시 활용). `--no-viz`: HTML 스킵.
-결과: `data/graphify-out/graph.json`
+`--update`: only re-extract new files (uses cache). `--no-viz`: skip HTML.
+Result: `graphify-out/graph.json`
 
 ### 3. Fill
 
-`git -C data/ status`로 새 raw 파일 파악 → `data/graphify-out/graph.json` 참조 → Claude가 wiki 페이지 작성.
+Use `uv run python -m kb_mcp.cli.diff_raw` to find unprocessed raw files → read `graphify-out/graph.json` → LLM writes wiki pages.
 
 ### 4. Lint
 
@@ -68,8 +66,8 @@ uv run python3 scripts/lint-wiki.py --strict      # warnings = fail too
 ### 5. Log + Commit
 
 ```bash
-# LLM appends to data/log.md after lint passes
-cd data && git add raw/ wiki/ log.md
+# LLM appends to log.md after lint passes
+git add raw/ wiki/ log.md
 git commit -m "ingest: [source] description"
 ```
 
@@ -121,8 +119,7 @@ tags: [architecture, entity, project]
 | File | Role |
 |---|---|
 | `CLAUDE.md` | Schema + pipeline definition |
-| `data/log.md` | Append-only operation record |
-| `data/wiki/index.md` | Entry point |
-| `data/graphify-out/graph.json` | Knowledge graph (build artifact) |
+| `log.md` | Append-only operation record |
+| `graphify-out/graph.json` | Knowledge graph (build artifact) |
 | `scripts/ingest-github.sh` | Step 1: GitHub data collection |
 | `scripts/lint-wiki.py` | Step 4: validation |

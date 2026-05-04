@@ -223,6 +223,140 @@ def test_index_sync_ignores_wikilinks_in_code_blocks(lint_mod, tmp_path):
     )
 
 
+# ── Placeholder regex (matches skeleton_gen.py's `<!-- LLM TODO: -->`) ──
+
+
+def test_placeholder_warn_on_llm_todo(lint_mod, tmp_path):
+    """skeleton_gen.py emits `<!-- LLM TODO: ... -->` — lint must detect it."""
+    wiki = make_wiki_root(tmp_path)
+    body = (
+        "# Title\n\n"
+        "## Overview\n\n"
+        "<!-- LLM TODO: 1-2 paragraph summary -->\n\n"
+        "## Key Details\n\n"
+        "<!-- LLM TODO: technical details -->\n"
+    )
+    write_page(wiki / "entities" / "Subj" / "2026-04" / "Page.md", body=body)
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[Page]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    placeholder_warns = [w for w in result.warnings if "unfilled" in w]
+    assert len(placeholder_warns) == 1
+    assert "Page.md" in placeholder_warns[0]
+    assert "2 unfilled" in placeholder_warns[0]
+
+
+def test_placeholder_warn_on_legacy_llm_colon(lint_mod, tmp_path):
+    """Legacy `<!-- LLM: ... -->` form must still be detected."""
+    wiki = make_wiki_root(tmp_path)
+    long_body = "This page has plenty of content. " * 5
+    body = long_body + "\n<!-- LLM: legacy -->\n"
+    write_page(wiki / "entities" / "Subj" / "2026-04" / "Legacy.md", body=body)
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[Legacy]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    placeholder_warns = [w for w in result.warnings if "unfilled" in w]
+    assert len(placeholder_warns) == 1
+
+
+# ── Frontmatter type field (Fix 2) ──────────────────────────────────
+
+
+def test_missing_type_field_errors(lint_mod, tmp_path):
+    """A page without `type:` must error — previously silently skipped."""
+    wiki = make_wiki_root(tmp_path)
+    fm_no_type = (
+        "---\n"
+        'created: "2026-04-27"\n'
+        'updated: "2026-04-27"\n'
+        "sources: []\n"
+        "tags: []\n"
+        "---\n"
+    )
+    long_body = "This page has plenty of content. " * 5
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "NoType.md",
+        body=long_body,
+        fm=fm_no_type,
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[NoType]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    type_errors = [
+        e for e in result.errors
+        if "missing frontmatter field: type" in e and "NoType.md" in e
+    ]
+    assert len(type_errors) == 1
+
+
+def test_unknown_type_warns(lint_mod, tmp_path):
+    wiki = make_wiki_root(tmp_path)
+    fm_unknown = (
+        "---\n"
+        "type: weirdtype\n"
+        'created: "2026-04-27"\n'
+        'updated: "2026-04-27"\n'
+        "sources: []\n"
+        "tags: []\n"
+        "---\n"
+    )
+    long_body = "This page has plenty of content. " * 5
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Weird.md",
+        body=long_body,
+        fm=fm_unknown,
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[Weird]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    unknown_warns = [w for w in result.warnings if "unknown type: weirdtype" in w]
+    assert len(unknown_warns) == 1
+
+
+# ── Orphan detection excludes _index.md (Fix 3) ─────────────────────
+
+
+def test_index_md_not_flagged_as_orphan(lint_mod, tmp_path):
+    """`_index.md` is not a link target by convention (skeleton_gen
+    excludes it), so it must not surface as an orphan even when no page
+    links to it."""
+    wiki = make_wiki_root(tmp_path)
+    long_body = "This page has plenty of content. " * 10
+    write_page(wiki / "entities" / "Subj" / "2026-04" / "Alpha.md", body=long_body)
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[Alpha]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    orphan_warns = [w for w in result.warnings if "orphan page" in w]
+    assert all("_index" not in w for w in orphan_warns), (
+        f"_index.md flagged as orphan: {orphan_warns}"
+    )
+
+
 def test_index_sync_skips_when_no_pages_section(lint_mod, tmp_path):
     """Hubs lacking a ## Pages heading should be ignored by sync entirely.
 

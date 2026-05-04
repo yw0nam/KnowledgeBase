@@ -11,7 +11,7 @@ import networkx as nx
 from networkx.readwrite import json_graph
 
 
-DEFAULT_GRAPH_PATH = Path("data/graphify-out/graph.json")
+DEFAULT_GRAPH_PATH = Path("graphify-out/graph.json")
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 

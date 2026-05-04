@@ -36,7 +36,7 @@ class IngestInput(BaseModel):
 async def kb_ingest(params: IngestInput) -> str:
     """Ingest CLAUDE.md + recent issues/PRs from the given GitHub repos.
 
-    Writes files under data/raw/github/. Returns a JSON summary with
+    Writes files under raw/github/. Returns a JSON summary with
     returncode, stdout tail, stderr tail, and the list of repos processed.
     """
     result = _ingest_github(

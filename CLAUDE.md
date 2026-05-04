@@ -4,12 +4,7 @@ Personal LLM Wiki. Raw sources go in, LLM writes wiki pages, lint keeps them hon
 
 ## Structure
 
-두 개의 git repo로 분리한다.
-
-- **루트 repo** (`KnowledgeBase/`) — 스크립트, 설정. 공개 가능.
-- **data repo** (`KnowledgeBase/data/`) — 콘텐츠. 로컬 전용, push 하지 않는다.
-
-### data/
+Everything lives in one flat repository at the project root.
 
 - `raw/` - Immutable sources. Never modify after creation. Subdirs by type:
   - `github/claude-md/` - CLAUDE.md files from repos (`{owner}_{repo}_CLAUDE.md`)
@@ -79,81 +74,81 @@ Flat namespace. Common: project, tool, pattern, decision, person, event.
 
 ## Pipeline
 
-5단계 파이프라인.
+5-stage pipeline.
 
 ```
 1.INGEST → 2.GRAPH → 3.FILL → 4.LINT → 5.LOG
-(스크립트)  (graphify)  (LLM)  (스크립트)  (LLM)
+(script)   (graphify)  (LLM)  (script)  (LLM)
 ```
 
-### 1. Ingest — 데이터 수집
+### 1. Ingest — Data collection
 
 ```bash
 ./scripts/ingest-github.sh owner/repo    # GitHub CLAUDE.md + Issues + PRs
-# 또는 data/raw/manual/ 에 직접 드롭
+# or drop files into raw/manual/
 ```
 
-결과: `data/raw/{type}/` 에 frontmatter 포함 마크다운 파일.
+Result: markdown files with frontmatter in `raw/{type}/`.
 
-### 2. Graph — 지식 그래프 빌드
+### 2. Graph — Knowledge graph build
 
 ```
-/graphify data/raw/ --update --no-viz
+/graphify raw/ --update --no-viz
 ```
 
-결과: `data/graphify-out/graph.json` (노드, 엣지, 커뮤니티).
-`--update`: 새로 추가된 파일만 재추출 (캐시 활용).
-`--no-viz`: HTML 생성 스킵.
+Result: `graphify-out/graph.json` (nodes, edges, communities).
+`--update`: only re-extract newly added files (uses cache).
+`--no-viz`: skip HTML generation.
 
-### 3. Fill — LLM이 wiki 작성
+### 3. Fill — LLM writes wiki
 
-`git -C data/ status`로 새로 추가된 raw 파일 파악 후 처리한다.
+Use `uv run python -m kb_mcp.cli.diff_raw` to identify raw files needing processing, then:
 
-- `data/graphify-out/graph.json` 읽어 관계 정보 파악
-- 각 raw 파일을 읽고 관련 wiki 페이지를 새로 만들거나 업데이트
-- frontmatter의 `sources:` 는 반드시 실제 raw 파일 경로를 기입
-- 존재하는 페이지에만 wikilink 사용
+- Read `graphify-out/graph.json` to understand relationships
+- Read each raw file and create or update the relevant wiki page
+- `sources:` in frontmatter must reference actual raw file paths
+- Only use wikilinks to pages that exist
 
-### 4. Lint — 검증
+### 4. Lint — Validation
 
 ```bash
-uv run python3 scripts/lint-wiki.py               # errors만 실패
-uv run python3 scripts/lint-wiki.py --strict      # warnings도 실패
+uv run python3 scripts/lint-wiki.py               # errors only = fail
+uv run python3 scripts/lint-wiki.py --strict      # warnings also = fail
 ```
 
-검사 항목 (ERROR = 커밋 불가):
+Checks (ERROR = cannot commit):
 
 - Dead wikilinks, `.md` in target, LaTeX/HTML, frontmatter format,
   stale sources, missing frontmatter
 
-검사 항목 (WARN = 정보):
+Checks (WARN = informational):
 
 - Self-links, unfilled placeholders, orphan pages, empty sections
 
-### 5. Log — 기록
+### 5. Log — Record
 
-LLM이 `data/log.md`에 append. lint PASSED 후에만 기록.
+LLM appends to `log.md`. Only after lint PASSED.
 
 ## Important rules
 
 - Never modify files in `raw/`. They are immutable after creation.
 - `wiki/` pages must always list their `sources:` in frontmatter.
-- Keep `data/log.md` updated on every operation.
+- Keep `log.md` updated on every operation.
 - Lint must pass (0 errors) before committing wiki changes.
 
 ## Scripts
 
-| 스크립트 | 역할 | 단계 |
+| Script | Role | Stage |
 |---|---|---|
-| `scripts/ingest-github.sh` | GitHub 소스 수집 | 1. Ingest |
-| `scripts/lint-wiki.py` | 검증 | 4. Lint |
+| `scripts/ingest-github.sh` | GitHub source collection | 1. Ingest |
+| `scripts/lint-wiki.py` | Validation | 4. Lint |
 
 ## Skills
 
-- **graphify** — 지식 그래프 빌드. Trigger: `/graphify data/raw/ --update --no-viz`. 단계 2에서 사용.
-- **kb_init** (`.claude/skills/kb_init/SKILL.md`) — 초기 설정 + 전체 그래프 빌드 + wiki 전체 작성. Trigger: `/kb_init`
-- **kb_update** (`.claude/skills/kb_update/SKILL.md`) — 그래프 증분 업데이트 + 새 파일 wiki 작성. Trigger: `/kb_update`
-- **kb_search** (`.claude/skills/kb_search/SKILL.md`) — 그래프 기반 질문 답변. Trigger: `/kb_search <질문>`
+- **graphify** — Knowledge graph build. Trigger: `/graphify raw/ --update --no-viz`. Used in stage 2.
+- **kb_init** (`.claude/skills/kb_init/SKILL.md`) — Initial setup + full graph build + write all wiki pages. Trigger: `/kb_init`
+- **kb_update** (`.claude/skills/kb_update/SKILL.md`) — Incremental graph update + write wiki for new files only. Trigger: `/kb_update`
+- **kb_search** (`.claude/skills/kb_search/SKILL.md`) — Graph-based question answering. Trigger: `/kb_search <question>`
 
 When the user types `/kb_init`, invoke the Skill tool with `skill: "kb_init"` before doing anything else.
 When the user types `/kb_update`, invoke the Skill tool with `skill: "kb_update"` before doing anything else.

@@ -1,58 +1,115 @@
 ---
 name: kb_init
-description: KnowledgeBase 초기 설정 스킬. raw/ 소스를 처음 넣은 후 전체 그래프 빌드, wiki 전체 작성, lint, log, commit을 순서대로 실행한다. 사용자가 `/kb_init`을 입력하거나 "KnowledgeBase 처음 설정", "wiki 처음 만들어줘", "초기화해줘" 등을 요청할 때 사용한다.
+description: KnowledgeBase initial setup skill. After placing raw sources for the first time, runs full graph build, writes all wiki pages, lint, log, and commit in sequence. Triggered when the user types `/kb_init` or requests "set up KnowledgeBase", "create wiki from scratch", "initialize" etc.
 ---
 
 # kb_init
 
-KnowledgeBase 초기 설정. 처음 raw/ 소스를 넣었을 때 한 번 실행.
-그래프 빌드 → wiki 전체 작성 → lint → log → commit.
+KnowledgeBase initial setup. Run once after placing raw sources for the first time.
+Graph build → write all wiki pages → lint → log → commit.
 
 ## Steps
 
-### Step 1 — 구조 확인
+### Step 1 — Verify structure
 
-필요한 디렉토리가 없으면 생성:
+Create directories if they don't exist:
 
 ```bash
-cp -r templates/ data/
-cd data
+cp -r templates/ .
 ```
 
 ```bash
-
 mkdir -p raw/github/claude-md raw/github/issues raw/manual
 mkdir -p wiki/entities wiki/concepts wiki/summaries wiki/decisions wiki/questions
 touch log.md 2>/dev/null || true
 ```
 
-### Step 2 — 그래프 빌드
+### Step 2 — Graph build
 
 /graphify raw/ --no-viz
 
-### Step 3 — wiki 전체 작성
+### Step 2.5 — Generate all skeletons (deterministic)
 
-> **반드시 `references/wiki_templates.md`를 먼저 읽고 시작한다.**
-> 모든 wiki 페이지는 해당 템플릿을 정확히 따른다.
+> **Generate the deterministic parts of all entity pages (frontmatter, sources, Relationships) via code.**
+> In Step 3, the LLM only fills in the body (title, Overview, Key Details).
 
-`graphify-out/graph.json`을 읽어 노드/엣지/커뮤니티 파악.
-`raw/` 전체 파일 목록을 확인하고 wiki 페이지를 작성한다.
+Iterate over all files in `raw/` and generate skeletons into a temp directory:
 
-**페이지 종류별 위치:**
+```bash
+SKELETON_DIR=$(mktemp -d)
+trap 'rm -rf "$SKELETON_DIR"' EXIT
 
-- entity 페이지: `wiki/entities/{subject}/{YYYY-MM}/PascalCase.md`
-  - subject는 raw 파일의 repo 이름 (e.g. `DesktopMatePlus`) 또는 주제
-  - `{YYYY-MM}`은 raw frontmatter의 `created_at` 또는 `captured_at`에서 추출
-- concept 페이지: `wiki/concepts/Snake_Case.md`
-  - graph.json의 hyperedge 또는 여러 entity에 걸친 공통 패턴
-- subject hub: `wiki/entities/{subject}/_index.md`
-  - subject 아래 모든 entity 페이지 목록
-  - 상단에 subject 설명 블록인용(> ...) 필수
-  - 각 링크에 반드시 한 줄 설명 추가 (`— 설명` 형식, 한국어)
-  - 월 헤더는 `### YYYY_MM` (언더스코어 사용)
-  - 페이지 10개 이상: `### YYYY_MM` 아래에 `#### Category` 섹션으로 기능별 그룹핑
-  - 페이지 10개 미만: `### YYYY_MM` 아래에 카테고리 없이 링크 나열
-  - 한 줄 설명은 제목 반복 금지, 실제 변경 내용/핵심 결정을 15~35자로
+# Generate skeleton for every .md file in raw/
+find raw -type f -name "*.md" -print0 \
+  | while IFS= read -r -d '' abs_path; do
+      rel="$abs_path"
+      basename=$(basename "$rel" .md)
+      uv run python -m kb_mcp.cli.skeleton_gen \
+        "$rel" \
+        "graphify-out/graph.json" \
+        "wiki" \
+        > "$SKELETON_DIR/${basename}.skeleton.md"
+    done
+```
+
+What the skeleton fills deterministically:
+
+- **frontmatter**: `type: entity`, `created`/`updated` (today's date, quoted), `sources` (raw file path), `aliases: []`, `tags: []`
+- **`## Relationships`**: extracts outgoing edges from `graph.json` where `source_file` matches the raw file, formatted as `[[FileName|Label]] (relation)`. If no matching wiki page exists, uses plain text + `<!-- no wiki page yet -->` comment.
+
+Placeholders for LLM to fill:
+
+- `# <!-- LLM TODO: title -->`
+- `## Overview` body
+- `## Key Details` body
+
+The `$SKELETON_DIR` path is referenced in Step 3.
+
+### Step 3 — Write all wiki pages
+
+> **Always read `references/wiki_templates.md` first before starting.**
+> All wiki pages must follow those templates exactly.
+
+#### 3-1. Entity pages (skeleton-based)
+
+For each raw file:
+
+1. Read the raw file (`raw/{type}/{file}.md`)
+2. Read the corresponding skeleton (`$SKELETON_DIR/{basename}.skeleton.md`)
+3. Determine the final wiki path:
+   - subject: repo name from the raw file (e.g. `DesktopMatePlus`) or topic
+   - `{YYYY-MM}`: extracted from raw frontmatter `created_at` or `captured_at`
+   - PascalCase: derived from the title to be written
+   - Path: `wiki/entities/{subject}/{YYYY-MM}/PascalCase.md`
+4. Take skeleton content and replace only these placeholders:
+   - `# <!-- LLM TODO: title -->` → `# Actual Title`
+   - `## Overview` placeholder → 1-2 paragraph summary
+   - `## Key Details` placeholder → technical details
+5. Save to the path from step 3.
+6. **HARD RULES**:
+   - NEVER modify frontmatter `created`, `updated`, `sources`
+   - NEVER modify the `## Relationships` section (heading + body)
+   - Adding tags to `tags: []` based on raw content is OK
+
+#### 3-2. Concept pages (no skeleton — write directly)
+
+Identify hyperedges in `graphify-out/graph.json` or common patterns spanning multiple entities.
+
+- Location: `wiki/concepts/Snake_Case.md`
+- Follow the Concept page template from `references/wiki_templates.md` exactly.
+- No skeleton is used since there's no 1:1 raw mapping.
+
+#### 3-3. Subject hub `_index.md` (no skeleton — write directly)
+
+Create `wiki/entities/{subject}/_index.md` for each subject directory.
+
+- List all entity pages under that subject
+- Required: blockquote description (> ...) at the top
+- Each link must have a one-line description (`— description` format)
+- Month headers use `### YYYY_MM` (underscore, not hyphen)
+- 10+ pages: group by `#### Category` under each month
+- <10 pages: list links directly under month header without categories
+- One-line descriptions must not repeat the title; describe actual changes/key decisions in 15-35 characters
 
 ### Step 4 — Lint
 
@@ -60,14 +117,14 @@ touch log.md 2>/dev/null || true
 uv run python3 scripts/lint-wiki.py
 ```
 
-ERROR가 있으면 수정 후 재실행. PASSED 확인 후 다음 단계.
+If ERRORs exist, fix and re-run. Proceed only after PASSED.
 
 ### Step 5 — Log
 
-`log.md`에 append:
+Append to `log.md`:
 
 ```markdown
-## {YYYY-MM-DD} kb_init | {처리한 소스 요약}
+## {YYYY-MM-DD} kb_init | {summary of processed sources}
 
 - Processed N raw files
 - Created X wiki pages (entities: N, concepts: N)

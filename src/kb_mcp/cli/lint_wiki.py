@@ -7,13 +7,14 @@ Checks:
   2. .md extension in wikilink targets (Obsidian doesn't need it)
   3. Self-referencing links
   4. LaTeX/HTML in content (Obsidian markdown only)
-  5. Unfilled LLM placeholders (<!-- LLM: -->)
-  6. Frontmatter format (inline sources, quoted types, missing fields)
-  7. Orphan pages (no inbound links from other wiki pages)
-  8. Missing frontmatter entirely
-  9. Empty sections (heading with no content before next heading)
- 10. Stale pages (sources reference non-existent raw files)
- 11. Stub pages (body length below STUB_THRESHOLD_CHARS)
+  5. Unfilled LLM placeholders (<!-- LLM TODO: -->)
+  6. Frontmatter format (missing/invalid, quoted types, inline sources,
+     missing/unknown type, missing required fields)
+  7. Empty () in Relationships section
+  8. Empty sections (heading with no content before next heading)
+  9. Stale sources (sources reference non-existent raw files)
+ 10. Stub pages (body length below STUB_THRESHOLD_CHARS)
+ 11. Orphan pages (no inbound links from other wiki pages)
  12. Subject _index.md ↔ disk sync (listed pages exist, on-disk pages listed)
 
 Usage:
@@ -26,9 +27,8 @@ import sys
 from pathlib import Path
 
 BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
-DATADIR = BASEDIR / "data"
-WIKI_DIR = DATADIR / "wiki"
-RAW_DIR = DATADIR / "raw"
+WIKI_DIR = BASEDIR / "wiki"
+RAW_DIR = BASEDIR / "raw"
 
 # Body length (after frontmatter) below this is flagged as a stub page.
 STUB_THRESHOLD_CHARS = 100
@@ -146,7 +146,7 @@ def extract_links(content: str) -> list[str]:
 
 def lint(result: LintResult, wiki_dir: Path = None) -> None:
     wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
-    # data_dir is wiki_dir.parent so that frontmatter `sources:` (relative to data/)
+    # data_dir is wiki_dir.parent (project root) so that frontmatter `sources:`
     # resolve correctly even when tests pass a tmp wiki_dir.
     data_dir = wiki_dir.parent
 
@@ -193,9 +193,12 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
                 result.warn(rel, f"contains HTML tags: {', '.join(set(non_comment))}")
 
         # ── 5. Unfilled placeholders ────────────────────────────────────
-        placeholders = re.findall(r"<!--\s*LLM:.*?-->", body)
+        # Accept both `<!-- LLM: -->` (legacy) and `<!-- LLM TODO: -->`
+        # (current skeleton_gen.py output) so the source-of-truth template
+        # stays in sync with what the linter detects.
+        placeholders = re.findall(r"<!--\s*LLM(?:\s+TODO)?:.*?-->", body)
         if placeholders:
-            result.warn(rel, f"{len(placeholders)} unfilled <!-- LLM: --> placeholder(s)")
+            result.warn(rel, f"{len(placeholders)} unfilled <!-- LLM TODO: --> placeholder(s)")
 
         # ── 6. Frontmatter format ───────────────────────────────────────
         if fm is None:
@@ -212,8 +215,15 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
             if sources_inline != "[]":
                 result.error(rel, "sources uses inline [...] format — use block style")
 
-        # Missing required fields
+        # Missing or unknown type (must come before required-field loop —
+        # an empty/unknown type silently disables the loop otherwise).
         page_type = fm.get("type", "")
+        if not page_type:
+            result.error(rel, "missing frontmatter field: type")
+        elif page_type not in REQUIRED_FM_FIELDS:
+            result.warn(rel, f"unknown type: {page_type}")
+
+        # Missing required fields
         required = REQUIRED_FM_FIELDS.get(page_type, [])
         for field in required:
             if field not in fm:
@@ -245,7 +255,7 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
                     if not src_path.exists():
                         result.error(rel, f"source file not found: {src}")
 
-        # ── 11. Stub pages ──────────────────────────────────────────────
+        # ── 10. Stub pages ──────────────────────────────────────────────
         # Subject hubs at entities/{subject}/_index.md are excluded — they're
         # allowed to be short, check_index_sync handles them separately. Other
         # files happening to be named _index.md (outside entities/) still get
@@ -259,9 +269,13 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
                     f"stub page — body {len(body.strip())} chars (< {STUB_THRESHOLD_CHARS})",
                 )
 
-    # ── 10. Orphan pages ────────────────────────────────────────────────
+    # ── 11. Orphan pages ────────────────────────────────────────────────
+    # Subject hubs (`_index.md`) are not link targets by convention
+    # (cf. skeleton_gen._index_wiki_pages: files starting with `_` are
+    # excluded from the link index), so they cannot accumulate inbound
+    # links and must be excluded from orphan detection.
     for stem in all_stems:
-        if stem == "index":
+        if stem in ("index", "_index"):
             continue
         if not inbound.get(stem):
             result.warn(_find_relative(stem, wiki_dir), "orphan page — no inbound links")

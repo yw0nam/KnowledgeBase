@@ -2,7 +2,7 @@
 graph_query.py — thin CLI over kb_mcp.core.graph.search
 
 Usage:
-  python3 scripts/graph_query.py "TTS 관련 PR" [--dfs] [--budget 2000] [--graph data/graphify-out/graph.json]
+  python3 scripts/graph_query.py "TTS 관련 PR" [--dfs] [--budget 2000] [--graph graphify-out/graph.json]
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def main() -> None:
     parser.add_argument("--budget", type=int, default=2000, help="Token budget (default: 2000)")
     parser.add_argument(
         "--graph",
-        default="data/graphify-out/graph.json",
+        default="graphify-out/graph.json",
         help="Path to graph.json",
     )
     args = parser.parse_args()

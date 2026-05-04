@@ -1,26 +1,36 @@
 #!/usr/bin/env bash
-# Ingest CLAUDE.md files and recent issues/PRs from GitHub repos.
-# Usage: ./scripts/ingest-github.sh owner/repo [owner/repo2 ...]
-# Example: ./scripts/ingest-github.sh YoungWoo-Worr/DesktopMatePlus
+# Ingest CLAUDE.md files and recent issues/PRs from GitHub repos into the
+# yuri wiki knowledge base (llm-wiki-agent/raw/github/).
+#
+# Usage: ingest-github.sh owner/repo [owner/repo2 ...]
+# Example: ingest-github.sh YoungWoo-Worr/DesktopMatePlus
 
 set -euo pipefail
 
-BASEDIR="$(cd "$(dirname "$0")/.." && pwd)"
-DATADIR="$BASEDIR/data"
-CLAUDE_MD_DIR="$DATADIR/raw/github/claude-md"
-ISSUES_DIR="$DATADIR/raw/github/issues"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+GITHUB_BASE="$(cd "$SCRIPT_DIR/.." && pwd)/raw/github"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+TODAY=$(date -u +"%Y-%m-%d")
+GH_USER=$(gh api /user --jq '.login' 2>/dev/null || echo "unknown")
 
-mkdir -p "$CLAUDE_MD_DIR" "$ISSUES_DIR"
 if [ $# -eq 0 ]; then
     echo "Usage: $0 owner/repo [owner/repo2 ...]"
     exit 1
 fi
 
+# Convert a string to a kebab-case slug (max 50 chars)
+slugify() {
+    echo "$1" \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/[^a-z0-9]/-/g; s/-\+/-/g; s/^-//; s/-$//' \
+        | cut -c1-50 \
+        | sed 's/-$//'
+}
+
 # Write file only if content changed (ignoring captured_at line)
 write_if_changed() {
     local dest="$1" tmp="$2"
-    # Normalize to LF before storing
+    # Normalize to LF
     tr -d '\r' < "$tmp" > "${tmp}.lf" && mv "${tmp}.lf" "$tmp"
     if [ -f "$dest" ]; then
         local tmp_dest tmp_new
@@ -37,11 +47,12 @@ write_if_changed() {
     mv "$tmp" "$dest"
 }
 
-# Fetch last comment body for an issue/PR number (empty string if none)
+# Fetch last comment body for an issue/PR number
 last_comment() {
     local repo="$1" num="$2"
+    # Strip control chars except TAB(9) and LF(10)
     gh api "repos/$repo/issues/$num/comments" --jq '.[-1].body // ""' 2>/dev/null \
-        | tr -d '\000-\011\013-\037' \
+        | tr -d '\000-\010\013-\037' \
         || echo ""
 }
 
@@ -54,12 +65,16 @@ last_comment_author() {
 for REPO in "$@"; do
     OWNER=$(echo "$REPO" | cut -d/ -f1)
     NAME=$(echo "$REPO" | cut -d/ -f2)
-    SLUG="${OWNER}_${NAME}"
+
+    REPO_DIR="$GITHUB_BASE/$NAME"
+    ISSUE_DIR="$REPO_DIR/issue"
+    PR_DIR="$REPO_DIR/pr"
+    mkdir -p "$REPO_DIR" "$ISSUE_DIR" "$PR_DIR"
 
     echo "=== Ingesting $REPO ==="
 
-    # --- CLAUDE.md ---
-    OUTFILE="$CLAUDE_MD_DIR/${SLUG}_CLAUDE.md"
+    # ── CLAUDE.md ──────────────────────────────────────────────────────────
+    OUTFILE="$REPO_DIR/${NAME}-claude.md"
     CONTENT=$(gh api "repos/$REPO/contents/CLAUDE.md" --jq '.content' 2>/dev/null || echo "")
 
     if [ -n "$CONTENT" ]; then
@@ -67,12 +82,15 @@ for REPO in "$@"; do
         TMP=$(mktemp)
         {
             echo "---"
+            echo "category: github"
+            echo "date: \"$TODAY\""
+            echo "title: \"$REPO CLAUDE.md\""
             echo "source_url: \"https://github.com/$REPO/blob/main/CLAUDE.md\""
             echo "type: claude_md"
             echo "repo: \"$REPO\""
             echo "captured_at: \"$NOW\""
             echo "commit: \"$COMMIT\""
-            echo "contributor: \"nam-young-woo\""
+            echo "contributor: \"$GH_USER\""
             echo "tags: [project]"
             echo "---"
             echo ""
@@ -84,11 +102,11 @@ for REPO in "$@"; do
         echo "  CLAUDE.md not found in $REPO, skipping"
     fi
 
-    # --- Issues ---
+    # ── Issues ─────────────────────────────────────────────────────────────
     echo "  Fetching issues..."
     gh issue list --repo "$REPO" --state all --limit 30 \
         --json number,title,body,state,labels,createdAt,author 2>/dev/null \
-        | jq '[.[] | walk(if type == "string" then (explode | map(select(. == 10 or (. > 31 and . != 127))) | implode) else . end)]' \
+        | jq '[.[] | walk(if type == "string" then (explode | map(select(. == 9 or . == 10 or (. > 31 and . != 127))) | implode) else . end)]' \
         | jq -r '.[] | @base64' | while read -r ITEM; do
         [ -z "$ITEM" ] && continue
         DECODED=$(echo "$ITEM" | base64 --decode)
@@ -97,16 +115,21 @@ for REPO in "$@"; do
         BODY=$(echo "$DECODED" | jq -r '.body // ""')
         STATE=$(echo "$DECODED" | jq -r '.state')
         CREATED=$(echo "$DECODED" | jq -r '.createdAt')
+        DATE_ONLY="${CREATED:0:10}"
         AUTHOR=$(echo "$DECODED" | jq -r '.author.login // "unknown"')
         LABELS=$(echo "$DECODED" | jq -r '[.labels[].name] | join(", ")')
 
         LAST_COMMENT=$(last_comment "$REPO" "$NUM")
         LAST_COMMENT_AUTHOR=$(last_comment_author "$REPO" "$NUM")
 
-        ISSUE_FILE="$ISSUES_DIR/${NAME}_${NUM}.md"
+        SLUG=$(slugify "$TITLE")
+        ISSUE_FILE="$ISSUE_DIR/${NUM}-${SLUG}.md"
         TMP=$(mktemp)
         {
             echo "---"
+            echo "category: github"
+            echo "date: \"$DATE_ONLY\""
+            echo "title: \"$TITLE\""
             echo "source_url: \"https://github.com/$REPO/issues/$NUM\""
             echo "type: github_issue"
             echo "repo: \"$REPO\""
@@ -114,9 +137,8 @@ for REPO in "$@"; do
             echo "state: \"$STATE\""
             echo "labels: \"$LABELS\""
             echo "captured_at: \"$NOW\""
-            echo "created_at: \"$CREATED\""
             echo "author: \"$AUTHOR\""
-            echo "contributor: \"nam-young-woo\""
+            echo "contributor: \"$GH_USER\""
             echo "tags: [issue]"
             echo "---"
             echo ""
@@ -134,11 +156,11 @@ for REPO in "$@"; do
     done
     echo "  Issues done."
 
-    # --- PRs ---
+    # ── PRs ────────────────────────────────────────────────────────────────
     echo "  Fetching PRs..."
     gh pr list --repo "$REPO" --state all --limit 30 \
         --json number,title,body,state,labels,createdAt,author,mergedAt 2>/dev/null \
-        | jq '[.[] | walk(if type == "string" then (explode | map(select(. == 10 or (. > 31 and . != 127))) | implode) else . end)]' \
+        | jq '[.[] | walk(if type == "string" then (explode | map(select(. == 9 or . == 10 or (. > 31 and . != 127))) | implode) else . end)]' \
         | jq -r '.[] | @base64' | while read -r ITEM; do
         [ -z "$ITEM" ] && continue
         DECODED=$(echo "$ITEM" | base64 --decode)
@@ -147,10 +169,10 @@ for REPO in "$@"; do
         BODY=$(echo "$DECODED" | jq -r '.body // ""')
         MERGED_AT=$(echo "$DECODED" | jq -r '.mergedAt // ""')
         CREATED=$(echo "$DECODED" | jq -r '.createdAt')
+        DATE_ONLY="${CREATED:0:10}"
         AUTHOR=$(echo "$DECODED" | jq -r '.author.login // "unknown"')
         LABELS=$(echo "$DECODED" | jq -r '[.labels[].name] | join(", ")')
 
-        # Derive state: MERGED > OPEN/CLOSED
         if [ -n "$MERGED_AT" ]; then
             STATE="MERGED"
         else
@@ -160,10 +182,14 @@ for REPO in "$@"; do
         LAST_COMMENT=$(last_comment "$REPO" "$NUM")
         LAST_COMMENT_AUTHOR=$(last_comment_author "$REPO" "$NUM")
 
-        PR_FILE="$ISSUES_DIR/${NAME}_PR${NUM}.md"
+        SLUG=$(slugify "$TITLE")
+        PR_FILE="$PR_DIR/${NUM}-${SLUG}.md"
         TMP=$(mktemp)
         {
             echo "---"
+            echo "category: github"
+            echo "date: \"$DATE_ONLY\""
+            echo "title: \"PR #$NUM: $TITLE\""
             echo "source_url: \"https://github.com/$REPO/pull/$NUM\""
             echo "type: github_pr"
             echo "repo: \"$REPO\""
@@ -175,9 +201,8 @@ for REPO in "$@"; do
             fi
             echo "labels: \"$LABELS\""
             echo "captured_at: \"$NOW\""
-            echo "created_at: \"$CREATED\""
             echo "author: \"$AUTHOR\""
-            echo "contributor: \"nam-young-woo\""
+            echo "contributor: \"$GH_USER\""
             echo "tags: [pr]"
             echo "---"
             echo ""

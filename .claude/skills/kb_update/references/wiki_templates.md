@@ -1,13 +1,13 @@
 # Wiki Page Templates
 
-wiki 페이지 작성 시 아래 템플릿을 정확히 따른다.
-frontmatter 필드 순서, 들여쓰기, 따옴표 규칙을 그대로 유지한다.
+Follow these templates exactly when writing wiki pages.
+Maintain field order, indentation, and quoting rules as shown.
 
 ---
 
-## Entity 페이지
+## Entity Page
 
-파일 위치: `data/wiki/entities/{subject}/{YYYY-MM}/PascalCase.md`
+File location: `wiki/entities/{subject}/{YYYY-MM}/PascalCase.md`
 
 ```markdown
 ---
@@ -24,11 +24,11 @@ tags: []
 
 ## Overview
 
-[1-2단락 요약. raw 소스에서 종합해 작성.]
+[1-2 paragraph summary synthesized from raw sources.]
 
 ## Key Details
 
-[기술적 세부사항, 구현 내용, 아키텍처 등.]
+[Technical details, implementation notes, architecture etc.]
 
 ## Relationships
 
@@ -37,9 +37,9 @@ tags: []
 
 ---
 
-## Concept 페이지
+## Concept Page
 
-파일 위치: `data/wiki/concepts/Snake_Case.md`
+File location: `wiki/concepts/Snake_Case.md`
 
 ```markdown
 ---
@@ -56,7 +56,7 @@ tags: []
 
 ## Overview
 
-[이 개념이 무엇인지, 왜 여러 entity가 이 개념으로 묶이는지.]
+[What this concept is and why multiple entities are grouped under it.]
 
 ## Components
 
@@ -64,14 +64,14 @@ tags: []
 
 ## How They Connect
 
-[구성 요소들 간의 관계, 패턴, 특이점.]
+[Relationships between components, patterns, notable points.]
 ```
 
 ---
 
 ## Subject Hub (_index.md)
 
-파일 위치: `data/wiki/entities/{subject}/_index.md`
+File location: `wiki/entities/{subject}/_index.md`
 
 ```markdown
 ---

@@ -26,7 +26,7 @@ body:
         - "2. Graph (graphify / graph.json)"
         - "3. Fill (LLM wiki writing)"
         - "4. Lint (scripts/lint.sh / kb-lint-wiki)"
-        - "5. Log (data/log.md)"
+        - "5. Log (log.md)"
         - "src/kb_mcp — MCP server / core / tools"
         - "Other (specify below)"
     validations:
