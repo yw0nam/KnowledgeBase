@@ -42,7 +42,7 @@ REQUIRED_FM_FIELDS = {
     "index": ["type", "created", "updated"],
 }
 
-COLLISION_EXEMPT_STEMS = frozenset({"_index", "index"})
+COLLISION_EXEMPT_STEMS = frozenset({"_index"})
 
 
 class LintResult:
@@ -135,9 +135,11 @@ def get_raw_frontmatter(content: str) -> str:
 def collect_pages(
     wiki_dir: Path = None,
 ) -> tuple[dict[str, str], dict[str, list[Path]]]:
-    """Return ``(pages, paths_by_stem)``: stem→first content (Obsidian
-    wikilinks resolve by stem alone), and stem→every path sharing the
-    stem so the lint pass can flag collisions the legacy dict hides."""
+    """Return ``(pages, paths_by_stem)``: stem→content for one of the
+    colliding files (Obsidian wikilinks resolve by stem alone, so the
+    dict cannot hold both), and stem→every path sharing the stem so
+    the lint pass can flag collisions the stem-keyed dict cannot
+    represent."""
     wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
     pages: dict[str, str] = {}
     paths_by_stem: dict[str, list[Path]] = {}
