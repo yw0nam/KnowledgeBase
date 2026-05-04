@@ -42,6 +42,8 @@ REQUIRED_FM_FIELDS = {
     "index": ["type", "created", "updated"],
 }
 
+COLLISION_EXEMPT_STEMS = frozenset({"_index", "index"})
+
 
 class LintResult:
     def __init__(self):
@@ -130,13 +132,20 @@ def get_raw_frontmatter(content: str) -> str:
     return parts[1] if len(parts) >= 3 else ""
 
 
-def collect_pages(wiki_dir: Path = None) -> dict[str, str]:
-    """Collect all wiki pages: {stem: content}."""
+def collect_pages(
+    wiki_dir: Path = None,
+) -> tuple[dict[str, str], dict[str, list[Path]]]:
+    """Return ``(pages, paths_by_stem)``: stem→first content (Obsidian
+    wikilinks resolve by stem alone), and stem→every path sharing the
+    stem so the lint pass can flag collisions the legacy dict hides."""
     wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
-    pages = {}
+    pages: dict[str, str] = {}
+    paths_by_stem: dict[str, list[Path]] = {}
     for f in wiki_dir.rglob("*.md"):
-        pages[f.stem] = f.read_text()
-    return pages
+        paths_by_stem.setdefault(f.stem, []).append(f)
+        if f.stem not in pages:
+            pages[f.stem] = f.read_text()
+    return pages, paths_by_stem
 
 
 def extract_links(content: str) -> list[str]:
@@ -150,8 +159,24 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
     # resolve correctly even when tests pass a tmp wiki_dir.
     data_dir = wiki_dir.parent
 
-    pages = collect_pages(wiki_dir)
+    pages, paths_by_stem = collect_pages(wiki_dir)
     all_stems = set(pages.keys())
+
+    # ── 0. Stem collisions ──────────────────────────────────────────────
+    # Obsidian wikilinks are stem-keyed, so two pages sharing a stem make
+    # ``[[Foo]]`` ambiguous and used to silently drop one file from
+    # ``pages`` entirely. Subject hubs (``_index.md``) intentionally share
+    # their stem across subjects and are exempt.
+    for stem, paths in paths_by_stem.items():
+        if stem in COLLISION_EXEMPT_STEMS or len(paths) <= 1:
+            continue
+        rel_paths = sorted(str(p.relative_to(wiki_dir)) for p in paths)
+        for rel_path in rel_paths:
+            others = [op for op in rel_paths if op != rel_path]
+            result.error(
+                rel_path,
+                f"stem collision: '{stem}' also used by {', '.join(others)}",
+            )
 
     # Build inbound link map for orphan detection
     inbound: dict[str, set[str]] = {stem: set() for stem in all_stems}

@@ -380,3 +380,127 @@ def test_index_sync_skips_when_no_pages_section(lint_mod, tmp_path):
     sync_warns = [w for w in result.warnings if "not listed in" in w]
     assert sync_errors == [], f"unexpected sync errors: {sync_errors}"
     assert sync_warns == [], f"unexpected sync warns: {sync_warns}"
+
+
+# ── Stem collision detection (issue #4 — pre-existing bug) ──────────
+
+
+def test_stem_collision_errors_on_two_dirs(lint_mod, tmp_path):
+    """Two .md files with the same stem in different dirs must both ERROR.
+
+    Wikilink resolution becomes ambiguous and ``collect_pages`` previously
+    silently overwrote one file's content with the other in a stem-keyed
+    dict, hiding the loser from every subsequent lint check.
+    """
+    wiki = make_wiki_root(tmp_path)
+    long_body = "This page has plenty of content. " * 10
+    write_page(wiki / "concepts" / "Foo.md", body=long_body)
+    write_page(wiki / "entities" / "Subj" / "2026-04" / "Foo.md", body=long_body)
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[Foo]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    collision_errors = [e for e in result.errors if "stem collision" in e]
+    assert len(collision_errors) == 2, (
+        f"expected 2 collision errors, got {len(collision_errors)}: {collision_errors}"
+    )
+    joined = "\n".join(collision_errors)
+    assert "concepts/Foo.md" in joined
+    assert "2026-04/Foo.md" in joined
+    assert all("'Foo'" in e for e in collision_errors)
+
+
+def test_stem_collision_excludes_index_md(lint_mod, tmp_path):
+    """Multiple subject hubs share stem ``_index`` by design — no error."""
+    wiki = make_wiki_root(tmp_path)
+    long_body = "This page has plenty of content. " * 10
+    write_page(wiki / "entities" / "SubjA" / "2026-04" / "PageA.md", body=long_body)
+    write_page(
+        wiki / "entities" / "SubjA" / "_index.md",
+        "# SubjA\n\n## Pages\n\n- [[PageA]]\n",
+    )
+    write_page(wiki / "entities" / "SubjB" / "2026-04" / "PageB.md", body=long_body)
+    write_page(
+        wiki / "entities" / "SubjB" / "_index.md",
+        "# SubjB\n\n## Pages\n\n- [[PageB]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    collision_errors = [e for e in result.errors if "stem collision" in e]
+    assert collision_errors == [], (
+        f"_index hubs flagged as collisions: {collision_errors}"
+    )
+
+
+def test_stem_collision_with_three_files(lint_mod, tmp_path):
+    """Three colliding files: each ERROR must name the other two."""
+    wiki = make_wiki_root(tmp_path)
+    long_body = "This page has plenty of content. " * 10
+    write_page(wiki / "concepts" / "Triple.md", body=long_body)
+    write_page(wiki / "entities" / "SubjA" / "2026-04" / "Triple.md", body=long_body)
+    write_page(wiki / "entities" / "SubjB" / "2026-04" / "Triple.md", body=long_body)
+    write_page(
+        wiki / "entities" / "SubjA" / "_index.md",
+        "# SubjA\n\n## Pages\n\n- [[Triple]]\n",
+    )
+    write_page(
+        wiki / "entities" / "SubjB" / "_index.md",
+        "# SubjB\n\n## Pages\n\n- [[Triple]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    collision_errors = [e for e in result.errors if "stem collision" in e]
+    assert len(collision_errors) == 3
+    for err in collision_errors:
+        assert "also used by" in err, f"error must list peers: {err}"
+        peers_segment = err.split("also used by", 1)[1]
+        other_triple_paths = peers_segment.count("Triple.md")
+        assert other_triple_paths == 2, (
+            f"expected 2 peer paths in collision message: {err}"
+        )
+
+
+def test_no_stem_collision_when_all_unique(lint_mod, tmp_path):
+    """Distinct stems must not produce false-positive collision errors."""
+    wiki = make_wiki_root(tmp_path)
+    long_body = "This page has plenty of content. " * 10
+    write_page(wiki / "concepts" / "Alpha.md", body=long_body)
+    write_page(wiki / "entities" / "Subj" / "2026-04" / "Beta.md", body=long_body)
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[Beta]]\n",
+    )
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    collision_errors = [e for e in result.errors if "stem collision" in e]
+    assert collision_errors == []
+
+
+def test_collect_pages_returns_paths_by_stem(lint_mod, tmp_path):
+    """``collect_pages`` must expose every path per stem so callers can
+    detect collisions that the legacy stem-keyed dict hides."""
+    wiki = make_wiki_root(tmp_path)
+    long_body = "This page has plenty of content. " * 5
+    write_page(wiki / "concepts" / "Dup.md", body=long_body)
+    write_page(wiki / "entities" / "Subj" / "2026-04" / "Dup.md", body=long_body)
+    write_page(wiki / "entities" / "Subj" / "2026-04" / "Solo.md", body=long_body)
+
+    pages, paths_by_stem = lint_mod.collect_pages(wiki_dir=wiki)
+
+    assert "Dup" in pages
+    assert "Solo" in pages
+    assert len(paths_by_stem["Dup"]) == 2
+    assert len(paths_by_stem["Solo"]) == 1
+    dup_paths = sorted(str(p) for p in paths_by_stem["Dup"])
+    assert any("concepts/Dup.md" in p for p in dup_paths)
+    assert any("2026-04/Dup.md" in p for p in dup_paths)
