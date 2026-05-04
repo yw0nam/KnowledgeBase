@@ -112,8 +112,8 @@ Use `uv run python -m kb_mcp.cli.diff_raw` to identify raw files needing process
 ### 4. Lint — Validation
 
 ```bash
-uv run python3 scripts/lint-wiki.py               # errors only = fail
-uv run python3 scripts/lint-wiki.py --strict      # warnings also = fail
+uv run python -m kb_mcp.cli.lint_wiki               # errors only = fail
+uv run python -m kb_mcp.cli.lint_wiki --strict      # warnings also = fail
 ```
 
 Checks (ERROR = cannot commit):
@@ -141,7 +141,7 @@ LLM appends to `log.md`. Only after lint PASSED.
 | Script | Role | Stage |
 |---|---|---|
 | `scripts/ingest-github.sh` | GitHub source collection | 1. Ingest |
-| `scripts/lint-wiki.py` | Validation | 4. Lint |
+| `src/kb_mcp/cli/lint_wiki.py` | Validation | 4. Lint |
 
 ## Skills
 

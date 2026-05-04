@@ -33,11 +33,16 @@ touch log.md 2>/dev/null || true
 > **Generate the deterministic parts of all entity pages (frontmatter, sources, Relationships) via code.**
 > In Step 3, the LLM only fills in the body (title, Overview, Key Details).
 
-Iterate over all files in `raw/` and generate skeletons into a temp directory:
+Iterate over all files in `raw/` and generate skeletons into the
+project-local scratch directory `.skeletons/`. **Do NOT use `mktemp -d`**:
+each Bash tool call runs in a fresh shell, so `trap EXIT` does not survive
+across calls and would never clean up. `.skeletons/` is gitignored and is
+deleted explicitly at the end of Step 6.
 
 ```bash
-SKELETON_DIR=$(mktemp -d)
-trap 'rm -rf "$SKELETON_DIR"' EXIT
+SKELETON_DIR=".skeletons"
+rm -rf "$SKELETON_DIR"
+mkdir -p "$SKELETON_DIR"
 
 # Generate skeleton for every .md file in raw/
 find raw -type f -name "*.md" -print0 \
@@ -63,7 +68,7 @@ Placeholders for LLM to fill:
 - `## Overview` body
 - `## Key Details` body
 
-The `$SKELETON_DIR` path is referenced in Step 3.
+The `.skeletons/` path is referenced in Step 3.
 
 ### Step 3 — Write all wiki pages
 
@@ -75,7 +80,7 @@ The `$SKELETON_DIR` path is referenced in Step 3.
 For each raw file:
 
 1. Read the raw file (`raw/{type}/{file}.md`)
-2. Read the corresponding skeleton (`$SKELETON_DIR/{basename}.skeleton.md`)
+2. Read the corresponding skeleton (`.skeletons/{basename}.skeleton.md`)
 3. Determine the final wiki path:
    - subject: repo name from the raw file (e.g. `DesktopMatePlus`) or topic
    - `{YYYY-MM}`: extracted from raw frontmatter `created_at` or `captured_at`
@@ -114,25 +119,44 @@ Create `wiki/entities/{subject}/_index.md` for each subject directory.
 ### Step 4 — Lint
 
 ```bash
-uv run python3 scripts/lint-wiki.py
+uv run python -m kb_mcp.cli.lint_wiki
 ```
 
 If ERRORs exist, fix and re-run. Proceed only after PASSED.
 
 ### Step 5 — Log
 
-Append to `log.md`:
+**Append** to `log.md`. **Never use the Write tool** — it overwrites the
+file and the previous history is lost (log.md is gitignored, so deleted
+content cannot be recovered from git). Use a Bash heredoc append instead:
 
-```markdown
+```bash
+cat >> log.md <<'EOF'
+
 ## {YYYY-MM-DD} kb_init | {summary of processed sources}
 
 - Processed N raw files
 - Created X wiki pages (entities: N, concepts: N)
 - Lint: PASSED
+EOF
 ```
 
-### Step 6 — Commit
+Notes:
+- The leading blank line inside the heredoc keeps a one-line gap from the
+  previous entry. Always include it.
+- If `log.md` does not exist yet, the `>>` redirection creates it.
+- If you must edit existing log content (rare), use the Read + Edit tools,
+  not Write.
+
+### Step 6 — Cleanup
+
+Remove the scratch skeleton directory created in Step 2.5:
 
 ```bash
-git add raw/ wiki/ log.md && git commit -m "init: KnowledgeBase wiki generated"
+rm -rf .skeletons
 ```
+
+This is required because each Bash tool call runs in a fresh shell, so the
+`trap EXIT` cleanup pattern does not work in this environment. Doing the
+removal explicitly here guarantees `.skeletons/` does not leak into the
+repo.
