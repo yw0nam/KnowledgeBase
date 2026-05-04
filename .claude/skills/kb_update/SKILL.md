@@ -34,12 +34,17 @@ Capture the output (one path per line) as the list of new raw files for Step 3.
 > **Generate the deterministic parts of wiki pages (frontmatter, sources, Relationships) via code.**
 > The LLM only fills in the body (title, Overview, Key Details) in Step 3.
 
-For each new/changed raw file from Step 1, generate a skeleton into a temp directory:
+For each new/changed raw file from Step 1, generate a skeleton into the
+project-local scratch directory `.skeletons/`. **Do NOT use `mktemp -d`**:
+each Bash tool call runs in a fresh shell, so `trap EXIT` does not survive
+across calls and would never clean up. `.skeletons/` is gitignored and is
+deleted explicitly at the end of Step 5.
 
 ```bash
-SKELETON_DIR=$(mktemp -d)
-# Clean up on exit
-trap 'rm -rf "$SKELETON_DIR"' EXIT
+# Recreate fresh scratch dir (overwrite anything stale from a prior run)
+SKELETON_DIR=".skeletons"
+rm -rf "$SKELETON_DIR"
+mkdir -p "$SKELETON_DIR"
 
 for rel in <raw file list from Step 1>; do
   basename=$(basename "$rel" .md)
@@ -62,7 +67,7 @@ Placeholders for LLM to fill:
 - `## Overview` body
 - `## Key Details` body
 
-The `$SKELETON_DIR` path is passed to sub-agent prompts in Step 3.
+The `.skeletons/` path is referenced in sub-agent prompts in Step 3.
 
 ### Step 3 — Wiki update (parallel sub-agents)
 
@@ -82,12 +87,12 @@ You are a wiki writer for a personal knowledge base. You are a subagent — do N
 
 Today's date: {YYYY-MM-DD}
 KnowledgeBase root: ./
-Skeleton directory: {SKELETON_DIR}   # temp dir created in Step 2.5
+Skeleton directory: .skeletons        # project-local scratch dir from Step 2.5 (gitignored)
 
 ## Your task
 
 Process these raw files. Each file already has a deterministic skeleton at
-`{SKELETON_DIR}/{basename}.skeleton.md` with frontmatter and Relationships
+`.skeletons/{basename}.skeleton.md` with frontmatter and Relationships
 pre-populated. Your job is to fill in the title, Overview, and Key Details only.
 
 Raw files:
@@ -99,7 +104,7 @@ Raw files:
 ## Steps
 
 1. Read each raw file in the list above.
-2. Read the corresponding skeleton at `{SKELETON_DIR}/{basename}.skeleton.md`
+2. Read the corresponding skeleton at `.skeletons/{basename}.skeleton.md`
    where `{basename}` is the raw filename without `.md`.
 3. Determine the final wiki path:
    - subject: derive from repo name or content (e.g. `nanobot_runtime`)
@@ -111,15 +116,17 @@ Raw files:
    - Replace the `## Overview` placeholder with a 1-2 paragraph summary
    - Replace the `## Key Details` placeholder with technical details
 5. Save the result to the path from step 3.
-6. **HARD RULES — DO NOT VIOLATE**:
-   - DO NOT modify the frontmatter `created`, `updated`, `sources` fields
-   - DO NOT modify the `## Relationships` section (heading or any line under it)
-   - DO NOT add commentary, links, or sections that aren't in the skeleton
-   - You MAY add tags to `tags: []` if clearly appropriate from the raw content
-7. **Update path** (file already exists at the wiki path): refresh
-   `updated:` to today's date, append the raw file path to `sources:` if not
-   already present, then re-fill Overview/Key Details. Leave Relationships
-   from the skeleton (it reflects the latest graph).
+6. **HARD RULES for NEW pages** (file does not exist):
+   - Use the skeleton as your base.
+   - DO NOT modify the frontmatter `created`, `updated`, `sources` fields.
+   - DO NOT modify the `## Relationships` section.
+   - You MAY add tags to `tags: []` if clearly appropriate.
+7. **HARD RULES for EXISTING pages** (file already exists, meaning you are updating an entity):
+   - Use the EXISTING wiki page as your base, NOT the skeleton.
+   - Refresh `updated:` to today's date.
+   - Append the new raw file path from the skeleton to the existing `sources:` array. DO NOT delete existing sources.
+   - Integrate the new information into `## Overview` and `## Key Details`.
+   - MERGE the `## Relationships` from the skeleton into the existing page's `## Relationships` section. Add any new bullet points, but DO NOT delete existing relationships.
 8. If a related concept page already exists in `wiki/concepts/`, update
    it. Do NOT create new concept pages.
 9. Do NOT touch `_index.md` files (handled in Step 3-2).
@@ -141,6 +148,7 @@ After all sub-agents complete, the main agent updates each affected subject's `_
 
 - Create `wiki/entities/{subject}/_index.md` if it doesn't exist
 - Add new entity pages as wikilinks under the appropriate section
+- **CRITICAL**: If you updated an EXISTING entity page, do NOT add a duplicate link. Instead, locate its existing link and update its one-line description.
 - **Each link must have a one-line description** (`— description` format)
 - Subjects with 10+ pages get functional area sections
 - Format:
@@ -186,25 +194,44 @@ tags:
 ### Step 4 — Lint
 
 ```bash
-uv run python3 scripts/lint-wiki.py
+uv run python -m kb_mcp.cli.lint_wiki
 ```
 
 If ERRORs exist, fix and re-run. Proceed only after PASSED.
 
 ### Step 5 — Log
 
-Append to `log.md`:
+**Append** to `log.md`. **Never use the Write tool** — it overwrites the
+file and the previous history is lost (log.md is gitignored, so deleted
+content cannot be recovered from git). Use a Bash heredoc append instead:
 
-```markdown
+```bash
+cat >> log.md <<'EOF'
+
 ## {YYYY-MM-DD} kb_update | {summary of processed sources}
 
 - New raw files: N
 - Created: X pages, Updated: Y pages
 - Lint: PASSED
+EOF
 ```
 
-### Step 6 — Commit
+Notes:
+- The leading blank line inside the heredoc keeps a one-line gap from the
+  previous entry. Always include it.
+- If `log.md` does not exist yet, the `>>` redirection creates it.
+- If you must edit existing log content (rare), use the Read + Edit tools,
+  not Write.
+
+### Step 6 — Cleanup
+
+Remove the scratch skeleton directory created in Step 2.5:
 
 ```bash
-git add raw/ wiki/ log.md && git commit -m "update: {source name} wiki synced"
+rm -rf .skeletons
 ```
+
+This is required because each Bash tool call runs in a fresh shell, so the
+`trap EXIT` cleanup pattern does not work in this environment. Doing the
+removal explicitly here guarantees `.skeletons/` does not leak into the
+repo.
