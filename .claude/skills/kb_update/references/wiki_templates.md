@@ -94,6 +94,51 @@ tags: [project]
 
 ---
 
+## Daily Report
+
+File location: `wiki/summaries/daily/YYYY/MM/YYYY_MM_DD_daily_report.md`
+
+```markdown
+---
+type: summary
+period: daily
+date: "YYYY-MM-DD"
+tags: []
+---
+
+# Daily Report — YYYY-MM-DD
+
+## Update Summary
+
+- **New raw files processed**: N
+- **Pages created**: X
+- **Pages updated**: Y
+- **Lint result**: PASSED
+
+## Graph Changes
+
+- **Nodes added/updated**: N
+- **Edges added/updated**: M
+
+## New Pages
+
+| Page | Subject | Source |
+|------|---------|--------|
+| [[PageTitle\|Page Title]] | subject_name | `raw/path/to/file.md` |
+
+## Updated Pages
+
+| Page | Changes |
+|------|---------|
+| [[ExistingPage\|Page Title]] | Added new source, refreshed Key Details |
+
+## Notes
+
+- (any anomalies, warnings, or errors encountered during the run)
+```
+
+---
+
 ## Frontmatter 규칙
 
 - 날짜는 반드시 따옴표: `"2026-04-16"`

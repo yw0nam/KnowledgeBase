@@ -18,6 +18,9 @@ graphify-out/
 # kb_update / kb_init skeleton scratch dir (deterministic skeleton output)
 .skeletons/
 
+# Repo-local ingestion state / dedup markers
+.kb_state/
+
 # Content directories (managed separately, local only)
 raw/
 wiki/

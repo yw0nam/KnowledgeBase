@@ -82,7 +82,7 @@ def diff_raw(
     if not raw_dir.exists():
         return []
 
-    project_root = raw_dir.parent
+    project_root = raw_dir.resolve().parent
     manifest = _load_manifest(manifest_path)
 
     # Normalize manifest keys to relative paths
@@ -103,7 +103,7 @@ def diff_raw(
 
     results: set[str] = set()
 
-    for f in sorted(raw_dir.rglob("*.md")):
+    for f in sorted(raw_dir.resolve().rglob("*.md")):
         rel = str(f.relative_to(project_root))
 
         if mode in ("graph", "all"):
