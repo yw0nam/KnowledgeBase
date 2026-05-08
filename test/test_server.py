@@ -1,15 +1,13 @@
 """Tests for kb_mcp.server — tool registration and CLI."""
-import pytest
 
 
-async def test_build_server_registers_both_tools():
+async def test_build_server_registers_ingest_tool():
     from kb_mcp.server import build_server
 
     mcp = build_server()
     tools = await mcp.list_tools()
     names = {t.name for t in tools}
 
-    assert "kb_search" in names
     assert "kb_ingest" in names
 
 

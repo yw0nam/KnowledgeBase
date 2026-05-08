@@ -1,4 +1,5 @@
 """Tests for src/kb_mcp/cli/lint_wiki.py — stub + index sync checks."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -111,10 +112,7 @@ def test_index_sync_error_on_listed_but_missing(lint_mod, tmp_path):
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki)
 
-    sync_errors = [
-        e for e in result.errors
-        if "_index.md lists [[PageOne]]" in e
-    ]
+    sync_errors = [e for e in result.errors if "_index.md lists [[PageOne]]" in e]
     assert len(sync_errors) == 1
 
 
@@ -136,8 +134,7 @@ def test_index_sync_warn_on_orphan_page(lint_mod, tmp_path):
     lint_mod.lint(result, wiki_dir=wiki)
 
     sync_warns = [
-        w for w in result.warnings
-        if "page not listed in Subj/_index.md" in w
+        w for w in result.warnings if "page not listed in Subj/_index.md" in w
     ]
     assert len(sync_warns) == 1
     assert "NotListed.md" in sync_warns[0]
@@ -215,19 +212,16 @@ def test_index_sync_ignores_wikilinks_in_code_blocks(lint_mod, tmp_path):
     lint_mod.lint(result, wiki_dir=wiki)
 
     sync_errors = [
-        e for e in result.errors
-        if "_index.md lists [[FakePlaceholder]]" in e
+        e for e in result.errors if "_index.md lists [[FakePlaceholder]]" in e
     ]
-    assert sync_errors == [], (
-        f"FakePlaceholder leaked into sync check: {sync_errors}"
-    )
+    assert sync_errors == [], f"FakePlaceholder leaked into sync check: {sync_errors}"
 
 
-# ── Placeholder regex (matches skeleton_gen.py's `<!-- LLM TODO: -->`) ──
+# ── Placeholder regex matches `<!-- LLM TODO: -->` markers ─────────
 
 
 def test_placeholder_warn_on_llm_todo(lint_mod, tmp_path):
-    """skeleton_gen.py emits `<!-- LLM TODO: ... -->` — lint must detect it."""
+    """Wiki templates emit `<!-- LLM TODO: ... -->` — lint must detect it."""
     wiki = make_wiki_root(tmp_path)
     body = (
         "# Title\n\n"
@@ -298,7 +292,8 @@ def test_missing_type_field_errors(lint_mod, tmp_path):
     lint_mod.lint(result, wiki_dir=wiki)
 
     type_errors = [
-        e for e in result.errors
+        e
+        for e in result.errors
         if "missing frontmatter field: type" in e and "NoType.md" in e
     ]
     assert len(type_errors) == 1
@@ -337,9 +332,8 @@ def test_unknown_type_warns(lint_mod, tmp_path):
 
 
 def test_index_md_not_flagged_as_orphan(lint_mod, tmp_path):
-    """`_index.md` is not a link target by convention (skeleton_gen
-    excludes it), so it must not surface as an orphan even when no page
-    links to it."""
+    """`_index.md` is not a link target by convention, so it must not
+    surface as an orphan even when no page links to it."""
     wiki = make_wiki_root(tmp_path)
     long_body = "This page has plenty of content. " * 10
     write_page(wiki / "entities" / "Subj" / "2026-04" / "Alpha.md", body=long_body)
@@ -352,9 +346,9 @@ def test_index_md_not_flagged_as_orphan(lint_mod, tmp_path):
     lint_mod.lint(result, wiki_dir=wiki)
 
     orphan_warns = [w for w in result.warnings if "orphan page" in w]
-    assert all("_index" not in w for w in orphan_warns), (
-        f"_index.md flagged as orphan: {orphan_warns}"
-    )
+    assert all(
+        "_index" not in w for w in orphan_warns
+    ), f"_index.md flagged as orphan: {orphan_warns}"
 
 
 def test_index_sync_skips_when_no_pages_section(lint_mod, tmp_path):
@@ -405,9 +399,9 @@ def test_stem_collision_errors_on_two_dirs(lint_mod, tmp_path):
     lint_mod.lint(result, wiki_dir=wiki)
 
     collision_errors = [e for e in result.errors if "stem collision" in e]
-    assert len(collision_errors) == 2, (
-        f"expected 2 collision errors, got {len(collision_errors)}: {collision_errors}"
-    )
+    assert (
+        len(collision_errors) == 2
+    ), f"expected 2 collision errors, got {len(collision_errors)}: {collision_errors}"
     joined = "\n".join(collision_errors)
     assert "concepts/Foo.md" in joined
     assert "2026-04/Foo.md" in joined
@@ -433,9 +427,9 @@ def test_stem_collision_excludes_index_md(lint_mod, tmp_path):
     lint_mod.lint(result, wiki_dir=wiki)
 
     collision_errors = [e for e in result.errors if "stem collision" in e]
-    assert collision_errors == [], (
-        f"_index hubs flagged as collisions: {collision_errors}"
-    )
+    assert (
+        collision_errors == []
+    ), f"_index hubs flagged as collisions: {collision_errors}"
 
 
 def test_stem_collision_with_three_files(lint_mod, tmp_path):
@@ -463,9 +457,9 @@ def test_stem_collision_with_three_files(lint_mod, tmp_path):
         assert "also used by" in err, f"error must list peers: {err}"
         peers_segment = err.split("also used by", 1)[1]
         other_triple_paths = peers_segment.count("Triple.md")
-        assert other_triple_paths == 2, (
-            f"expected 2 peer paths in collision message: {err}"
-        )
+        assert (
+            other_triple_paths == 2
+        ), f"expected 2 peer paths in collision message: {err}"
 
 
 def test_no_stem_collision_when_all_unique(lint_mod, tmp_path):

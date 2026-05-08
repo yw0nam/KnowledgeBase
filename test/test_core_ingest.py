@@ -1,6 +1,6 @@
 """Tests for kb_mcp.core.ingest — subprocess wrapper for ingest-github.sh."""
+
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -55,9 +55,7 @@ def test_ingest_github_missing_script_raises(tmp_path):
     from kb_mcp.core import ingest as ingest_mod
 
     with pytest.raises(FileNotFoundError):
-        ingest_mod.ingest_github(
-            repos=["owner/repo"], script_path=tmp_path / "nope.sh"
-        )
+        ingest_mod.ingest_github(repos=["owner/repo"], script_path=tmp_path / "nope.sh")
 
 
 def test_ingest_github_reports_nonzero_exit(monkeypatch, tmp_path):
@@ -72,9 +70,7 @@ def test_ingest_github_reports_nonzero_exit(monkeypatch, tmp_path):
     script.write_text("#!/bin/sh\n")
     script.chmod(0o755)
 
-    result = ingest_mod.ingest_github(
-        repos=["owner/repo"], script_path=script
-    )
+    result = ingest_mod.ingest_github(repos=["owner/repo"], script_path=script)
 
     assert result["returncode"] == 1
     assert "boom" in result["stderr"]

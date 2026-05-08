@@ -7,9 +7,8 @@ requires-python = ">=3.11"
 dependencies = [
     "black>=26.3.1",
     "fastmcp>=3.2.4",
-    "graphifyy>=0.4.14",
-    "networkx>=3.0",
     "pydantic>=2.0",
+    "pyyaml>=6.0",
     "ruff>=0.15.12",
 ]
 
@@ -35,4 +34,4 @@ build-backend = "hatchling.build"
 [project.scripts]
 kb-mcp = "kb_mcp.server:main"
 kb-lint-wiki = "kb_mcp.cli.lint_wiki:main"
-kb-graph-query = "kb_mcp.cli.graph_query:main"
+kb-lint-handoff = "kb_mcp.cli.lint_handoff:main"

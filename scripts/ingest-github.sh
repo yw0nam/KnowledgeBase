@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Ingest CLAUDE.md files and recent issues/PRs from GitHub repos into the
-# yuri wiki knowledge base (llm-wiki-agent/raw/github/).
+# yuri wiki knowledge base (llm-wiki-agent/data/raw/github/).
 #
 # Usage: ingest-github.sh owner/repo [owner/repo2 ...]
 # Example: ingest-github.sh YoungWoo-Worr/DesktopMatePlus
@@ -8,7 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GITHUB_BASE="$(cd "$SCRIPT_DIR/.." && pwd)/raw/github"
+GITHUB_BASE="$(cd "$SCRIPT_DIR/.." && pwd)/data/raw/github"
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 TODAY=$(date -u +"%Y-%m-%d")
 GH_USER=$(gh api /user --jq '.login' 2>/dev/null || echo "unknown")

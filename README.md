@@ -1,74 +1,77 @@
 # KnowledgeBase
 
-Personal LLM Wiki. Raw sources go in, LLM writes wiki pages, lint keeps them honest.
+Personal LLM wiki. Raw sources go in, LLM writes wiki pages, lint keeps them honest.
 
 ## Architecture
 
+KnowledgeBase separates code from data:
+
+- **Outer repo** (`KnowledgeBase/`) — Code, lint tools, templates, documentation. Public-safe.
+- **Nested repo** (`data/`) — Raw sources, wiki pages, handoff documents. Local-only, never pushed.
+
 ```
 KnowledgeBase/
+├── src/kb_mcp/                   MCP server + CLI tools
 ├── scripts/
-│   ├── ingest-github.sh
-│   └── lint-wiki.py
-├── src/kb_mcp/          MCP server + CLI tools
+│   └── ingest-github.sh          GitHub source collection
+├── templates/                    Frontmatter + handoff templates
+├── CLAUDE.md                     Full schema + pipeline definition
+├── README.md                     This file
+└── .gitignore                    Excludes data/
+
+data/                             Nested git repo (local-only)
 ├── raw/
-│   ├── github/          CLAUDE.md, Issues, PRs
-│   ├── conversations/   Desktop Chatbot history
-│   ├── calendar/        Calendar events
-│   ├── web/             Web clippings
-│   └── manual/          Anything dropped by hand
+│   ├── github/                   CLAUDE.md, Issues, PRs
+│   ├── conversations/            Desktop Chatbot history
+│   ├── calendar/                 Calendar events
+│   ├── web/                      Web clippings
+│   ├── manual/                   Hand-dropped files
+│   └── handoffs/                 Handoff documents
 ├── wiki/
-│   ├── entities/        Named objects ({subject}/{YYYY-MM}/)
-│   ├── concepts/        Abstract ideas (patterns, protocols)
-│   ├── summaries/       Time/subject rollups
-│   ├── decisions/       Architecture Decision Records
-│   └── questions/       Saved Q&A
-├── graphify-out/        Build artifacts (gitignored)
-│   └── graph.json       Knowledge graph
-├── log.md
-├── CLAUDE.md
-└── README.md
+│   ├── entities/                 Named objects ({subject}/{YYYY-MM}/)
+│   ├── concepts/                 Abstract ideas (flat)
+│   ├── decisions/                Architecture Decision Records
+│   ├── questions/                Saved Q&A
+│   ├── improvements/             Open-ended improvements
+│   ├── checklists/               Operational checklists
+│   └── summaries/                Time/subject rollups
+└── log.md                        Operation record
 ```
 
 ## Pipeline
 
+4-stage pipeline:
+
 ```
-1.INGEST → 2.GRAPH → 3.FILL → 4.LINT → 5.LOG
-(script)  (graphify)  (LLM)  (script)  (LLM)
+1. INGEST → 2. FILL → 3. LOG → 4. LINT
+(script)    (LLM)    (LLM)   (script)
 ```
 
 ### 1. Ingest
 
+Collect raw sources into `data/raw/`.
+
 ```bash
 ./scripts/ingest-github.sh owner/repo    # GitHub CLAUDE.md + Issues + PRs
-# or drop files into raw/manual/
+# or drop files into data/raw/manual/
 ```
 
-### 2. Graph
+### 2. Fill
 
-```
-/graphify raw/ --update --no-viz
-```
+LLM reads raw files and writes wiki pages to `data/wiki/`.
 
-`--update`: only re-extract new files (uses cache). `--no-viz`: skip HTML.
-Result: `graphify-out/graph.json`
+### 3. Log
 
-### 3. Fill
-
-Use `uv run python -m kb_mcp.cli.diff_raw` to find unprocessed raw files → read `graphify-out/graph.json` → LLM writes wiki pages.
+Append operation record to `data/log.md`.
 
 ### 4. Lint
 
-```bash
-uv run python3 scripts/lint-wiki.py               # errors = fail
-uv run python3 scripts/lint-wiki.py --strict      # warnings = fail too
-```
-
-### 5. Log + Commit
+Validate wiki pages and handoff documents.
 
 ```bash
-# LLM appends to log.md after lint passes
-git add raw/ wiki/ log.md
-git commit -m "ingest: [source] description"
+kb-lint-wiki                      # errors only = fail
+kb-lint-wiki --strict             # warnings also = fail
+kb-lint-handoff                   # validate handoffs
 ```
 
 ## Conventions
@@ -81,7 +84,7 @@ source_url: "https://..."
 type: github_issue | claude_md | conversation | calendar_event | web_article | manual
 captured_at: "2026-04-15T09:00:00Z"
 author: "who wrote it"
-contributor: "nam-young-woo"
+contributor: "contributor name"
 tags: []
 ---
 ```
@@ -92,13 +95,13 @@ Always block style for lists. Never quote scalars except dates.
 
 ```yaml
 ---
-type: entity
+type: entity | concept | decision | question | improvement | checklist | summary
 created: "2026-04-15"
 updated: "2026-04-15"
 sources:
   - raw/github/issues/repo_42.md
 aliases: []
-tags: [architecture, entity, project]
+tags: []
 ---
 ```
 
@@ -114,12 +117,60 @@ tags: [architecture, entity, project]
 - `[[FileName]]` or `[[FileName|Display Text]]`. Never `.md` extension.
 - Only link to pages that exist. No page → plain text.
 
+## Privacy
+
+`data/` is local-only. Never pushed to remote.
+
+- Outer `.gitignore` excludes `data/`
+- All raw sources and wiki pages stay local
+- Handoff documents (sensitive decisions) stay local
+
+## Quick Start
+
+### Install
+
+```bash
+uv sync
+```
+
+### Ingest sources
+
+```bash
+./scripts/ingest-github.sh owner/repo
+```
+
+### Write wiki
+
+Read `data/raw/` and write pages to `data/wiki/`.
+
+### Validate
+
+```bash
+kb-lint-wiki
+kb-lint-handoff
+```
+
+### Commit
+
+```bash
+cd data
+git add raw/ wiki/ log.md
+git commit -m "ingest: [source] description"
+```
+
 ## Files
 
 | File | Role |
 |---|---|
-| `CLAUDE.md` | Schema + pipeline definition |
-| `log.md` | Append-only operation record |
-| `graphify-out/graph.json` | Knowledge graph (build artifact) |
-| `scripts/ingest-github.sh` | Step 1: GitHub data collection |
-| `scripts/lint-wiki.py` | Step 4: validation |
+| `CLAUDE.md` | Full schema + pipeline definition |
+| `scripts/ingest-github.sh` | GitHub source collection |
+| `src/kb_mcp/cli/lint_wiki.py` | Wiki validation |
+| `src/kb_mcp/cli/lint_handoff.py` | Handoff validation |
+| `data/log.md` | Operation record |
+| `data/raw/` | Immutable sources |
+| `data/wiki/` | LLM-generated pages |
+| `data/raw/handoffs/` | Handoff documents |
+
+## More
+
+See `CLAUDE.md` for full schema, frontmatter conventions, handoff system details, and reference links.
