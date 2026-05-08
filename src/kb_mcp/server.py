@@ -1,4 +1,4 @@
-"""kb_mcp — MCP server exposing KnowledgeBase graph search + ingest.
+"""kb_mcp — MCP server exposing KnowledgeBase ingest tools.
 
 Usage:
     kb-mcp                              # stdio (default)
@@ -12,12 +12,10 @@ import argparse
 from fastmcp import FastMCP
 
 from .tools import ingest as ingest_tool
-from .tools import search as search_tool
 
 
 def build_server() -> FastMCP:
     mcp = FastMCP("kb_mcp")
-    search_tool.register(mcp)
     ingest_tool.register(mcp)
     return mcp
 

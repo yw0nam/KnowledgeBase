@@ -223,11 +223,11 @@ def test_index_sync_ignores_wikilinks_in_code_blocks(lint_mod, tmp_path):
     )
 
 
-# ── Placeholder regex (matches skeleton_gen.py's `<!-- LLM TODO: -->`) ──
+# ── Placeholder regex matches `<!-- LLM TODO: -->` markers ─────────
 
 
 def test_placeholder_warn_on_llm_todo(lint_mod, tmp_path):
-    """skeleton_gen.py emits `<!-- LLM TODO: ... -->` — lint must detect it."""
+    """Wiki templates emit `<!-- LLM TODO: ... -->` — lint must detect it."""
     wiki = make_wiki_root(tmp_path)
     body = (
         "# Title\n\n"
@@ -337,9 +337,8 @@ def test_unknown_type_warns(lint_mod, tmp_path):
 
 
 def test_index_md_not_flagged_as_orphan(lint_mod, tmp_path):
-    """`_index.md` is not a link target by convention (skeleton_gen
-    excludes it), so it must not surface as an orphan even when no page
-    links to it."""
+    """`_index.md` is not a link target by convention, so it must not
+    surface as an orphan even when no page links to it."""
     wiki = make_wiki_root(tmp_path)
     long_body = "This page has plenty of content. " * 10
     write_page(wiki / "entities" / "Subj" / "2026-04" / "Alpha.md", body=long_body)

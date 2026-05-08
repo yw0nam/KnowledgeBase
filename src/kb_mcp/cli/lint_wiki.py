@@ -221,8 +221,8 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
 
         # ── 5. Unfilled placeholders ────────────────────────────────────
         # Accept both `<!-- LLM: -->` (legacy) and `<!-- LLM TODO: -->`
-        # (current skeleton_gen.py output) so the source-of-truth template
-        # stays in sync with what the linter detects.
+        # (canonical wiki template marker) so the lint stays aligned with
+        # what wiki templates emit.
         placeholders = re.findall(r"<!--\s*LLM(?:\s+TODO)?:.*?-->", body)
         if placeholders:
             result.warn(rel, f"{len(placeholders)} unfilled <!-- LLM TODO: --> placeholder(s)")
@@ -298,9 +298,9 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
 
     # ── 11. Orphan pages ────────────────────────────────────────────────
     # Subject hubs (`_index.md`) are not link targets by convention
-    # (cf. skeleton_gen._index_wiki_pages: files starting with `_` are
-    # excluded from the link index), so they cannot accumulate inbound
-    # links and must be excluded from orphan detection.
+    # (files starting with `_` are excluded from the link index by
+    # convention), so they cannot accumulate inbound links and must be
+    # excluded from orphan detection.
     for stem in all_stems:
         if stem in ("index", "_index"):
             continue
