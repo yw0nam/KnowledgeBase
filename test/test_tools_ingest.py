@@ -1,4 +1,5 @@
 """Tests for kb_mcp.tools.ingest — MCP tool wrapper."""
+
 import subprocess
 
 import pytest

@@ -49,7 +49,7 @@ COLLISION_EXEMPT_STEMS = frozenset({"_index"})
 
 class LintResult:
     def __init__(self):
-        self.errors: list[str] = []    # must fix
+        self.errors: list[str] = []  # must fix
         self.warnings: list[str] = []  # should fix
 
     def error(self, file: str, msg: str):
@@ -78,7 +78,7 @@ class LintResult:
             for w in sorted(self.warnings):
                 print(w)
 
-        print(f"\n--- Summary ---\n")
+        print("\n--- Summary ---\n")
         print(f"  Errors:   {len(self.errors)}")
         print(f"  Warnings: {len(self.warnings)}")
 
@@ -118,7 +118,9 @@ def parse_frontmatter(content: str) -> dict | None:
             elif val.startswith("["):
                 # Inline list
                 items = val.strip("[]").split(",")
-                result[current_key] = [i.strip().strip('"').strip("'") for i in items if i.strip()]
+                result[current_key] = [
+                    i.strip().strip('"').strip("'") for i in items if i.strip()
+                ]
             elif val.startswith('"') or val.startswith("'"):
                 result[current_key] = val.strip('"').strip("'")
             else:
@@ -190,7 +192,11 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
         links = extract_links(content)
         fm_raw = get_raw_frontmatter(content)
         fm = parse_frontmatter(content)
-        body = content.split("---", 2)[2] if content.startswith("---") and content.count("---") >= 2 else content
+        body = (
+            content.split("---", 2)[2]
+            if content.startswith("---") and content.count("---") >= 2
+            else content
+        )
 
         # ── 1. Dead wikilinks ───────────────────────────────────────────
         for link in links:
@@ -227,7 +233,9 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
         # what wiki templates emit.
         placeholders = re.findall(r"<!--\s*LLM(?:\s+TODO)?:.*?-->", body)
         if placeholders:
-            result.warn(rel, f"{len(placeholders)} unfilled <!-- LLM TODO: --> placeholder(s)")
+            result.warn(
+                rel, f"{len(placeholders)} unfilled <!-- LLM TODO: --> placeholder(s)"
+            )
 
         # ── 6. Frontmatter format ───────────────────────────────────────
         if fm is None:
@@ -307,7 +315,9 @@ def lint(result: LintResult, wiki_dir: Path = None) -> None:
         if stem in ("index", "_index"):
             continue
         if not inbound.get(stem):
-            result.warn(_find_relative(stem, wiki_dir), "orphan page — no inbound links")
+            result.warn(
+                _find_relative(stem, wiki_dir), "orphan page — no inbound links"
+            )
 
     # ── 12. Subject _index.md ↔ disk sync ───────────────────────────────
     check_index_sync(result, wiki_dir)
@@ -363,26 +373,21 @@ def check_index_sync(result: LintResult, wiki_dir: Path = None) -> None:
         section_start = pages_match.end()
         next_heading = re.search(r"^##\s+", stripped[section_start:], re.MULTILINE)
         section_end = (
-            section_start + next_heading.start()
-            if next_heading
-            else len(stripped)
+            section_start + next_heading.start() if next_heading else len(stripped)
         )
         pages_section = stripped[section_start:section_end]
 
         listed_stems = set(extract_links(pages_section))
 
         on_disk_stems = {
-            f.stem
-            for f in subject_dir.rglob("*.md")
-            if f.stem != "_index"
+            f.stem for f in subject_dir.rglob("*.md") if f.stem != "_index"
         }
 
         # Filter wikilinks to only those that look like they target a subject
         # page (no "/" in the link → simple stem reference).
         # Also drop self-link to _index.
         listed_stems = {
-            link for link in listed_stems
-            if "/" not in link and link != "_index"
+            link for link in listed_stems if "/" not in link and link != "_index"
         }
 
         listed_but_missing = listed_stems - on_disk_stems

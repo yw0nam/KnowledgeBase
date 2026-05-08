@@ -1,4 +1,5 @@
 """Subprocess wrapper around scripts/ingest-github.sh."""
+
 from __future__ import annotations
 
 import re
@@ -16,9 +17,7 @@ def _validate_repos(repos: Sequence[str]) -> None:
         raise ValueError("repos must not be empty; pass at least one 'owner/repo'")
     for r in repos:
         if not REPO_PATTERN.match(r):
-            raise ValueError(
-                f"invalid repo {r!r}; expected 'owner/repo' format"
-            )
+            raise ValueError(f"invalid repo {r!r}; expected 'owner/repo' format")
 
 
 def ingest_github(

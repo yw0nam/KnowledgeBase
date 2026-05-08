@@ -5,6 +5,7 @@ Usage:
     kb-mcp --transport stdio
     kb-mcp --transport http --port 8000
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,9 +29,7 @@ def main() -> None:
         default="stdio",
         help="Transport: stdio (local) or http (streamable HTTP, remote).",
     )
-    parser.add_argument(
-        "--host", default="127.0.0.1", help="Host for http transport."
-    )
+    parser.add_argument("--host", default="127.0.0.1", help="Host for http transport.")
     parser.add_argument(
         "--port", type=int, default=8000, help="Port for http transport."
     )

@@ -56,7 +56,7 @@ def _collect_wiki_sources(wiki_dir: Path) -> set[str]:
 
 def diff_raw(raw_dir: Path, wiki_dir: Path) -> list[str]:
     """Return raw files not yet referenced by any wiki page.
-    
+
     Compares raw/ files on disk against wiki page frontmatter sources.
     Returns relative paths (from project root) of unprocessed raw files.
     """
@@ -81,7 +81,9 @@ def main() -> None:
         description="Detect raw files not yet referenced by wiki pages"
     )
     parser.add_argument("--raw-dir", default="data/raw", help="Path to raw/ directory")
-    parser.add_argument("--wiki-dir", default="data/wiki", help="Path to wiki/ directory")
+    parser.add_argument(
+        "--wiki-dir", default="data/wiki", help="Path to wiki/ directory"
+    )
     args = parser.parse_args()
 
     changed = diff_raw(

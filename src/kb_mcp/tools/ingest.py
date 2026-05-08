@@ -1,4 +1,5 @@
 """MCP tool: kb_ingest — run scripts/ingest-github.sh for given repos."""
+
 from __future__ import annotations
 
 import json

@@ -1,5 +1,4 @@
 """Tests for kb_mcp.server — tool registration and CLI."""
-import pytest
 
 
 async def test_build_server_registers_ingest_tool():
