@@ -47,75 +47,7 @@ data/                             Nested git repo (local-only)
 (script)    (LLM)    (LLM)   (script)
 ```
 
-### 1. Ingest
-
-Collect raw sources into `data/raw/`.
-
-```bash
-./scripts/ingest-github.sh owner/repo    # GitHub CLAUDE.md + Issues + PRs
-# or drop files into data/raw/manual/
-```
-
-### 2. Fill
-
-LLM reads raw files and writes wiki pages to `data/wiki/`.
-
-### 3. Log
-
-Append operation record to `data/log.md`.
-
-### 4. Lint
-
-Validate wiki pages and handoff documents.
-
-```bash
-kb-lint-wiki                      # errors only = fail
-kb-lint-wiki --strict             # warnings also = fail
-kb-lint-handoff                   # validate handoffs
-```
-
-## Conventions
-
-### Frontmatter — Raw files
-
-```yaml
----
-source_url: "https://..."
-type: github_issue | claude_md | conversation | calendar_event | web_article | manual
-captured_at: "2026-04-15T09:00:00Z"
-author: "who wrote it"
-contributor: "contributor name"
-tags: []
----
-```
-
-### Frontmatter — Wiki pages
-
-Always block style for lists. Never quote scalars except dates.
-
-```yaml
----
-type: entity | concept | decision | question | improvement | checklist | summary
-created: "2026-04-15"
-updated: "2026-04-15"
-sources:
-  - raw/github/issues/repo_42.md
-aliases: []
-tags: []
----
-```
-
-### Naming
-
-- Raw: `{repo}_{number}.md`, `chat_{timestamp}.md`, `event_{date}_{slug}.md`
-- Wiki entities: `{subject}/{YYYY-MM}/PascalCase.md`
-- Wiki concepts: `Snake_Case.md` (flat)
-- Summaries: ISO (`2026-W16.md`, `2026-04.md`)
-
-### Wikilinks
-
-- `[[FileName]]` or `[[FileName|Display Text]]`. Never `.md` extension.
-- Only link to pages that exist. No page → plain text.
+See [docs/pipeline.md](docs/pipeline.md) for stage-by-stage details, bash commands, and lint check categories.
 
 ## Privacy
 
@@ -171,6 +103,12 @@ git commit -m "ingest: [source] description"
 | `data/wiki/` | LLM-generated pages |
 | `data/raw/handoffs/` | Handoff documents |
 
-## More
+## Documentation
 
-See `CLAUDE.md` for full schema, frontmatter conventions, handoff system details, and reference links.
+- [Pipeline details](docs/pipeline.md) — Full pipeline stages and lint check categories
+- [Frontmatter](docs/frontmatter.md) — Raw, Wiki, and Handoff frontmatter schemas
+- [Wiki Categories](docs/wiki-categories.md) — 7 categories, naming, wikilinks, tags
+- [Handoff System](docs/handoff-system.md) — Roles, status, promotion
+- [Commands](docs/commands.md) — Full CLI command reference
+
+See [CLAUDE.md](CLAUDE.md) for the LLM entry point.
