@@ -3,7 +3,6 @@ type: entity
 created: ""
 updated: ""
 sources: []
-graph_nodes: []
 aliases: []
 tags: []
 ---
