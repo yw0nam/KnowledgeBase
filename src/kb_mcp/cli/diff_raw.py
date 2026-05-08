@@ -2,14 +2,15 @@
 """
 diff_raw.py — detect raw files not yet referenced by wiki pages.
 
-Scans raw/ directory and identifies files that are not yet cited in any wiki
-page's frontmatter `sources:` list. These are candidates for wiki page creation.
+Scans data/raw/ directory and identifies files that are not yet cited in any
+wiki page's frontmatter `sources:` list. These are candidates for wiki page
+creation.
 
 Usage:
-    uv run python -m kb_mcp.cli.diff_raw [--raw-dir raw] [--wiki-dir wiki]
+    uv run python -m kb_mcp.cli.diff_raw [--raw-dir data/raw] [--wiki-dir data/wiki]
 
 Output (one relative path per line):
-    raw/github/nanobot_runtime/issue/42-some-title.md
+    data/raw/github/nanobot_runtime/issue/42-some-title.md
 
 Exit codes:
     0  unprocessed files found (printed to stdout)
@@ -79,8 +80,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Detect raw files not yet referenced by wiki pages"
     )
-    parser.add_argument("--raw-dir", default="raw", help="Path to raw/ directory")
-    parser.add_argument("--wiki-dir", default="wiki", help="Path to wiki/ directory")
+    parser.add_argument("--raw-dir", default="data/raw", help="Path to raw/ directory")
+    parser.add_argument("--wiki-dir", default="data/wiki", help="Path to wiki/ directory")
     args = parser.parse_args()
 
     changed = diff_raw(

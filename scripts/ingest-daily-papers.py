@@ -6,8 +6,8 @@ Default behavior:
 - only processes it when the subject paper date equals today's KST date
 - extracts paper titles + HuggingFace paper URLs
 - fetches each paper abstract from the arXiv API
-- writes one immutable markdown source under raw/web/huggingface/
-- deduplicates with repo-local state under .kb_state/ingest/daily_papers/
+- writes one immutable markdown source under data/raw/web/huggingface/
+- deduplicates with repo-local state under data/raw/ops/ingest_state/daily_papers/
 
 This script intentionally performs INGEST only. The existing kb_update cron/job can
 handle graph/fill/lint/log stages separately.
@@ -31,8 +31,8 @@ from pathlib import Path
 from typing import Any
 
 KB_ROOT = Path(__file__).resolve().parents[1]
-RAW_DIR = KB_ROOT / "raw" / "web" / "huggingface"
-STATE_DIR = KB_ROOT / ".kb_state" / "ingest" / "daily_papers"
+RAW_DIR = KB_ROOT / "data" / "raw" / "web" / "huggingface"
+STATE_DIR = KB_ROOT / "data" / "raw" / "ops" / "ingest_state" / "daily_papers"
 GAPI = Path.home() / ".hermes" / "skills" / "productivity" / "google-workspace" / "scripts" / "google_api.py"
 GMAIL_QUERY = 'from:daily_papers_digest@notifications.huggingface.co subject:"Daily papers of" newer_than:2d'
 KST = timezone(timedelta(hours=9))

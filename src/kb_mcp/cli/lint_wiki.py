@@ -18,8 +18,8 @@ Checks:
  12. Subject _index.md ↔ disk sync (listed pages exist, on-disk pages listed)
 
 Usage:
-    python3 scripts/lint-wiki.py           # full lint
-    python3 scripts/lint-wiki.py --strict  # exit code 1 on any warning
+    uv run python -m kb_mcp.cli.lint_wiki           # full lint
+    uv run python -m kb_mcp.cli.lint_wiki --strict  # exit code 1 on any warning
 """
 
 import re
@@ -27,8 +27,8 @@ import sys
 from pathlib import Path
 
 BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
-WIKI_DIR = BASEDIR / "wiki"
-RAW_DIR = BASEDIR / "raw"
+WIKI_DIR = BASEDIR / "data" / "wiki"
+RAW_DIR = BASEDIR / "data" / "raw"
 
 # Body length (after frontmatter) below this is flagged as a stub page.
 STUB_THRESHOLD_CHARS = 100
@@ -37,6 +37,8 @@ REQUIRED_FM_FIELDS = {
     "entity": ["type", "created", "updated", "sources", "tags"],
     "concept": ["type", "created", "updated", "sources", "tags"],
     "decision": ["type", "created", "updated", "sources", "tags"],
+    "improvement": ["type", "created", "updated", "sources", "tags"],
+    "checklist": ["type", "created", "updated", "sources", "tags"],
     "summary": ["type", "created", "updated", "sources", "tags"],
     "question": ["type", "created", "updated", "sources", "tags"],
     "index": ["type", "created", "updated"],
