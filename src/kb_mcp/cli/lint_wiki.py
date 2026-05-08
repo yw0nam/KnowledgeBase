@@ -33,13 +33,70 @@ Usage:
 
 from __future__ import annotations
 
-import datetime
 import re
-import subprocess
 import sys
 from pathlib import Path
 
-import yaml
+from kb_mcp.cli._wiki_checks import (
+    CAPTURED_AT_MTIME_TOLERANCE_SEC,
+    RAW_FM_REQUIRED,
+    RAW_INGEST_TOPLEVEL,
+    check_index_sync,
+    check_raw_captured_at_mtime,
+    check_raw_frontmatter,
+    check_raw_immutability,
+    _get_modified_raw_files,
+)
+from kb_mcp.cli._wiki_utils import (
+    _find_relative,
+    _parse_yaml_frontmatter,
+    collect_pages,
+    extract_links,
+    get_raw_frontmatter,
+    parse_frontmatter,
+)
+from kb_mcp.cli._wiki_validators import (
+    IMPROVEMENT_DOMAIN_VALUES,
+    IMPROVEMENT_KIND_VALUES,
+    IMPROVEMENT_SEVERITY_VALUES,
+    IMPROVEMENT_STATUS_VALUES,
+    ISO_DATE_RE,
+    _validate_checklist_items,
+    _validate_improvement_fm,
+)
+
+__all__ = [
+    "BASEDIR",
+    "CAPTURED_AT_MTIME_TOLERANCE_SEC",
+    "COLLISION_EXEMPT_STEMS",
+    "IMPROVEMENT_DOMAIN_VALUES",
+    "IMPROVEMENT_KIND_VALUES",
+    "IMPROVEMENT_SEVERITY_VALUES",
+    "IMPROVEMENT_STATUS_VALUES",
+    "ISO_DATE_RE",
+    "LintResult",
+    "RAW_DIR",
+    "RAW_FM_REQUIRED",
+    "RAW_INGEST_TOPLEVEL",
+    "REQUIRED_FM_FIELDS",
+    "STUB_THRESHOLD_CHARS",
+    "WIKI_DIR",
+    "_find_relative",
+    "_get_modified_raw_files",
+    "_parse_yaml_frontmatter",
+    "_validate_checklist_items",
+    "_validate_improvement_fm",
+    "check_index_sync",
+    "check_raw_captured_at_mtime",
+    "check_raw_frontmatter",
+    "check_raw_immutability",
+    "collect_pages",
+    "extract_links",
+    "get_raw_frontmatter",
+    "lint",
+    "main",
+    "parse_frontmatter",
+]
 
 BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
 WIKI_DIR = BASEDIR / "data" / "wiki"
@@ -47,27 +104,6 @@ RAW_DIR = BASEDIR / "data" / "raw"
 
 # Body length (after frontmatter) below this is flagged as a stub page.
 STUB_THRESHOLD_CHARS = 100
-
-# ── Improvement enum vocabularies (per spec lines 432-444) ──────────
-ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-IMPROVEMENT_KIND_VALUES = frozenset({"improvement", "issue", "proposal"})
-IMPROVEMENT_DOMAIN_VALUES = frozenset({"cost", "correctness", "perf", "dx", "security"})
-IMPROVEMENT_SEVERITY_VALUES = frozenset({"low", "med", "high"})
-IMPROVEMENT_STATUS_VALUES = frozenset({"open", "acknowledged", "resolved", "wontfix"})
-
-# ── Raw frontmatter contract (per CLAUDE.md "Raw files" section) ────
-RAW_FM_REQUIRED = ("source_url", "type", "captured_at", "contributor")
-# Raw subdirectories that hold ingested external sources and therefore must
-# satisfy the standard raw frontmatter contract. Other top-level dirs
-# (handoffs/, ops/, sessions/) follow specialized templates handled
-# elsewhere (kb-lint-handoff) and are skipped here.
-RAW_INGEST_TOPLEVEL = frozenset(
-    {"github", "gmail", "calendar", "web", "manual", "conversations"}
-)
-# Tolerance for mtime > captured_at (seconds). Allows for normal capture →
-# write delay (clock skew, fs latency) without flagging genuine immutability
-# violations. 60s is enough for any sane ingest pipeline.
-CAPTURED_AT_MTIME_TOLERANCE_SEC = 60
 
 REQUIRED_FM_FIELDS = {
     "entity": ["type", "created", "updated", "sources", "tags"],
@@ -132,172 +168,6 @@ class LintResult:
         print("\n--- Summary ---\n")
         print(f"  Errors:   {len(self.errors)}")
         print(f"  Warnings: {len(self.warnings)}")
-
-
-def parse_frontmatter(content: str) -> dict | None:
-    """Extract frontmatter fields from markdown content (no yaml dependency)."""
-    if not content.startswith("---"):
-        return None
-    parts = content.split("---", 2)
-    if len(parts) < 3:
-        return None
-    fm_text = parts[1].strip()
-    if not fm_text:
-        return {}
-    result = {}
-    current_key = None
-    current_list = None
-    for line in fm_text.split("\n"):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        # List item under current key
-        if stripped.startswith("- ") and current_key:
-            if current_list is None:
-                current_list = []
-                result[current_key] = current_list
-            current_list.append(stripped[2:].strip().strip('"').strip("'"))
-            continue
-        # Key: value
-        m = re.match(r"^([a-zA-Z_]+)\s*:\s*(.*)", stripped)
-        if m:
-            current_key = m.group(1)
-            val = m.group(2).strip()
-            current_list = None
-            if val == "" or val == "[]":
-                result[current_key] = []
-            elif val.startswith("["):
-                # Inline list
-                items = val.strip("[]").split(",")
-                result[current_key] = [
-                    i.strip().strip('"').strip("'") for i in items if i.strip()
-                ]
-            elif val.startswith('"') or val.startswith("'"):
-                result[current_key] = val.strip('"').strip("'")
-            else:
-                result[current_key] = val
-    return result
-
-
-def get_raw_frontmatter(content: str) -> str:
-    """Get raw frontmatter string for format checks."""
-    if not content.startswith("---"):
-        return ""
-    parts = content.split("---", 2)
-    return parts[1] if len(parts) >= 3 else ""
-
-
-def _parse_yaml_frontmatter(text: str) -> dict | None:
-    """Parse raw-file frontmatter via PyYAML. Returns None on absent/invalid."""
-    if not text.startswith("---"):
-        return None
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return None
-    try:
-        fm = yaml.safe_load(parts[1])
-    except yaml.YAMLError:
-        return None
-    return fm if isinstance(fm, dict) else None
-
-
-def collect_pages(
-    wiki_dir: Path = None,
-) -> tuple[dict[str, str], dict[str, list[Path]]]:
-    """Return ``(pages, paths_by_stem)``: stem→content for one of the
-    colliding files (Obsidian wikilinks resolve by stem alone, so the
-    dict cannot hold both), and stem→every path sharing the stem so
-    the lint pass can flag collisions the stem-keyed dict cannot
-    represent."""
-    wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
-    pages: dict[str, str] = {}
-    paths_by_stem: dict[str, list[Path]] = {}
-    for f in wiki_dir.rglob("*.md"):
-        paths_by_stem.setdefault(f.stem, []).append(f)
-        if f.stem not in pages:
-            pages[f.stem] = f.read_text()
-    return pages, paths_by_stem
-
-
-def extract_links(content: str) -> list[str]:
-    """Extract wikilink targets from content."""
-    return re.findall(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]", content)
-
-
-def _validate_improvement_fm(
-    rel: str,
-    fm: dict,
-    result: LintResult,
-    all_stems: set[str],
-    wiki_dir: Path,
-) -> None:
-    """Enum + reference validation for ``type: improvement`` pages."""
-    kind = fm.get("kind")
-    if kind not in (None, "") and kind not in IMPROVEMENT_KIND_VALUES:
-        result.error(
-            rel,
-            f"invalid kind: {kind!r} (must be one of {sorted(IMPROVEMENT_KIND_VALUES)})",
-        )
-
-    observed_at = fm.get("observed_at")
-    if observed_at not in (None, "") and not ISO_DATE_RE.match(str(observed_at)):
-        result.error(
-            rel,
-            f"observed_at must be ISO date YYYY-MM-DD, got {observed_at!r}",
-        )
-
-    domain = fm.get("domain")
-    if domain not in (None, "") and domain not in IMPROVEMENT_DOMAIN_VALUES:
-        result.error(
-            rel,
-            f"invalid domain: {domain!r} (must be one of {sorted(IMPROVEMENT_DOMAIN_VALUES)})",
-        )
-
-    severity = fm.get("severity")
-    if severity not in (None, "") and severity not in IMPROVEMENT_SEVERITY_VALUES:
-        result.error(
-            rel,
-            f"invalid severity: {severity!r} (must be one of {sorted(IMPROVEMENT_SEVERITY_VALUES)})",
-        )
-
-    status = fm.get("status")
-    if status not in (None, "") and status not in IMPROVEMENT_STATUS_VALUES:
-        result.error(
-            rel,
-            f"invalid status: {status!r} (must be one of {sorted(IMPROVEMENT_STATUS_VALUES)})",
-        )
-
-    related = fm.get("related", [])
-    if isinstance(related, list):
-        for ref in related:
-            if not isinstance(ref, str) or not ref:
-                continue
-            if "/" in ref:
-                if not (wiki_dir / ref).exists():
-                    result.error(rel, f"related: target not found: {ref}")
-            else:
-                stem = ref[:-3] if ref.endswith(".md") else ref
-                if stem not in all_stems:
-                    result.error(rel, f"related: target not found: {ref}")
-
-
-def _validate_checklist_items(rel: str, body: str, result: LintResult) -> None:
-    """All bullets under ``## Items`` must use markdown task-list syntax."""
-    m = re.search(r"^##\s+Items\b.*$", body, re.MULTILINE)
-    if not m:
-        return
-    section_start = m.end()
-    next_h = re.search(r"^##\s+", body[section_start:], re.MULTILINE)
-    section_end = section_start + next_h.start() if next_h else len(body)
-    section = body[section_start:section_end]
-
-    for line in section.splitlines():
-        stripped = line.strip()
-        if not stripped.startswith("- "):
-            continue
-        if not re.match(r"^- \[[ xX]\]\s", stripped):
-            preview = stripped[:60]
-            result.error(rel, f"checklist item not in task-list syntax: {preview!r}")
 
 
 def lint(
@@ -479,259 +349,6 @@ def lint(
     if check_immutability:
         check_raw_captured_at_mtime(result, raw_dir)
         check_raw_immutability(result, raw_dir, data_dir)
-
-
-def _find_relative(stem: str, wiki_dir: Path = None) -> str:
-    """Find relative path for a page stem."""
-    wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
-    for f in wiki_dir.rglob("*.md"):
-        if f.stem == stem:
-            return str(f.relative_to(wiki_dir))
-    return stem
-
-
-def check_index_sync(result: LintResult, wiki_dir: Path = None) -> None:
-    """Verify that each subject's _index.md lists exactly the pages that exist on disk.
-
-    For every entities/{subject}/_index.md:
-      - listed_but_missing → ERROR (broken hub)
-      - on_disk_not_listed → WARN  (page exists but not advertised in the hub)
-
-    Scope constraint: wikilinks are extracted ONLY from the ``## Pages``
-    section, after fenced code blocks (``` ... ``` and ~~~ ... ~~~) are
-    stripped. Links elsewhere in the hub body (notes, references, prompt
-    templates) are intentionally ignored to avoid false positives. If the hub
-    has no ``## Pages`` heading, the sync check is skipped entirely for that
-    hub — empty/template hubs shouldn't flood the output.
-    """
-    wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
-    entities_root = wiki_dir / "entities"
-    if not entities_root.exists():
-        return
-
-    for index_file in entities_root.rglob("_index.md"):
-        subject_dir = index_file.parent
-        subject = subject_dir.name
-        rel_index = str(index_file.relative_to(wiki_dir))
-
-        raw_text = index_file.read_text()
-
-        # Strip fenced code blocks so wikilinks inside templates / examples
-        # are not mistaken for hub entries.
-        stripped = re.sub(r"```.*?```", "", raw_text, flags=re.DOTALL)
-        stripped = re.sub(r"~~~.*?~~~", "", stripped, flags=re.DOTALL)
-
-        # Limit scope to the ## Pages section (heading inclusive, up to the
-        # next ## heading or EOF). If the hub has no Pages heading at all,
-        # skip sync entirely.
-        pages_match = re.search(r"^##\s+Pages\b.*$", stripped, re.MULTILINE)
-        if not pages_match:
-            continue
-
-        section_start = pages_match.end()
-        next_heading = re.search(r"^##\s+", stripped[section_start:], re.MULTILINE)
-        section_end = (
-            section_start + next_heading.start() if next_heading else len(stripped)
-        )
-        pages_section = stripped[section_start:section_end]
-
-        listed_stems = set(extract_links(pages_section))
-
-        on_disk_stems = {
-            f.stem for f in subject_dir.rglob("*.md") if f.stem != "_index"
-        }
-
-        # Filter wikilinks to only those that look like they target a subject
-        # page (no "/" in the link → simple stem reference).
-        # Also drop self-link to _index.
-        listed_stems = {
-            link for link in listed_stems if "/" not in link and link != "_index"
-        }
-
-        listed_but_missing = listed_stems - on_disk_stems
-        on_disk_not_listed = on_disk_stems - listed_stems
-
-        for stem in sorted(listed_but_missing):
-            result.error(
-                rel_index,
-                f"_index.md lists [[{stem}]] but no file with that stem under {subject_dir.relative_to(wiki_dir)}",
-            )
-
-        for stem in sorted(on_disk_not_listed):
-            page_rel = _find_relative(stem, wiki_dir)
-            result.warn(
-                page_rel,
-                f"page not listed in {subject}/_index.md",
-            )
-
-
-def _get_modified_raw_files(data_dir: Path) -> set[Path] | None:
-    """Return modified-but-not-newly-added paths under ``raw/`` per ``git status``.
-
-    Returns ``None`` (skip silently) when:
-      - ``data_dir/.git`` is missing — no immutability gate possible
-      - ``git`` binary not on PATH (``FileNotFoundError``)
-      - ``git status`` times out (``subprocess.TimeoutExpired``)
-      - ``git status`` exits non-zero
-
-    Otherwise parses porcelain output. ``git status --porcelain`` emits two
-    status columns ``XY`` followed by a path. Untracked (``??``) and any
-    line whose index column is ``A`` (newly added: ``A `` or ``AM``) are
-    treated as NEW files and skipped — immutability only applies to files
-    that were committed and then changed. Anything else with ``M`` or ``D``
-    in either column is reported as a violation.
-    """
-    if not (data_dir / ".git").exists():
-        return None
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(data_dir), "status", "--porcelain", "raw/"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-    if proc.returncode != 0:
-        return None
-
-    modified: set[Path] = set()
-    for line in proc.stdout.splitlines():
-        if len(line) < 4:
-            continue
-        x, y, rest = line[0], line[1], line[3:]
-        # Strip rename-target arrows (``orig -> new``) — we only care about
-        # the destination path.
-        if " -> " in rest:
-            rest = rest.split(" -> ", 1)[1]
-        # Git quotes paths containing special chars; strip surrounding quotes.
-        if rest.startswith('"') and rest.endswith('"'):
-            rest = rest[1:-1]
-
-        # Untracked or freshly added → not an immutability violation.
-        if x == "?" and y == "?":
-            continue
-        if x == "A":
-            continue
-        # Anything with M/D in either column is a real change to a tracked file.
-        if "M" in (x, y) or "D" in (x, y):
-            modified.add(data_dir / rest)
-    return modified
-
-
-def check_raw_frontmatter(result: LintResult, raw_dir: Path = None) -> None:
-    """Every raw ingest file must declare the standard frontmatter contract.
-
-    Iterates ``*.md`` under ``raw_dir`` but limits checks to the ingest
-    categories declared in ``RAW_INGEST_TOPLEVEL``; ``handoffs/``, ``ops/``,
-    and ``sessions/`` use specialized templates and are linted by
-    ``kb-lint-handoff``. ``README.md`` files are documentation and skipped.
-    """
-    raw_dir = raw_dir if raw_dir is not None else RAW_DIR
-    if not raw_dir.exists():
-        return
-    for f in raw_dir.rglob("*.md"):
-        rel = f.relative_to(raw_dir)
-        if not rel.parts or rel.parts[0] not in RAW_INGEST_TOPLEVEL:
-            continue
-        if f.name == "README.md":
-            continue
-        fm = _parse_yaml_frontmatter(f.read_text())
-        rel_str = f"raw/{rel.as_posix()}"
-        if fm is None:
-            result.error(rel_str, "missing or invalid frontmatter")
-            continue
-        for key in RAW_FM_REQUIRED:
-            if key not in fm:
-                result.error(rel_str, f"raw frontmatter missing required field: {key}")
-
-
-def check_raw_captured_at_mtime(result: LintResult, raw_dir: Path = None) -> None:
-    """Flag files whose mtime drifts past ``captured_at`` beyond tolerance.
-
-    Raw files are immutable; once captured, the on-disk mtime should not
-    advance past the declared ``captured_at`` timestamp. A small tolerance
-    (``CAPTURED_AT_MTIME_TOLERANCE_SEC``) absorbs normal capture→write
-    latency. Parsing failures are silent here — those are caught by
-    ``check_raw_frontmatter``.
-    """
-    raw_dir = raw_dir if raw_dir is not None else RAW_DIR
-    if not raw_dir.exists():
-        return
-    for f in raw_dir.rglob("*.md"):
-        rel = f.relative_to(raw_dir)
-        if not rel.parts or rel.parts[0] not in RAW_INGEST_TOPLEVEL:
-            continue
-        if f.name == "README.md":
-            continue
-        fm = _parse_yaml_frontmatter(f.read_text())
-        if fm is None:
-            continue
-        captured_at = fm.get("captured_at")
-        if captured_at in (None, ""):
-            continue
-
-        captured_ts: float
-        try:
-            if isinstance(captured_at, datetime.datetime):
-                dt = captured_at
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)
-                captured_ts = dt.timestamp()
-            elif isinstance(captured_at, datetime.date):
-                dt = datetime.datetime(
-                    captured_at.year,
-                    captured_at.month,
-                    captured_at.day,
-                    tzinfo=datetime.timezone.utc,
-                )
-                captured_ts = dt.timestamp()
-            else:
-                s = str(captured_at).strip()
-                if s.endswith("Z"):
-                    s = s[:-1] + "+00:00"
-                dt = datetime.datetime.fromisoformat(s)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=datetime.timezone.utc)
-                captured_ts = dt.timestamp()
-        except (ValueError, TypeError):
-            continue
-
-        mtime = f.stat().st_mtime
-        if mtime > captured_ts + CAPTURED_AT_MTIME_TOLERANCE_SEC:
-            delta = int(mtime - captured_ts)
-            result.error(
-                f"raw/{rel.as_posix()}",
-                f"mtime is {delta}s after captured_at (tolerance "
-                f"{CAPTURED_AT_MTIME_TOLERANCE_SEC}s) — raw files must be immutable",
-            )
-
-
-def check_raw_immutability(
-    result: LintResult, raw_dir: Path = None, data_dir: Path = None
-) -> None:
-    """Reject any raw file modified after its initial commit.
-
-    Uses ``_get_modified_raw_files`` to read git's view of the working
-    tree. Files that are merely untracked or freshly added are not flagged
-    — only previously-committed paths that have since been modified or
-    deleted. When git is unavailable the check is silently skipped.
-    """
-    raw_dir = raw_dir if raw_dir is not None else RAW_DIR
-    data_dir = data_dir if data_dir is not None else raw_dir.parent
-    modified = _get_modified_raw_files(data_dir)
-    if modified is None:
-        return
-    for path in modified:
-        try:
-            rel = path.relative_to(raw_dir)
-        except ValueError:
-            continue
-        result.error(
-            f"raw/{rel.as_posix()}",
-            "raw file modified after creation (immutability violation)",
-        )
 
 
 def main():
