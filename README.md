@@ -25,8 +25,8 @@ data/                             Nested git repo (local-only)
 │   ├── conversations/            Desktop Chatbot history
 │   ├── calendar/                 Calendar events
 │   ├── web/                      Web clippings
-│   ├── manual/                   Hand-dropped files
-│   └── handoffs/                 Handoff documents
+│   └── manual/                   Hand-dropped files
+├── handoffs/                     Handoff documents
 ├── wiki/
 │   ├── entities/                 Named objects ({subject}/{YYYY-MM}/)
 │   ├── concepts/                 Abstract ideas (flat)
@@ -101,7 +101,7 @@ git commit -m "ingest: [source] description"
 | `data/log.md` | Operation record |
 | `data/raw/` | Immutable sources |
 | `data/wiki/` | LLM-generated pages |
-| `data/raw/handoffs/` | Handoff documents |
+| `data/handoffs/` | Handoff documents |
 
 ## Documentation
 

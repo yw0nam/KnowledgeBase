@@ -13,6 +13,14 @@ def _write(path: Path, content: str) -> None:
     path.write_text(dedent(content).lstrip("\n"))
 
 
+def _handoffs_dir(tmp_path: Path) -> Path:
+    return tmp_path / "data" / "handoffs"
+
+
+def _task_dir(tmp_path: Path) -> Path:
+    return _handoffs_dir(tmp_path) / "2026" / "05" / "task-foo"
+
+
 def _valid_handoff_fm(
     role: str = "research",
     seq: int = 1,
@@ -43,35 +51,35 @@ def _valid_handoff_fm(
 
 
 def test_valid_handoff_passes(tmp_path):
-    task_dir = tmp_path / "data" / "raw" / "handoffs" / "2026" / "05" / "task-foo"
+    task_dir = _task_dir(tmp_path)
     _write(task_dir / "research_handoff_01.md", _valid_handoff_fm())
     result = lh.LintResult()
-    lh.lint(result, tmp_path / "data" / "raw" / "handoffs")
+    lh.lint(result, _handoffs_dir(tmp_path))
     assert result.errors == [], result.errors
 
 
 def test_missing_role_errors(tmp_path):
-    task_dir = tmp_path / "data" / "raw" / "handoffs" / "2026" / "05" / "task-foo"
+    task_dir = _task_dir(tmp_path)
     fm = _valid_handoff_fm()
     fm = fm.replace('role: "research"\n', "")
     _write(task_dir / "research_handoff_01.md", fm)
     result = lh.LintResult()
-    lh.lint(result, tmp_path / "data" / "raw" / "handoffs")
+    lh.lint(result, _handoffs_dir(tmp_path))
     assert any("role" in e.lower() for e in result.errors), result.errors
 
 
 def test_invalid_status_errors(tmp_path):
-    task_dir = tmp_path / "data" / "raw" / "handoffs" / "2026" / "05" / "task-foo"
+    task_dir = _task_dir(tmp_path)
     fm = _valid_handoff_fm()
     fm = fm.replace("status: draft", "status: garbage")
     _write(task_dir / "research_handoff_01.md", fm)
     result = lh.LintResult()
-    lh.lint(result, tmp_path / "data" / "raw" / "handoffs")
+    lh.lint(result, _handoffs_dir(tmp_path))
     assert any("status" in e.lower() for e in result.errors), result.errors
 
 
 def test_secrets_in_final_errors(tmp_path):
-    task_dir = tmp_path / "data" / "raw" / "handoffs" / "2026" / "05" / "task-foo"
+    task_dir = _task_dir(tmp_path)
     _write(task_dir / "research_handoff_01.md", _valid_handoff_fm(secrets=True))
     final_fm = dedent(
         """
@@ -93,22 +101,31 @@ def test_secrets_in_final_errors(tmp_path):
     ).lstrip("\n")
     _write(task_dir / "task-foo_final.md", final_fm)
     result = lh.LintResult()
-    lh.lint(result, tmp_path / "data" / "raw" / "handoffs")
+    lh.lint(result, _handoffs_dir(tmp_path))
     assert any("secret" in e.lower() for e in result.errors), result.errors
 
 
 def test_filename_role_mismatch_errors(tmp_path):
-    task_dir = tmp_path / "data" / "raw" / "handoffs" / "2026" / "05" / "task-foo"
+    task_dir = _task_dir(tmp_path)
     _write(task_dir / "execution_handoff_01.md", _valid_handoff_fm(role="research"))
     result = lh.LintResult()
-    lh.lint(result, tmp_path / "data" / "raw" / "handoffs")
+    lh.lint(result, _handoffs_dir(tmp_path))
     assert any(
         "filename" in e.lower() or "mismatch" in e.lower() for e in result.errors
     ), result.errors
 
 
+def test_uncommon_role_warns_not_errors(tmp_path):
+    task_dir = _task_dir(tmp_path)
+    _write(task_dir / "custom-role_handoff_01.md", _valid_handoff_fm(role="custom-role"))
+    result = lh.LintResult()
+    lh.lint(result, _handoffs_dir(tmp_path))
+    assert result.errors == [], result.errors
+    assert any("uncommon role" in w.lower() for w in result.warnings), result.warnings
+
+
 def test_empty_handoffs_dir_no_errors(tmp_path):
-    handoffs = tmp_path / "data" / "raw" / "handoffs"
+    handoffs = _handoffs_dir(tmp_path)
     handoffs.mkdir(parents=True)
     result = lh.LintResult()
     lh.lint(result, handoffs)
@@ -123,29 +140,29 @@ def test_missing_handoffs_dir_no_crash(tmp_path):
 
 
 def test_promotion_memory_with_unchecked_redaction_errors(tmp_path):
-    task_dir = tmp_path / "data" / "raw" / "handoffs" / "2026" / "05" / "task-foo"
+    task_dir = _task_dir(tmp_path)
     fm = _valid_handoff_fm(promotion="memory")
     _write(task_dir / "research_handoff_01.md", fm)
     result = lh.LintResult()
-    lh.lint(result, tmp_path / "data" / "raw" / "handoffs")
+    lh.lint(result, _handoffs_dir(tmp_path))
     assert any(
         "memory" in e.lower() and "redaction" in e.lower() for e in result.errors
     ), result.errors
 
 
 def test_promotion_wiki_entity_with_secrets_errors(tmp_path):
-    task_dir = tmp_path / "data" / "raw" / "handoffs" / "2026" / "05" / "task-foo"
+    task_dir = _task_dir(tmp_path)
     fm = _valid_handoff_fm(promotion="wiki_entity", secrets=True)
     _write(task_dir / "research_handoff_01.md", fm)
     result = lh.LintResult()
-    lh.lint(result, tmp_path / "data" / "raw" / "handoffs")
+    lh.lint(result, _handoffs_dir(tmp_path))
     assert any(
         "wiki_entity" in e.lower() and "secret" in e.lower() for e in result.errors
     ), result.errors
 
 
 def test_handoff_id_format_invalid_errors(tmp_path):
-    task_dir = tmp_path / "data" / "raw" / "handoffs" / "2026" / "05" / "task-foo"
+    task_dir = _task_dir(tmp_path)
     fm = _valid_handoff_fm()
     fm = fm.replace(
         'handoff_id: "task-foo:null:research:01"',
@@ -153,5 +170,5 @@ def test_handoff_id_format_invalid_errors(tmp_path):
     )
     _write(task_dir / "research_handoff_01.md", fm)
     result = lh.LintResult()
-    lh.lint(result, tmp_path / "data" / "raw" / "handoffs")
+    lh.lint(result, _handoffs_dir(tmp_path))
     assert any("handoff_id" in e.lower() for e in result.errors), result.errors

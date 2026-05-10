@@ -41,8 +41,8 @@ data/                             # Nested git repo: raw sources + wiki (local-o
 │   ├── conversations/            # Desktop Chatbot history ({YYYY-MM}/chat_{timestamp}.md)
 │   ├── calendar/                 # Calendar events ({YYYY-MM}/event_{date}_{slug}.md)
 │   ├── web/                      # Web clippings
-│   ├── manual/                   # Hand-dropped files
-│   └── handoffs/                 # Handoff documents (task-based)
+│   └── manual/                   # Hand-dropped files
+├── handoffs/                     # Handoff documents (task-based)
 ├── wiki/
 │   ├── entities/                 # Named objects ({subject}/{YYYY-MM}/)
 │   ├── concepts/                 # Abstract ideas (flat)
@@ -71,7 +71,7 @@ See [Pipeline details](docs/pipeline.md) for stage-by-stage actions and lint che
 - `data/wiki/` pages must always list their `sources:` in frontmatter.
 - Keep `data/log.md` updated on every operation.
 - Lint must pass (0 errors) before committing wiki changes.
-- Handoff documents are stored in `data/raw/handoffs/` and tracked via git.
+- Handoff documents are stored in `data/handoffs/` and tracked via git.
 
 ## Privacy
 
