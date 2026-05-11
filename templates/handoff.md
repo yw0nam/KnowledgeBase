@@ -4,6 +4,8 @@ task_slug: ""
 subject: null
 role: ""
 handoff_seq: 1
+created: ""
+updated: ""
 status: draft
 security:
   contains_secrets: false
