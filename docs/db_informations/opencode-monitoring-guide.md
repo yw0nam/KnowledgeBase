@@ -1,6 +1,6 @@
 # OpenCode Monitoring Guide — Daily & Weekly Report
 
-Updated: 2026-05-11 (rev4)
+Updated: 2026-05-11
 
 ## 1. Synopsis
 
@@ -15,19 +15,17 @@ Updated: 2026-05-11 (rev4)
 
 **목적**: 얼마나 썼나, 낭비는 없나.
 
-> ⚠️ **모델별 토큰은 Prometheus 우선**: SQLite `session.model`은 subagent 세션에서 전부 NULL.
-> 실제 모델 분포(haiku, sonnet, gpt 등)는 Prometheus `opencode_token_usage_tokens_total{model="..."}` 에서만 확인 가능.
-> SQLite 단독 집계 시 shadow 비용이 과대 계산된다.
+> **모델별 토큰·비용은 `message` 테이블이 유일한 소스.**
+> `session.model`은 subagent 세션에서 NULL이지만, `message.data.modelID`에는 root/subagent 구분 없이 실제 모델명이 정확히 기록된다.
 
 | 지표 | 소스 | 의미 |
 |------|------|------|
-| 모델별 일일 토큰 | **Prometheus** `opencode_token_usage_tokens_total` by model, type | 실제 모델 분포 확인. SQLite는 subagent model=NULL |
-| 모델별 실청구 비용 | **Prometheus** `opencode_cost_usage_USD_total` by model | 구독 세션은 0, API 과금 모델만 찍힘 |
-| shadow 비용 | Prometheus 토큰 × pricing-exporter 단가 | 구독 절감액 산출 |
-| 캐시 히트율 | `cacheRead / (input + cacheRead) × 100` | 높을수록 비용 효율 좋음. 실측 평균 97% |
-| API 호출 횟수 | SQLite `step-finish` count per session | 평균 16회. 51회+ = 루프 탈출 실패 의심 |
-| reasoning 토큰 비율 | Prometheus `type="reasoning"` / 전체 | Extended thinking 남용 여부 |
-| 세션별 토큰 이상치 | 상위 5% 세션 | 목적 대비 과도한 소비 여부 검토 |
+| 모델별 일일 토큰 | `message.data` (modelID, tokens.*) | root+subagent 포함 실제 모델 분포 |
+| 실청구 비용 | `message.data.cost` (providerID=opencode-go만 유효) | anthropic/openai/google은 구독이라 0. opencode-go 모델만 실청구 발생 |
+| shadow 비용 | message 토큰 × pricing-exporter 단가 | 구독 절감액 산출. 반드시 계산해서 기재 |
+| 캐시 히트율 | `cache_read / (input_cache_miss + cache_read) × 100` | 높을수록 비용 효율 좋음. `input`은 캐시 미스분만이므로 반드시 cache_read와 합산해서 분모 계산 |
+| API 호출 횟수 | SQLite `part.type=step-finish` count per session | 51회+ = 루프 탈출 실패 의심 |
+| reasoning 토큰 비율 | `message.tokens.reasoning` / 전체 | Extended thinking 남용 여부 |
 
 ### Layer 2: 작업 품질 (Task Quality)
 
@@ -62,8 +60,7 @@ Updated: 2026-05-11 (rev4)
 | 일일 프로젝트 전환 수 | SQLite `session.project_id` distinct per day | 3개+ = 컨텍스트 스위칭 과다 |
 | 핫 파일 (주간 수정 빈도) | SQLite `patch.files[]` | 반복 수정 = 설계 불안정. 실측: mail_server.py 46회 |
 | 세션당 수정 파일 수 | SQLite `patch.files[]` distinct per session | 과도하게 많으면 범위 초과 작업 |
-| 모델별 세션 분포 (root) | SQLite `session.model.id` | root 세션만 유효. subagent는 NULL이므로 Prometheus 참조 |
-| 모델별 세션 분포 (전체) | **Prometheus** `opencode_token_usage_tokens_total` by model | subagent 포함 실제 모델 분포 |
+| 모델별 세션 분포 (전체) | `message.data.modelID` GROUP BY | root+subagent 포함 실제 모델 분포. session.model 사용 금지 |
 
 ---
 
@@ -86,11 +83,3 @@ Updated: 2026-05-11 (rev4)
 ### A. 관련 문서
 
 - `opencode-schema-reference.md` — 테이블·컬럼·JSON 구조 상세
-
-### B. PatchNote
-
-2026-05-11: 최초 작성.
-2026-05-11 (rev2): 캐시 히트율 계산식 오류 수정.
-2026-05-11 (rev3): 문서 전면 재구성. 쿼리 제거, 스키마·지표 정의 중심으로 재작성.
-2026-05-11 (rev4): §2 Source Schema 제거 (opencode-schema-reference.md로 이관). Appendix A·B 제거.
-2026-05-11 (rev5): Layer 1에 Prometheus 우선 지표 추가 및 SQLite model=NULL 한계 경고 명시. Layer 4에 모델별 세션 분포 소스 분리 (root=SQLite, 전체=Prometheus).

@@ -12,11 +12,11 @@ Updated: 2026-05-11
 ## 2. 파이프라인 구조
 
 ```
-SQLite (OpenCode + Hermes)          Prometheus OTel
-  session / part / todo               opencode_token_usage_tokens_total
-  patch.files / compaction            opencode_cost_usage_USD_total
-        │                                       │
-        └──────────────┬────────────────────────┘
+SQLite (OpenCode)                   SQLite (Hermes)
+  message / session / part / todo     sessions
+  patch.files / compaction                  │
+        │                                   │
+        └──────────────┬────────────────────┘
                        ▼
             [daily cron 00:10 KST]
                        └── data/wiki/summaries/daily/YYYY-MM-DD_agent_usage.md
@@ -34,13 +34,11 @@ SQLite (OpenCode + Hermes)          Prometheus OTel
 
 | 소스 | 담당 지표 | 이유 |
 |------|----------|------|
-| SQLite `opencode.db` | 세션 수, root/subagent 구분, todo, 핫 파일, compaction, 시간대 분포 | 세션 구조 정보는 DB가 정확 |
-| **Prometheus** | 모델별 토큰, shadow 비용, 실청구 비용 | subagent `session.model`이 DB에서 전부 NULL — OTel에만 실제 모델명 기록 |
-| SQLite `hermes/state.db` | Hermes 전체 지표 | Hermes는 OTel 미연동 |
-
-> **SQLite model=NULL 문제**: OpenCode subagent 세션은 `session.model` 컬럼이 NULL로 기록된다 (upstream 버그).
-> Prometheus `opencode_token_usage_tokens_total{model="..."}` 에만 실제 모델명이 남으므로,
-> 모델별 토큰·비용은 반드시 Prometheus에서 가져온다. SQLite 단독 집계 시 shadow 비용이 과대 계산된다.
+| `message.data` (modelID, tokens, cost) | **모델별 토큰·실청구·shadow** | root+subagent 구분 없이 실제 모델명 기록. 유일한 정확한 소스 |
+| `session` (parent_id, time_created) | 세션 수, root/subagent 구분, 시간대 분포, 프로젝트별 분포 | 세션 구조 정보 |
+| `part` (type=tool, patch, compaction) | 도구 에러율, 핫 파일, compaction | 세션 내 행동 데이터 |
+| `todo` | Todo 완료율 | 작업 품질 |
+| SQLite `hermes/state.db` | Hermes 전체 지표 | Hermes는 OTel 미연동, DB가 유일 소스 |
 
 ---
 
@@ -80,8 +78,8 @@ SQLite (OpenCode + Hermes)          Prometheus OTel
 
 ### 실청구 vs Shadow
 
-- **실청구**: Prometheus `opencode_cost_usage_USD_total` (모델별). 구독 세션은 0으로 찍힘.
-- **Shadow**: 토큰 × LiteLLM 단가. 구독이어도 반드시 계산해서 기재.
+- **실청구**: `message.data.cost` 합산. anthropic/openai/google은 구독이라 0. **opencode-go 모델만 실청구 발생.**
+- **Shadow**: message 토큰 × pricing-exporter(LiteLLM) 단가. 구독이어도 반드시 계산해서 기재.
 
 ### 단가 조회
 
@@ -91,13 +89,15 @@ curl -s localhost:9091/metrics | grep 'model_pricing_usd_per_token' | grep -v '#
 
 pricing-exporter(`/home/spow12/observability/pricing-exporter/server.py`)가 LiteLLM GitHub JSON을 24h 캐시로 제공.
 
-### 모델 처리 규칙
+### providerID별 처리 규칙
 
-| 상황 | 처리 |
-|------|------|
-| Prometheus에 model 레이블 있음 | 해당 단가로 shadow 계산 |
-| pricing-exporter에 단가 없는 모델 | shadow 제외, 실청구만 기재, 명시적으로 표기 |
-| claude max / codex 구독 세션 | 실청구 0 USD, shadow는 반드시 계산 |
+| providerID | 실청구 소스 | Shadow |
+|------------|------------|--------|
+| `anthropic` | 0 USD (Max 구독) | pricing-exporter 단가로 계산 |
+| `openai` | 0 USD (구독) | pricing-exporter 단가로 계산 |
+| `google` | 0 USD (구독) | pricing-exporter 단가로 계산 |
+| `opencode-go` | `SUM(message.cost)` = 실청구 | pricing-exporter에 단가 있으면 shadow도 계산, 없으면 실청구만 기재 |
+| `vllm` | 0 USD (자체호스팅) | shadow 제외, 표에 명시 |
 
 ### Shadow 계산식
 
@@ -131,8 +131,3 @@ data/wiki/summaries/
 daily/weekly 작성 시 아래 문서의 임계값 기준으로 이상 신호 판단:
 - `opencode-monitoring-guide.md` §4
 - `hermes-monitoring-guide.md` §3
-
-### C. PatchNote
-
-2026-05-11: 최초 작성. markdown 단일 형식, 세션 시작일 귀속, 공백일 파일 생성 방식으로 확정.
-2026-05-11 (rev2): 데이터 소스 전략 추가. SQLite + Prometheus 조합 방식으로 전환. §2 파이프라인 구조에 소스별 역할 분담 표 추가. §5 비용 계산 전면 재작성.

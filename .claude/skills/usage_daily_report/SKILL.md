@@ -14,29 +14,36 @@ license: MIT
 
 - OpenCode DB: `~/.local/share/opencode/opencode.db`
 - Hermes DB: `~/.hermes/state.db`
-- Prometheus: `curl -s http://localhost:9090/-/healthy` → `Prometheus Server is Healthy.`
 - pricing-exporter: `curl localhost:9091/healthz` → `models=N`
-- 스키마 참조: `docs/db_informations/` 하위 4개 문서
+- 스키마 참조: `docs/db_informations/` 하위 문서
 
 ---
 
 ## 데이터 소스 전략 (중요)
 
-**두 소스를 조합해서 사용한다. 단독 사용 금지.**
+| 지표 | 소스 |
+|------|------|
+| 모델별 토큰 / 실청구 / shadow | `message.data` (modelID, providerID, tokens.*, cost) |
+| 세션 수 / root·subagent 구분 / 시간대 | `session` (parent_id, time_created) |
+| 핫 파일 / compaction | `part` (type=patch, compaction) |
+| 도구 에러율 | `part` (type=tool, state.status) |
+| Todo 완료율 | `todo` (status) |
+| Hermes 지표 전체 | `~/.hermes/state.db` (sessions 테이블) |
 
-| 지표 | 소스 | 이유 |
-|------|------|------|
-| 세션 수 / root·subagent 구분 | SQLite `session.parent_id` | DB가 정확. Prometheus는 is_subagent 레이블만 있음 |
-| 모델별 토큰 / shadow 비용 | **Prometheus** `opencode_token_usage_tokens_total` | SQLite의 subagent `session.model`은 전부 NULL. Prometheus OTel에만 실제 모델명 기록됨 |
-| 실청구 비용 | **Prometheus** `opencode_cost_usage_USD_total` | 모델별 실청구 집계 가능 |
-| 핫 파일 / todo / compaction | SQLite `part`, `todo` | Prometheus에 없는 정보 |
-| Hermes 지표 전체 | SQLite `~/.hermes/state.db` | Hermes는 OTel 미연동, DB가 유일 소스 |
+### 핵심: message.data.modelID가 정확한 이유
 
-### 왜 SQLite model이 NULL인가
+`session.model`은 subagent 세션에서 NULL이지만, **`message.data.modelID`에는 root/subagent 구분 없이 실제 모델명이 기록된다.**
+subagent가 minimax, gpt-5.4-mini-fast, haiku를 사용했다면 각각의 modelID로 정확히 찍힌다.
 
-OpenCode는 subagent 세션을 spawn할 때 `session.model` 컬럼에 값을 기록하지 않는다 (upstream 버그).
-OTLP emit 시에는 model attribute를 포함하므로 Prometheus에만 실제 모델명이 남는다.
-→ **모델별 토큰/비용은 반드시 Prometheus에서 가져온다.**
+### providerID별 비용 처리
+
+| providerID | 실청구 | Shadow |
+|------------|--------|--------|
+| `anthropic` | 0 USD (Max 구독) | pricing-exporter 단가로 계산 |
+| `openai` | 0 USD (구독) | pricing-exporter 단가로 계산 |
+| `google` | 0 USD (구독) | pricing-exporter 단가로 계산 |
+| `opencode-go` | `SUM(message.cost)` = 실청구 | pricing-exporter에 단가 있으면 shadow도 계산 |
+| `vllm` | 0 USD (자체호스팅) | shadow 제외, 표에 명시 |
 
 ---
 
@@ -60,37 +67,42 @@ TARGET=$(date -d "yesterday" +%Y-%m-%d)   # Linux
 
 스키마는 `docs/db_informations/` 문서를 읽고 쿼리를 직접 작성한다.
 
-#### 2-A. SQLite 수집 지표 (세션 구조 / 작업 품질 / 행동 패턴)
+#### 2-A. OpenCode message DB — 모델별 토큰·비용 (Layer 1 핵심)
 
 **KST 변환 필수**: `time_created/1000` + `'+9 hours'` 적용.
 
-| 레이어 | 지표 | 소스 |
-|--------|------|------|
-| Layer 2 | Todo 완료율(completed/total), 도구별 에러율, compaction 발생 수 | SQLite |
-| Layer 3 | 시간대별 세션 분포, root vs subagent 수 | SQLite `session.parent_id` |
-| Layer 4 | 프로젝트별 세션 수, 핫 파일(수정 빈도 상위 10), 세션당 수정 파일 수 | SQLite `patch.files` |
-
-#### 2-B. Prometheus 수집 지표 (모델별 토큰 / 비용)
-
-**KST 기준 하루 구간**: `start=YYYY-MM-DDT00:00:00+09:00`, `end=YYYY-MM-DDT23:59:59+09:00`
-
-```bash
-# 모델별 토큰 (type: input/output/cacheRead/cacheCreation/reasoning)
-curl -sG 'http://localhost:9090/api/v1/query_range' \
-  --data-urlencode 'query=sum by (model, type) (increase(opencode_token_usage_tokens_total{service_name="opencode"}[1d]))' \
-  --data-urlencode "start=${TARGET}T00:00:00+09:00" \
-  --data-urlencode "end=${TARGET}T23:59:59+09:00" \
-  --data-urlencode 'step=86400'
-
-# 모델별 실청구 비용
-curl -sG 'http://localhost:9090/api/v1/query_range' \
-  --data-urlencode 'query=sum by (model) (increase(opencode_cost_usage_USD_total{service_name="opencode"}[1d]))' \
-  --data-urlencode "start=${TARGET}T00:00:00+09:00" \
-  --data-urlencode "end=${TARGET}T23:59:59+09:00" \
-  --data-urlencode 'step=86400'
+```sql
+SELECT
+  json_extract(m.data, '$.modelID')                        AS modelID,
+  json_extract(m.data, '$.providerID')                     AS providerID,
+  SUM(json_extract(m.data, '$.tokens.input'))              AS input_cache_miss,
+  SUM(json_extract(m.data, '$.tokens.cache.read'))         AS cache_read,
+  SUM(json_extract(m.data, '$.tokens.output'))             AS output,
+  SUM(json_extract(m.data, '$.tokens.cache.write'))        AS cache_write,
+  SUM(json_extract(m.data, '$.tokens.reasoning'))          AS reasoning,
+  SUM(json_extract(m.data, '$.tokens.input')
+    + json_extract(m.data, '$.tokens.cache.read'))         AS total_input,
+  SUM(json_extract(m.data, '$.cost'))                      AS actual_cost
+FROM message m
+JOIN session s ON m.session_id = s.id
+WHERE date(datetime(s.time_created/1000, 'unixepoch', '+9 hours')) = '${TARGET}'
+  AND json_extract(m.data, '$.role') = 'assistant'
+GROUP BY modelID, providerID
+ORDER BY total_input DESC;
 ```
 
-> **주의**: Prometheus `increase()` 는 counter reset 시 오차가 생길 수 있다. 세션 수 등 정확도가 중요한 지표는 SQLite를 우선한다.
+이 쿼리 하나로 root+subagent 전체 모델별 토큰과 실청구가 나온다.
+
+> **`input_cache_miss`**: 캐시 미스 토큰만 (새로 읽힌 것). 실제 LLM 입력량은 `input_cache_miss + cache_read`.
+> **캐시 히트율**: `cache_read / (input_cache_miss + cache_read) × 100`
+
+#### 2-B. OpenCode SQLite — 세션 구조 / 작업 품질 / 행동 패턴
+
+| 레이어 | 지표 | 소스 |
+|--------|------|------|
+| Layer 2 | Todo 완료율(completed/total), 도구별 에러율, compaction 발생 수 | `todo`, `part` |
+| Layer 3 | 시간대별 세션 분포, root vs subagent 수 | `session.parent_id` |
+| Layer 4 | 프로젝트별 세션 수, 핫 파일(수정 빈도 상위 10), 세션당 수정 파일 수 | `part.type=patch` |
 
 #### 2-C. Hermes 수집 지표 (SQLite 전용)
 
@@ -118,32 +130,45 @@ curl -s localhost:9091/metrics | grep 'model_pricing_usd_per_token' | grep -v '#
 #### 계산 공식
 
 ```
-shadow_cost = input × price_input
-            + output × price_output
-            + cache_read × price_cache_read
-            + cache_write × price_cache_write
-            + reasoning × price_input   # reasoning은 input 단가 적용
+shadow_cost = input_cache_miss × price_input
+            + cache_read       × price_cache_read   # 캐시 히트는 단가가 훨씬 저렴
+            + cache_write      × price_cache_write
+            + output           × price_output
+            + reasoning        × price_input        # reasoning은 input 단가 적용
 ```
+
+> `input`과 `cache_read`는 단가가 다르므로 반드시 분리해서 계산한다.
+> (예: claude-opus-4-7 input 5e-6 USD/tok vs cache_read 5e-7 USD/tok — 10배 차이)
 
 #### 모델 처리 규칙
 
-| 상황 | 처리 |
-|------|------|
-| Prometheus `model` 레이블 있음 | 해당 모델 단가로 shadow 계산 |
-| pricing-exporter에 단가 없는 모델 (Qwen, minimax 등) | shadow 계산 제외, 실청구만 기재 |
-| OpenCode SQLite `model = NULL` | **Prometheus 데이터로 대체** (SQLite NULL은 무시) |
-| Hermes `actual_cost_usd` | 실청구 비용으로 별도 기재 |
+| providerID | 실청구 | Shadow |
+|------------|--------|--------|
+| `anthropic` | 0 USD (Max 구독) | pricing-exporter 단가로 계산 |
+| `openai` | 0 USD (codex 구독) | pricing-exporter 단가로 계산 |
+| `google` | 0 USD (Gemini 구독) | pricing-exporter 단가로 계산 |
+| `opencode-go` | `SUM(message.cost)` | 실청구만 기재 |
+| `vllm` | 0 USD (자체호스팅) | shadow 제외, 표에 명시 |
 
 #### 기재 형식 (Layer 1 OpenCode)
 
 ```markdown
-- 실청구: N USD / Shadow: N USD (claude+gpt 계열, 단가 불명확 모델 제외)
+**OpenCode** _(토큰·비용: message DB 기준 / 세션 구조: session DB 기준)_
+- 모델별 토큰:
+  | 모델 | total_input | cache_miss | cache_read | output | cache_write | cache_hit |
+  |------|------------:|-----------:|-----------:|-------:|------------:|----------:|
+  | claude-opus-4-7 | N | N | N | N | N | N% |
+  | gpt-5.5 | N | N | N | N | N | N% |
+  | (실청구) glm-5/opencode-go | N | N | N | N | N | — |
+  | (자체호스팅) chat_model/vllm | N | N | N | N | N | — |
+- 실청구: N USD (opencode-go 모델 합산) / Shadow: N USD (anthropic+openai+google 계열)
 - Shadow 상세:
-  - claude-opus-4-7 — input N / output N / cache_read N / cache_write N → X.XX USD
-  - claude-haiku-4-5 — ... → X.XX USD
-  - (단가 불명확: minimax-m2.7 N tok — shadow 제외)
-- 단가 기준 (LiteLLM): 모델별 상이, pricing-exporter 실시간 조회값 사용
+  - claude-opus-4-7 — cache_miss N × 5e-6 + cache_read N × 5e-7 + output N × 2.5e-5 → X.XX USD
+  - gpt-5.5 — ... → X.XX USD
+- 단가 기준 (LiteLLM): pricing-exporter 실시간 조회값 사용
 ```
+
+> `total_input = cache_miss + cache_read`. `cache_hit = cache_read / total_input × 100`
 
 ---
 
@@ -152,18 +177,18 @@ shadow_cost = input × price_input
 템플릿: `templates/summary-daily_agent_usage.md`
 
 각 레이어 안에서 **OpenCode → Hermes 순서**로 블록을 나란히 작성한다.
-OpenCode Layer 1에는 **데이터 소스 출처** (Prometheus/SQLite)를 명시한다.
+OpenCode Layer 1에는 **데이터 소스 출처** (message DB / session DB)를 명시한다.
 데이터 없는 날: frontmatter만 채우고 본문은 `> 데이터 없음` 한 줄.
 
 ```markdown
 ## Layer 1: 비용·효율
-**OpenCode** _(토큰·비용: Prometheus OTel 기준 / 세션 구조: SQLite 기준)_
+**OpenCode** _(토큰·비용: message DB 기준 / 세션 구조: session DB 기준)_
 - 모델별 토큰:
   | 모델 | input | output | cache_read | cache_write | 합계 | cache_hit |
   |------|------:|-------:|-----------:|------------:|-----:|----------:|
   | claude-opus-4-7 | N | N | N | N | N | N% |
   | claude-haiku-4-5 | N | N | N | N | N | N% |
-  | (단가불명) minimax-m2.7 | N | N | N | N | N | N% |
+  | minimax-m2.7 | N | N | N | N | N | N% |
 - 실청구: N USD / Shadow: N USD
 - Shadow 상세: ...
 
@@ -176,7 +201,7 @@ OpenCode Layer 1에는 **데이터 소스 출처** (Prometheus/SQLite)를 명시
 
 #### Frontmatter 규칙
 
-- `sources: []` — DB/Prometheus는 raw 파일이 아니므로 항상 빈 리스트
+- `sources: []` — DB는 raw 파일이 아니므로 항상 빈 리스트
 - `type: summary` — 따옴표 없이
 - 비용 표기: `17.73 USD` 형식, 달러 기호(`$`) 사용 금지
 
@@ -207,9 +232,9 @@ warnings (orphan, stub)은 daily report 특성상 정상 — 무시.
 ## YYYY-MM-DD
 
 - **fill**: YYYY-MM-DD daily report 생성
-  - 소스: opencode.db (세션구조), Prometheus (모델별 토큰·비용), hermes state.db
+  - 소스: opencode.db (message/session/part/todo), hermes state.db, pricing-exporter (shadow 단가)
   - 출력: wiki/summaries/daily/YYYY-MM-DD_agent_usage.md
-  - shadow 비용: X.XX USD (claude+gpt 계열 기준)
+  - shadow 비용: X.XX USD (anthropic+openai+google 계열) / 실청구: X.XX USD (opencode-go 모델)
 - **lint**: kb-lint-wiki PASSED (errors 0)
 ```
 
@@ -231,12 +256,13 @@ git commit -m "report(daily_usage): daily agent usage report ${TARGET}
 
 ## 주의사항
 
-**SQLite model=NULL 문제**
-OpenCode subagent 세션의 `session.model`은 전부 NULL. 이를 claude-opus-4-7로 가정하면 shadow 비용이 과대 계산된다.
-반드시 Prometheus `opencode_token_usage_tokens_total{model="..."}` 로 실제 모델별 토큰을 가져온다.
+**session.model 사용 금지**
+`session.model`은 subagent 세션에서 NULL. 모델 집계에 절대 사용하지 말 것.
+반드시 `message.data.modelID`로 집계한다. root/subagent 구분 없이 실제 모델명이 정확히 기록된다.
 
 **shadow 비용은 필수**
-구독이라 실청구가 0이어도 반드시 계산해서 기재. 실청구 비용과 shadow 비용은 항상 분리.
+anthropic/openai/google은 구독이라 실청구 0이어도 반드시 shadow를 계산해서 기재.
+실청구(opencode-go)와 shadow는 항상 분리해서 표기.
 
 **달러 기호 금지**
 비용 표기는 `17.73 USD` 형식. `$17.73` 사용 금지.
@@ -244,6 +270,6 @@ OpenCode subagent 세션의 `session.model`은 전부 NULL. 이를 claude-opus-4
 **git add는 명시적으로**
 `git add .` 대신 파일 경로 직접 지정.
 
-**Prometheus 데이터 없을 때**
-Prometheus가 다운되었거나 해당 날짜 데이터가 없으면 SQLite 기반으로 fallback하되,
-Layer 1 상단에 `> ⚠️ Prometheus 데이터 없음 — 모델별 토큰은 SQLite 기반 근사치 (subagent model=NULL → claude-opus-4-7 가정)` 경고를 명시한다.
+**pricing-exporter에 단가 없는 모델**
+shadow 계산 제외하고 표에 명시적으로 `(단가불명)` 또는 `(자체호스팅)` 표기.
+opencode-go 모델은 `message.cost` 합산이 실청구이므로 그대로 기재.
