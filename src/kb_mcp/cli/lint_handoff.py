@@ -1,8 +1,8 @@
 """Handoff system linter — validate frontmatter, security flags, and naming.
 
-Scans data/raw/handoffs/<YYYY>/<MM>/<task-slug>/*.md for:
+Scans data/handoffs/<YYYY>/<MM>/<task-slug>/*.md for:
   - Required frontmatter fields (handoff_id, task_slug, role, status, ...)
-  - Enum values (role, status, promotion)
+  - Recommended role values and enum values for status/promotion
   - handoff_id format <task-slug>:<subject-or-null>:<role>:<NN>
   - Filename ↔ role/seq consistency
   - Security ERRORs (contains_secrets bleed-through into final/promotion)
@@ -31,9 +31,9 @@ from kb_mcp.cli._handoff_validators import (
     HANDOFF_FILENAME_RE,
     HANDOFF_ID_RE as HANDOFF_ID_RE,
     REQUIRED_FM_KEYS as REQUIRED_FM_KEYS,
+    RECOMMENDED_ROLES as RECOMMENDED_ROLES,
     TOOL_TRACE_PIPE_COUNT as TOOL_TRACE_PIPE_COUNT,
     VALID_PROMOTIONS as VALID_PROMOTIONS,
-    VALID_ROLES as VALID_ROLES,
     VALID_STATUSES as VALID_STATUSES,
     _check_tool_trace_columns as _check_tool_trace_columns,
     _security_flags as _security_flags,
@@ -43,7 +43,7 @@ from kb_mcp.cli._handoff_validators import (
 )
 
 BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
-HANDOFFS_DIR = BASEDIR / "data" / "raw" / "handoffs"
+HANDOFFS_DIR = BASEDIR / "data" / "handoffs"
 
 class LintResult:
     def __init__(self) -> None:
@@ -197,7 +197,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print("Linting data/raw/handoffs/...\n")
+    print("Linting data/handoffs/...\n")
 
     result = LintResult()
     lint(result)

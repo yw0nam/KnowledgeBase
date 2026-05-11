@@ -49,7 +49,7 @@ Note: `sources:` paths are relative to `data/` (the parent of `data/wiki/`). Use
 handoff_id: <task-slug>:<subject>:<role>:01
 task_slug: <task-slug>
 subject: <subject-or-null>
-role: main_gateway | research | structuring | execution | verification
+role: opencode | claude_code | hermes | user
 handoff_seq: 1
 status: draft | ready | consumed | superseded
 security:
@@ -59,7 +59,7 @@ promotion: null | skill_candidate | memory | wiki_entity | wiki_concept
 ---
 ```
 
-Use this schema when drafting task handoff documents in `data/raw/handoffs/`.
+Use this schema when drafting task handoff documents in `data/handoffs/`.
 
 ## 3. Usage
 

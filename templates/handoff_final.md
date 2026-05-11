@@ -3,6 +3,8 @@ type: handoff_final
 task_slug: ""
 subject: null
 finalized_at: ""
+created: ""
+updated: ""
 source_handoffs: []
 promotion: null
 security:

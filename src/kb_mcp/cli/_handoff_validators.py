@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 
-VALID_ROLES = {
-    "main_gateway",
-    "research",
-    "structuring",
-    "execution",
-    "verification",
+# Recommended values only; non-members warn but are not rejected.
+RECOMMENDED_ROLES = {
+    "opencode",
+    "claude_code",
+    "hermes",
+    "user",
 }
 VALID_STATUSES = {"draft", "ready", "consumed", "superseded"}
 VALID_PROMOTIONS = {None, "skill_candidate", "memory", "wiki_entity", "wiki_concept"}
@@ -27,12 +27,12 @@ REQUIRED_FM_KEYS = [
 
 HANDOFF_ID_RE = re.compile(
     r"^[a-z0-9-]+:(?:[a-z0-9-]+|null):"
-    r"(?:main_gateway|research|structuring|execution|verification):\d{2}$"
+    r"[a-z][a-z0-9_-]*:\d{2}$"
 )
 
 HANDOFF_FILENAME_RE = re.compile(
     r"^(?:(?P<subject>[a-z0-9-]+)_)?"
-    r"(?P<role>main_gateway|research|structuring|execution|verification)"
+    r"(?P<role>[a-z][a-z0-9_-]*)"
     r"_handoff_(?P<seq>\d{2})\.md$"
 )
 FINAL_FILENAME_RE = re.compile(r"^(?P<slug>[a-z0-9-]+)_final\.md$")
@@ -78,10 +78,10 @@ def _validate_handoff(
             result.error(rel, f"missing frontmatter field: {key}")
 
     role = fm.get("role")
-    if "role" in fm and role not in VALID_ROLES:
-        result.error(
+    if "role" in fm and role not in RECOMMENDED_ROLES:
+        result.warn(
             rel,
-            f"invalid role: {role!r} (must be one of {sorted(VALID_ROLES)})",
+            f"uncommon role: {role!r} (recommended: {sorted(RECOMMENDED_ROLES)})",
         )
 
     status = fm.get("status")
@@ -132,7 +132,7 @@ def _validate_handoff(
                     f"got {type(sec['redaction_status']).__name__}",
                 )
 
-    if role in VALID_ROLES and role != role_from_filename:
+    if isinstance(role, str) and role != role_from_filename:
         result.error(
             rel,
             f"filename role {role_from_filename!r} mismatches "

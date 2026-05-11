@@ -814,19 +814,19 @@ def test_raw_complete_fm_passes(lint_mod, tmp_path):
     assert fm_errors == [], f"unexpected raw fm errors: {fm_errors}"
 
 
-def test_raw_handoffs_skipped(lint_mod, tmp_path):
+def test_raw_non_ingest_top_level_skipped(lint_mod, tmp_path):
     wiki, raw = make_data_root(tmp_path)
-    handoff_path = raw / "handoffs" / "2026" / "05" / "foo" / "research_handoff_01.md"
-    handoff_path.parent.mkdir(parents=True, exist_ok=True)
-    handoff_path.write_text("# no frontmatter at all\n")
+    ops_path = raw / "ops" / "2026" / "05" / "note.md"
+    ops_path.parent.mkdir(parents=True, exist_ok=True)
+    ops_path.write_text("# no frontmatter at all\n")
 
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki, raw_dir=raw)
 
-    handoff_errors = [e for e in result.errors if "research_handoff_01.md" in e]
-    assert handoff_errors == [], (
-        "handoffs must be skipped by kb-lint-wiki (handled by kb-lint-handoff): "
-        f"{handoff_errors}"
+    ops_errors = [e for e in result.errors if "note.md" in e]
+    assert ops_errors == [], (
+        "non-ingest raw top-level dirs must be skipped by kb-lint-wiki: "
+        f"{ops_errors}"
     )
 
 

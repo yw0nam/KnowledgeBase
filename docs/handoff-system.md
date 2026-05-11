@@ -1,23 +1,24 @@
 # Handoff System v0
 
-Updated: 2026-05-08
+Updated: 2026-05-10
 
 ## 1. Synopsis
 
 - **Purpose**: Track work delegation and decision-making across agent roles via versioned handoff documents.
-- **I/O**: Agent role + task context → handoff markdown file in `data/raw/handoffs/` with required frontmatter.
+- **I/O**: Agent role + task context → handoff markdown file in `data/handoffs/` with required frontmatter.
 
 ## 2. Core Logic
 
 ### Roles
 
-Handoff documents specify which agent role handles each stage of work:
+The `role` field identifies which agent authored the handoff. Recommended values:
 
-- **main_gateway** — User request interpretation, delegation decision, final response
-- **research** — Source survey, evidence gathering, conflicting claims
-- **structuring** — Schema design, content merging, editorial decisions
-- **execution** — Implementation, file changes, test results
-- **verification** — Criteria definition, findings, pass/fail decision
+- **opencode** — Open-source coding agent (Gemini CLI, opencode, etc.)
+- **claude_code** — Claude Code / Anthropic API based agent
+- **hermes** — Hermes agent
+- **user** — Direct human action
+
+`role` is free-string `[a-z][a-z0-9_-]*`; non-recommended values trigger a lint WARN. Add new agent identities to `RECOMMENDED_ROLES` as you adopt them.
 
 ### Status
 
@@ -46,7 +47,7 @@ Handoff documents use this frontmatter structure:
 handoff_id: <task-slug>:<subject>:<role>:01
 task_slug: <task-slug>
 subject: <subject-or-null>
-role: main_gateway | research | structuring | execution | verification
+role: opencode | claude_code | hermes | user
 handoff_seq: 1
 status: draft | ready | consumed | superseded
 security:
@@ -56,56 +57,36 @@ promotion: null | skill_candidate | memory | wiki_entity | wiki_concept
 ---
 ```
 
+`role` accepts any free-string matching `[a-z][a-z0-9_-]*`. The values listed above are recommended; lint emits a WARN (not ERROR) for non-recommended values.
+
+**Filename caveat for underscore roles**: If `role` contains underscores (e.g. `claude_code`), the filename MUST include the `<subject>_` prefix to disambiguate parsing. A subject-less filename like `claude_code_handoff_01.md` is parsed as `subject=claude, role=code` by the filename regex, which then fails the filename↔frontmatter role-match check. Workaround: always include subject for underscore roles, or use hyphenated custom roles (e.g. `my-role`).
+
 ## 3. Usage
 
 ### Happy Path Example
 
-**Step 1: main_gateway drafts**
+A task has 1+ agents contributing 1+ handoffs. Each agent drafts its own
+handoff file. At task close, optionally write `<slug>_final.md` to
+aggregate all handoffs into one record.
 
-Create `data/raw/handoffs/claude-md-split_docs_main_gateway_01.md`:
+**Single-handoff task**
 
-```yaml
----
-handoff_id: claude-md-split:docs:main_gateway:01
-task_slug: claude-md-split
-subject: docs
-role: main_gateway
-handoff_seq: 1
-status: ready
-security:
-  contains_secrets: false
-  redaction_status: unchecked
-promotion: null
----
+One agent does the work end-to-end:
+`data/handoffs/2026/05/some-task/docs_opencode_handoff_01.md`
+with `role: opencode`, `status: ready`. Done.
 
-User requested restructuring docs/handoff-system.md to follow Standard Document Structure.
-Delegating to research role for content audit.
-```
+**Multi-handoff task**
 
-**Step 2: research consumes and hands off**
+Agent A drafts:
+`data/handoffs/2026/05/some-task/docs_claude_code_handoff_01.md`
+with `role: claude_code`, `status: ready`.
 
-Update same file, set `status: ready`, increment `handoff_seq: 2`, change `role: research`:
+Agent B picks up, drafts:
+`data/handoffs/2026/05/some-task/docs_opencode_handoff_02.md`
+with `role: opencode`, `status: ready`. Marks the previous file
+`status: consumed`.
 
-```yaml
-handoff_id: claude-md-split:docs:research:02
-handoff_seq: 2
-role: research
-status: ready
-```
-
-Append findings to body. Hand off to structuring.
-
-**Step 3: structuring merges and designs**
-
-Create new file with `role: structuring`, `handoff_seq: 3`, `status: ready`. Design the new structure, hand off to execution.
-
-**Step 4: execution implements**
-
-Create new file with `role: execution`, `handoff_seq: 4`. Implement changes, set `status: ready`, hand off to verification.
-
-**Step 5: verification validates**
-
-Create new file with `role: verification`, `handoff_seq: 5`. Confirm criteria met, set `status: consumed`. Mark eligible handoffs with `promotion: memory` or `promotion: skill_candidate`.
+Continue until task closes. Optionally write `docs_final.md` summarizing.
 
 ---
 
@@ -115,7 +96,7 @@ Create new file with `role: verification`, `handoff_seq: 5`. Confirm criteria me
 
 **handoff_id collisions**
 
-Use format `task_slug:subject:role:NN` consistently. Increment `NN` per role per task. Example: `claude-md-split:docs:main_gateway:01`, `claude-md-split:docs:research:02`.
+Use format `task_slug:subject:role:NN` consistently. Increment `NN` per role per task. Example: `some-task:docs:claude_code:01`, `some-task:docs:opencode:02`.
 
 **Forgetting to bump status**
 
@@ -131,6 +112,14 @@ If a handoff contains secrets (API keys, passwords, tokens), set `security.conta
 
 ### B. PatchNote
 
+- 2026-05-10 (phase 2): Reframed `role` from 5-phase pipeline (main_gateway/research/structuring/execution/verification) to agent identity (opencode/claude_code/hermes/user). Collapsed 5 phase-role templates into 1 universal `templates/handoff.md`. Multi-handoff per task and `final.md` aggregation pattern preserved.
+- 2026-05-10 (revision): Reverted unrequested lint hacks (untracked-skip,
+  filename role override). Documented filename caveat for underscore roles.
+- 2026-05-10: Relaxed `role` to free-string with WARN-only recommended enum.
+  Moved handoffs from `data/raw/handoffs/` to `data/handoffs/` (handoffs are
+  authored operational records, not immutable raw sources). Fixed Step 2
+  happy-path example to create a new file per role rather than updating the
+  prior one (aligns with filename↔frontmatter role-match enforcement).
 - 2026-05-08: Initial split from CLAUDE.md and restructured to follow docs/CLAUDE.md Standard Document Structure. Preserved all 5 roles, 4 statuses, 4 promotions, and frontmatter YAML verbatim.
 
 ## Reference
