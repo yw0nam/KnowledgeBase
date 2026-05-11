@@ -69,8 +69,8 @@ SQLite (OpenCode)                   SQLite (Hermes)
 
 ## 4. 템플릿
 
-- Daily: [`templates/summary-daily_agent_usage.md`](../../templates/summary-daily_agent_usage.md)
-- Weekly: [`templates/summary-weekly_agent_usage.md`](../../templates/summary-weekly_agent_usage.md)
+- Daily: [`templates/wiki/summaries/daily_agent_usage.md`](../../templates/wiki/summaries/daily_agent_usage.md)
+- Weekly: [`templates/wiki/summaries/weekly_agent_usage.md`](../../templates/wiki/summaries/weekly_agent_usage.md)
 
 **공백일 처리**: 데이터가 없는 날은 frontmatter만 채우고 본문을 `> 데이터 없음` 한 줄로 작성.
 

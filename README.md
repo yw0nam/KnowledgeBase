@@ -15,6 +15,10 @@ KnowledgeBase/
 ├── scripts/
 │   └── ingest-github.sh          GitHub source collection
 ├── templates/                    Frontmatter + handoff templates
+│   ├── wiki/                       Wiki page templates (entity, concept, decision, …)
+│   │   └── summaries/              Summary subtypes (daily, weekly, …)
+│   ├── handoff/                    Handoff templates (task, final, readme)
+│   └── raw/                        Raw source frontmatter
 ├── CLAUDE.md                     Full schema + pipeline definition
 ├── README.md                     This file
 └── .gitignore                    Excludes data/

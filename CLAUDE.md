@@ -20,6 +20,10 @@ KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 ├── scripts/
 │   └── ingest-github.sh          # GitHub source collection
 ├── templates/                    # Frontmatter + handoff templates
+│   ├── wiki/                     #   Wiki page templates (entity, concept, decision, …)
+│   │   └── summaries/            #     Summary subtypes (daily, weekly, …)
+│   ├── handoff/                  #   Handoff templates (task, final, readme)
+│   └── raw/                      #   Raw source frontmatter
 ├── pyproject.toml
 ├── CLAUDE.md                     # This file
 ├── README.md

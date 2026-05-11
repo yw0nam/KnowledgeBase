@@ -112,7 +112,8 @@ If a handoff contains secrets (API keys, passwords, tokens), set `security.conta
 
 ### B. PatchNote
 
-- 2026-05-10 (phase 2): Reframed `role` from 5-phase pipeline (main_gateway/research/structuring/execution/verification) to agent identity (opencode/claude_code/hermes/user). Collapsed 5 phase-role templates into 1 universal `templates/handoff.md`. Multi-handoff per task and `final.md` aggregation pattern preserved.
+- 2026-05-10 (phase 2): Reframed `role` from 5-phase pipeline (main_gateway/research/structuring/execution/verification) to agent identity (opencode/claude_code/hermes/user). Collapsed 5 phase-role templates into 1 universal `templates/handoff/task.md`. Multi-handoff per task and `final.md` aggregation pattern preserved.
+- 2026-05-11: Reorganized `templates/` into subfolders — `wiki/`, `wiki/summaries/`, `handoff/`, `raw/`.
 - 2026-05-10 (revision): Reverted unrequested lint hacks (untracked-skip,
   filename role override). Documented filename caveat for underscore roles.
 - 2026-05-10: Relaxed `role` to free-string with WARN-only recommended enum.
