@@ -6,22 +6,21 @@ Checks:
   1. Dead wikilinks (link target doesn't exist)
   2. .md extension in wikilink targets (Obsidian doesn't need it)
   3. Self-referencing links
-  4. LaTeX/HTML in content (Obsidian markdown only)
-  5. Unfilled LLM placeholders (<!-- LLM TODO: -->)
-  6. Frontmatter format (missing/invalid, quoted types, inline sources,
+  4. Unfilled LLM placeholders (<!-- LLM TODO: -->)
+  5. Frontmatter format (missing/invalid, quoted types, inline sources,
      missing/unknown type, missing required fields)
-  7. Empty () in Relationships section
-  8. Empty sections (heading with no content before next heading)
-  9. Stale sources (sources reference non-existent raw files)
- 10. Stub pages (body length below STUB_THRESHOLD_CHARS)
- 11. Orphan pages (no inbound links from other wiki pages)
- 12. Subject _index.md ↔ disk sync (listed pages exist, on-disk pages listed)
- 13. Improvement enum validation (kind, observed_at, domain, severity, status,
+  6. Empty () in Relationships section
+  7. Empty sections (heading with no content before next heading)
+  8. Stale sources (sources reference non-existent raw files)
+  9. Stub pages (body length below STUB_THRESHOLD_CHARS)
+ 10. Orphan pages (no inbound links from other wiki pages)
+ 11. Subject _index.md ↔ disk sync (listed pages exist, on-disk pages listed)
+ 12. Improvement enum validation (kind, observed_at, domain, severity, status,
      related path resolution)
- 14. Checklist items must use markdown task-list syntax under ``## Items``
- 15. Raw frontmatter required fields (source_url, type, captured_at,
+ 13. Checklist items must use markdown task-list syntax under ``## Items``
+ 14. Raw frontmatter required fields (source_url, type, captured_at,
      contributor) — always-on, scoped to raw ingest categories
- 16. Raw immutability — ``--check-immutability`` opts in to:
+ 15. Raw immutability — ``--check-immutability`` opts in to:
        a) git-status modified-but-not-new files under data/raw/ → ERROR
        b) file mtime later than captured_at by more than the tolerance → ERROR
 
@@ -230,19 +229,7 @@ def lint(
             if link == stem:
                 result.warn(rel, "links to itself")
 
-        # ── 4. LaTeX / HTML ─────────────────────────────────────────────
-        if re.search(r"\$[^$]+\$", body):
-            result.error(rel, "contains LaTeX ($...$) — use plain text arrows (→)")
-        if re.search(r"\\rightarrow|\\leftarrow|\\times|\\frac", body):
-            result.error(rel, "contains LaTeX commands — use Obsidian markdown only")
-        if re.search(r"<(?!!--)[a-zA-Z]", body):
-            # Allow <!-- comments --> but flag <div>, <span>, etc.
-            html_tags = re.findall(r"<([a-zA-Z]+)", body)
-            non_comment = [t for t in html_tags if t not in ("br",)]
-            if non_comment:
-                result.warn(rel, f"contains HTML tags: {', '.join(set(non_comment))}")
-
-        # ── 5. Unfilled placeholders ────────────────────────────────────
+        # ── 4. Unfilled placeholders ────────────────────────────────────
         # Accept both `<!-- LLM: -->` (legacy) and `<!-- LLM TODO: -->`
         # (canonical wiki template marker) so the lint stays aligned with
         # what wiki templates emit.
@@ -252,7 +239,7 @@ def lint(
                 rel, f"{len(placeholders)} unfilled <!-- LLM TODO: --> placeholder(s)"
             )
 
-        # ── 6. Frontmatter format ───────────────────────────────────────
+        # ── 5. Frontmatter format ───────────────────────────────────────
         if fm is None:
             result.error(rel, "missing or invalid frontmatter")
             continue
@@ -286,13 +273,13 @@ def lint(
         elif page_type == "checklist":
             _validate_checklist_items(rel, body, result)
 
-        # ── 7. Empty relation parens ────────────────────────────────────
+        # ── 6. Empty relation parens ────────────────────────────────────
         if "## Relationships" in body:
             rel_section = body.split("## Relationships")[1].split("##")[0]
             if "()" in rel_section:
                 result.warn(rel, "empty () in Relationships section")
 
-        # ── 8. Empty sections ───────────────────────────────────────────
+        # ── 7. Empty sections ───────────────────────────────────────────
         headings = list(re.finditer(r"^##\s+.+$", body, re.MULTILINE))
         for i, match in enumerate(headings):
             start = match.end()
@@ -303,7 +290,7 @@ def lint(
                 heading_text = match.group().strip()
                 result.warn(rel, f"empty section: {heading_text}")
 
-        # ── 9. Stale sources ────────────────────────────────────────────
+        # ── 8. Stale sources ────────────────────────────────────────────
         sources = fm.get("sources", [])
         if isinstance(sources, list):
             for src in sources:
@@ -312,7 +299,7 @@ def lint(
                     if not src_path.exists():
                         result.error(rel, f"source file not found: {src}")
 
-        # ── 10. Stub pages ──────────────────────────────────────────────
+        # ── 9. Stub pages ───────────────────────────────────────────────
         # Subject hubs at entities/{subject}/_index.md are excluded — they're
         # allowed to be short, check_index_sync handles them separately. Other
         # files happening to be named _index.md (outside entities/) still get
@@ -326,7 +313,7 @@ def lint(
                     f"stub page — body {len(body.strip())} chars (< {STUB_THRESHOLD_CHARS})",
                 )
 
-    # ── 11. Orphan pages ────────────────────────────────────────────────
+    # ── 10. Orphan pages ────────────────────────────────────────────────
     # Subject hubs (`_index.md`) are not link targets by convention
     # (files starting with `_` are excluded from the link index by
     # convention), so they cannot accumulate inbound links and must be
@@ -339,13 +326,13 @@ def lint(
                 _find_relative(stem, wiki_dir), "orphan page — no inbound links"
             )
 
-    # ── 12. Subject _index.md ↔ disk sync ───────────────────────────────
+    # ── 11. Subject _index.md ↔ disk sync ───────────────────────────────
     check_index_sync(result, wiki_dir)
 
-    # ── 13. Raw frontmatter required fields (always-on) ─────────────────
+    # ── 12. Raw frontmatter required fields (always-on) ─────────────────
     check_raw_frontmatter(result, raw_dir)
 
-    # ── 14. Raw immutability (opt-in: --check-immutability or --strict) ─
+    # ── 13. Raw immutability (opt-in: --check-immutability or --strict) ─
     if check_immutability:
         check_raw_captured_at_mtime(result, raw_dir)
         check_raw_immutability(result, raw_dir, data_dir)
