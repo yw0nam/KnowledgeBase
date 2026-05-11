@@ -72,6 +72,7 @@ See [Pipeline details](docs/pipeline.md) for stage-by-stage actions and lint che
 - Keep `data/log.md` updated on every operation.
 - Lint must pass (0 errors) before committing wiki changes.
 - Handoff documents are stored in `data/handoffs/` and tracked via git.
+- Use uv for package management
 
 ## Privacy
 

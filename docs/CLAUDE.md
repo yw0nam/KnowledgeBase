@@ -28,13 +28,6 @@ Updated: YYYY-MM-DD
 
 ## 3. Usage
 - Happy Path example (brief)
-
----
-
-## Appendix
-### A. Troubleshooting
-### B. PatchNote
-YYYY-MM-DD: What changed and why
 ```
 
 ## 3. Writing Rules
