@@ -76,36 +76,19 @@ SQLite (OpenCode)                   SQLite (Hermes)
 
 ## 5. 비용 계산
 
-### 실청구 vs Shadow
+### 비용 소스
 
-- **실청구**: `message.data.cost` 합산. anthropic/openai/google은 구독이라 0. **opencode-go 모델만 실청구 발생.**
-- **Shadow**: message 토큰 × pricing-exporter(LiteLLM) 단가. 구독이어도 반드시 계산해서 기재.
-
-### 단가 조회
-
-```bash
-curl -s localhost:9091/metrics | grep 'model_pricing_usd_per_token' | grep -v '#'
-```
-
-pricing-exporter(`/home/spow12/observability/pricing-exporter/server.py`)가 LiteLLM GitHub JSON을 24h 캐시로 제공.
+- **기록 비용**: `SUM(message.data.cost)`. OpenCode가 모든 모델에 대해 자동 집계.
 
 ### providerID별 처리 규칙
 
-| providerID | 실청구 소스 | Shadow |
-|------------|------------|--------|
-| `anthropic` | 0 USD (Max 구독) | pricing-exporter 단가로 계산 |
-| `openai` | 0 USD (구독) | pricing-exporter 단가로 계산 |
-| `google` | 0 USD (구독) | pricing-exporter 단가로 계산 |
-| `opencode-go` | `SUM(message.cost)` = 실청구 | pricing-exporter에 단가 있으면 shadow도 계산, 없으면 실청구만 기재 |
-| `vllm` | 0 USD (자체호스팅) | shadow 제외, 표에 명시 |
-
-### Shadow 계산식
-
-```
-shadow = input × p_input + output × p_output
-       + cache_read × p_cache_read + cache_write × p_cache_write
-       + reasoning × p_input   # reasoning은 input 단가 적용
-```
+| providerID | 비용 소스 |
+|------------|----------|
+| `anthropic` | `message.data.cost` (OpenCode 자동 집계) |
+| `openai` | `message.data.cost` (OpenCode 자동 집계) |
+| `google` | `message.data.cost` (OpenCode 자동 집계) |
+| `opencode-go` | `message.data.cost` (실청구) |
+| `vllm` | 0 USD (자체호스팅, 집계 제외) |
 
 ---
 

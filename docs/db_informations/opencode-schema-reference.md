@@ -110,7 +110,7 @@ project ──< session ──< part
 > `total = input + cache.read + output`
 > **`input` = 캐시 미스 토큰만** (새로 읽힌 것). `cache.read` = 캐시 히트 토큰.
 > 실제 LLM 입력량 = `input + cache.read`. 캐시 히트율 = `cache.read / (input + cache.read)`
-> 구독 모델(anthropic/openai/google)은 `cost = 0`. shadow 비용은 pricing-exporter 단가로 별도 계산.
+> `cost`는 OpenCode가 모든 모델에 대해 자동 집계해서 기록.
 
 ### tool
 ```json
@@ -189,17 +189,16 @@ ORDER BY total_input DESC;
 ```
 
 > **캐시 히트율** = `cache_read / (input_cache_miss + cache_read) × 100`
-> **Shadow 계산 시**: `input_cache_miss × p_input + cache_read × p_cache_read` (단가가 다르므로 반드시 분리)
 
 **providerID별 비용 처리 규칙:**
 
-| providerID | 실청구 | Shadow |
-|------------|--------|--------|
-| `anthropic` | 0 USD (Max 구독) | pricing-exporter 단가로 계산 |
-| `openai` | 0 USD (구독) | pricing-exporter 단가로 계산 |
-| `opencode-go` | `message.cost` 합산 = 실청구 | pricing-exporter에 단가 없으면 shadow 제외 |
-| `google` | 0 USD (구독) | pricing-exporter 단가로 계산 |
-| `vllm` | 0 USD (자체호스팅) | shadow 제외 |
+| providerID | 비용 소스 |
+|------------|----------|
+| `anthropic` | `message.data.cost` (OpenCode 자동 집계) |
+| `openai` | `message.data.cost` (OpenCode 자동 집계) |
+| `opencode-go` | `message.data.cost` (실청구) |
+| `google` | `message.data.cost` (OpenCode 자동 집계) |
+| `vllm` | 0 USD (자체호스팅, 집계 제외) |
 
 ### B. 인덱스 (성능 참고)
 

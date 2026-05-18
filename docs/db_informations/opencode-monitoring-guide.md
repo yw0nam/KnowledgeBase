@@ -21,8 +21,7 @@ Updated: 2026-05-11
 | 지표 | 소스 | 의미 |
 |------|------|------|
 | 모델별 일일 토큰 | `message.data` (modelID, tokens.*) | root+subagent 포함 실제 모델 분포 |
-| 실청구 비용 | `message.data.cost` (providerID=opencode-go만 유효) | anthropic/openai/google은 구독이라 0. opencode-go 모델만 실청구 발생 |
-| shadow 비용 | message 토큰 × pricing-exporter 단가 | 구독 절감액 산출. 반드시 계산해서 기재 |
+| 기록 비용 | `message.data.cost` | OpenCode가 모든 모델에 대해 자동 집계. vllm(자체호스팅)은 0 |
 | 캐시 히트율 | `cache_read / (input_cache_miss + cache_read) × 100` | 높을수록 비용 효율 좋음. `input`은 캐시 미스분만이므로 반드시 cache_read와 합산해서 분모 계산 |
 | API 호출 횟수 | SQLite `part.type=step-finish` count per session | 51회+ = 루프 탈출 실패 의심 |
 | reasoning 토큰 비율 | `message.tokens.reasoning` / 전체 | Extended thinking 남용 여부 |

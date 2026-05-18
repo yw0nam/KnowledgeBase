@@ -14,20 +14,20 @@ tags: []
 
 - OpenCode: 총 N세션 (root N / subagent N), 프로젝트 N개
 - Hermes: 총 N세션, source N종
-- 총 shadow 비용: N USD (OpenCode N USD + Hermes N USD)
+- 총 기록 비용: N USD (OpenCode N USD + Hermes N USD)
 
 ## Layer 1: 비용·효율
 
 **OpenCode**
 - 총 토큰: N (input N / output N / cache_read N / cache_write N)
 - 캐시 히트율: N%
-- 실청구: N USD / Shadow: N USD
+- 기록 비용: N USD
 - 이상치: <!-- reasoning 비율 높은 세션, API 호출 50회+ 세션 제목과 함께 명시 -->
 
 **Hermes**
 - 총 토큰: N (input N / output N / cache_read N)
 - 캐시 히트율: N%
-- 실청구: N USD / Shadow: N USD (claude 계열만, 나머지 단가 불명확)
+- 기록 비용: N USD
 - 모델별 분포: <!-- model: N세션 형식 -->
 
 ## Layer 2: 작업 품질
