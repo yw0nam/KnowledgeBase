@@ -30,7 +30,7 @@ Open-ended improvement ideas. Status: draft, in_progress, proposed, deferred. Pa
 Operational checklists. Path: `checklists/Checklist_Name.md`.
 
 #### Summaries
-Time/subject rollups. Path: `summaries/{daily|weekly|monthly|migration}/{YYYY-MM-DD|YYYY-Www|YYYY-MM}.md`.
+Time/subject rollups grouped by year and month. Path: `summaries/{YYYY}/{MM}/{period-or-date}-{summary-kind}.md`.
 
 ### Naming
 
@@ -44,7 +44,7 @@ Time/subject rollups. Path: `summaries/{daily|weekly|monthly|migration}/{YYYY-MM
 
 **Wiki concepts:** `Snake_Case.md` (flat, e.g., `Agent_Middleware_Implementation_Stack.md`)
 
-**Wiki summaries:** ISO date/week (e.g., `2026-W16.md`, `2026-04.md`)
+**Wiki summaries:** ISO date/week/month plus kind (e.g., `2026-05-18-memory.md`, `2026-05-18-opencode-usage.md`, `2026-W21-weekly.md`, `2026-05-monthly.md`).
 
 ### Wikilinks
 

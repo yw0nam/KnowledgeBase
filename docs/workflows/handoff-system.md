@@ -125,4 +125,4 @@ If a handoff contains secrets (API keys, passwords, tokens), set `security.conta
 
 ## Reference
 
-For the complete handoff system specification, see `/home/spow12/hermes_optimize/handoff.md`.
+For the complete historical handoff system specification, use the local migration/reference notes if available. This workflow document is the portable project reference.

@@ -29,11 +29,19 @@ KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 ├── README.md
 ├── docs/
 │   ├── CLAUDE.md                 # CLAUDE.md file for docs/
-│   ├── commands.md               # Command reference
-│   ├── frontmatter.md            # Frontmatter schemas
-│   ├── handoff-system.md         # Handoff system spec
-│   ├── pipeline.md               # 4-stage pipeline details
-│   └── wiki-categories.md        # Wiki categories
+│   ├── README.md                 # Documentation index
+│   ├── architecture.md           # Repository and memory layer map
+│   ├── workflows/                # Operating procedures
+│   │   ├── cron-jobs.md          # Cron schedule, wrappers, and failure policy
+│   │   ├── handoff-system.md     # Handoff system spec
+│   │   ├── periodic-memory-workflow.md # Daily/weekly/monthly memory workflow
+│   │   ├── usage-reports.md      # OpenCode/Hermes report modes
+│   │   └── pipeline.md           # 4-stage pipeline details
+│   ├── db_informations/          # DB schemas and monitoring guides
+│   └── reference/                # Schemas, categories, commands
+│       ├── commands.md           # Command reference
+│       ├── frontmatter.md        # Frontmatter schemas
+│       └── wiki-categories.md    # Wiki categories
 └── .gitignore                    # Excludes data/
 
 data/                             # Nested git repo: raw sources + wiki (local-only)
@@ -67,7 +75,7 @@ data/                             # Nested git repo: raw sources + wiki (local-o
 (script)    (LLM)    (LLM)   (script)
 ```
 
-See [Pipeline details](docs/pipeline.md) for stage-by-stage actions and lint check categories.
+See [Pipeline details](docs/workflows/pipeline.md) for stage-by-stage actions and lint check categories.
 
 ## Important Rules
 
@@ -91,17 +99,22 @@ Never commit `data/` contents to the outer repository.
 
 ## Skills
 
-Currently NONE. All previous automation skills were removed during migration to memory-workflow v0. New skills will be authored after 2-3 operating cycles complete.
+- `knowledgebase-initialize` — initialize `data/`, verify tooling, and propose cron jobs for approval.
 
 ## Documentation
 
-- [Pipeline](docs/pipeline.md) — 4-stage pipeline (Ingest → Fill → Log → Lint), commands, lint categories
-- [Frontmatter Conventions](docs/frontmatter.md) — Raw, Wiki, Handoff frontmatter schemas
-- [Wiki Categories](docs/wiki-categories.md) — 7 categories, naming, wikilinks, tags
-- [Handoff System](docs/handoff-system.md) — Roles, status, promotion, frontmatter
-- [Commands](docs/commands.md) — kb-mcp, kb-lint-wiki, kb-lint-handoff
+- [Documentation Index](docs/README.md) — read order and document map
+- [Architecture](docs/architecture.md) — repository layout and memory layers
+- [Pipeline](docs/workflows/pipeline.md) — 4-stage pipeline (Ingest → Fill → Log → Lint), commands, lint categories
+- [Cron Jobs](docs/workflows/cron-jobs.md) — scheduling, locking, wrappers, failure policy
+- [Usage Reports](docs/workflows/usage-reports.md) — OpenCode, Hermes, combined report modes
+- [Periodic Memory Workflow](docs/workflows/periodic-memory-workflow.md) — daily, weekly, monthly memory workflow for cron agents
+- [Frontmatter Conventions](docs/reference/frontmatter.md) — Raw, Wiki, Handoff frontmatter schemas
+- [Wiki Categories](docs/reference/wiki-categories.md) — 7 categories, naming, wikilinks, tags
+- [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion, frontmatter
+- [Commands](docs/reference/commands.md) — kb-mcp, kb-lint-wiki, kb-lint-handoff
 
 ## Reference
 
-- Handoff system spec: `/home/spow12/hermes_optimize/handoff.md`
-- Migration plan: `/home/spow12/codes/KnowledgeBase/.sisyphus/plans/memory-workflow-migration-v0.md`
+- Handoff system spec: external local reference, not required for normal operation.
+- Migration plan: `.sisyphus/plans/memory-workflow-migration-v0.md` if present.

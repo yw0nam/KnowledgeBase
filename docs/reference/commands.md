@@ -57,6 +57,9 @@ git add raw/ wiki/ log.md
 git commit -m "ingest: [source] description"
 ```
 
+For cron-based daily, weekly, and monthly memory workflows, read
+`docs/workflows/periodic-memory-workflow.md` before running the pipeline.
+
 ---
 
 ## Appendix
@@ -77,4 +80,5 @@ Check that `uv sync` was run and the entry point is on PATH.
 
 ### B. PatchNote
 
+- 2026-05-18: Added pointer to periodic memory workflow for cron agents.
 - 2026-05-08: Initial split from CLAUDE.md and restructured to follow docs/CLAUDE.md Standard Document Structure.

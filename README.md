@@ -51,7 +51,7 @@ data/                             Nested git repo (local-only)
 (script)    (LLM)    (LLM)   (script)
 ```
 
-See [docs/pipeline.md](docs/pipeline.md) for stage-by-stage details, bash commands, and lint check categories.
+See [docs/workflows/pipeline.md](docs/workflows/pipeline.md) for stage-by-stage details, bash commands, and lint check categories.
 
 ## Privacy
 
@@ -109,10 +109,15 @@ git commit -m "ingest: [source] description"
 
 ## Documentation
 
-- [Pipeline details](docs/pipeline.md) — Full pipeline stages and lint check categories
-- [Frontmatter](docs/frontmatter.md) — Raw, Wiki, and Handoff frontmatter schemas
-- [Wiki Categories](docs/wiki-categories.md) — 7 categories, naming, wikilinks, tags
-- [Handoff System](docs/handoff-system.md) — Roles, status, promotion
-- [Commands](docs/commands.md) — Full CLI command reference
+- [Documentation Index](docs/README.md) — Read order and document map
+- [Architecture](docs/architecture.md) — Repository layout and memory layers
+- [Pipeline details](docs/workflows/pipeline.md) — Full pipeline stages and lint check categories
+- [Cron Jobs](docs/workflows/cron-jobs.md) — Scheduling, locking, wrapper, and failure policy for periodic jobs
+- [Usage Reports](docs/workflows/usage-reports.md) — OpenCode, Hermes, and combined report mode policy
+- [Periodic Memory Workflow](docs/workflows/periodic-memory-workflow.md) — Daily, weekly, and monthly long-term memory workflow for fresh-session cron agents
+- [Frontmatter](docs/reference/frontmatter.md) — Raw, Wiki, and Handoff frontmatter schemas
+- [Wiki Categories](docs/reference/wiki-categories.md) — 7 categories, naming, wikilinks, tags
+- [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion
+- [Commands](docs/reference/commands.md) — Full CLI command reference
 
 See [CLAUDE.md](CLAUDE.md) for the LLM entry point.
