@@ -14,36 +14,36 @@ tags: []
 
 ## Summary
 
-- 총 세션: N개 / 활동일: N일 (공백일: N일)
-- 총 토큰: N / 평균 일일 토큰: N
-- 평균 캐시 히트율: N%
-- 평균 Todo 완료율: N%
+- Total sessions: N / active days: N (empty days: N)
+- Total tokens: N / average daily tokens: N
+- Average cache hit rate: N%
+- Average TODO completion rate: N%
 
-## 주차별 트렌드
+## Weekly Trends
 
-| 주차 | 세션 | 토큰 | 캐시 히트율 | Todo 완료율 | 비고 |
+| Week | Sessions | Tokens | Cache Hit Rate | TODO Completion | Notes |
 |------|------|------|------------|------------|------|
 | W01 | | | | | |
 | W02 | | | | | |
 | W03 | | | | | |
 | W04 | | | | | |
 
-## 이번 달 인사이트
+## Monthly Insights
 
-### 잘된 것
+### What Went Well
 
-<!-- 전월 대비 개선된 지표, 높은 완료율 주간, 효율적인 패턴 -->
+<!-- Improved metrics versus prior month, high-completion weeks, efficient patterns. -->
 
-### 문제 패턴
+### Problem Patterns
 
-<!-- 반복된 에러, 낮은 완료율, 핫 파일, 루프 의심 세션 -->
+<!-- Repeated errors, low completion, hot files, suspected loop sessions. -->
 
-### 액션 아이템
+### Action Items
 
-<!-- 신호→액션 매핑 기준으로 도출된 구체적 개선 사항 -->
-<!-- 없으면 "없음" 명시 -->
+<!-- Concrete improvements derived from signal-to-action mapping. -->
+<!-- Use "None" if empty. -->
 
 ## Observations
 
-<!-- 월간 전체를 읽으면서 포착한 추가 패턴, 맥락, 특이사항 -->
-<!-- 없으면 생략 가능 -->
+<!-- Additional patterns, context, or anomalies found while reading the month. -->
+<!-- Omit if empty. -->

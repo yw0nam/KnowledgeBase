@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-"""Deterministic OpenCode + Hermes daily usage report generator."""
+"""Shared collectors for deterministic usage reports."""
 
 from __future__ import annotations
 
-import argparse
 import json
 import sqlite3
-import subprocess
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-
-from kb_mcp.cli._usage_report_render import render_daily_report
 
 BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
 DEFAULT_OPENCODE_DB = Path.home() / ".local/share/opencode/opencode.db"
@@ -458,72 +453,3 @@ def _collect_hermes(target_date: str, db_path: Path) -> dict[str, Any]:
         "latency": {"avg_session_sec": round(_num(sessions.get("avg_session_sec")), 2), "max_session_sec": round(_num(sessions.get("max_session_sec")), 2)},
         "cost": {"recorded_usd": round(_num(sessions.get("cost")), 6), "cost_per_session_usd": round(_num(sessions.get("cost")) / _num(sessions.get("root")), 6) if _num(sessions.get("root")) else None},
     }
-
-def collect_usage_metrics(target_date: str, opencode_db: Path = DEFAULT_OPENCODE_DB, hermes_db: Path = DEFAULT_HERMES_DB) -> dict[str, Any]:
-    return {
-        "date": target_date,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "deferred_metrics": DEFERRED_METRICS,
-        "opencode": _collect_opencode(target_date, Path(opencode_db)),
-        "hermes": _collect_hermes(target_date, Path(hermes_db)),
-        "policy_compliance": {"passed": 0, "total": 0, "rate_pct": None, "status": "not_evaluated_until_write"},
-    }
-
-
-def _write_policy(report_path: Path, metrics_path: Path, report: str) -> dict[str, Any]:
-    checks = [
-        report_path.as_posix().endswith("_agent_usage.md"),
-        "/data/wiki/summaries/daily/" in report_path.as_posix(),
-        "/data/ops/reports/daily/" in metrics_path.as_posix(),
-        "sources: []" in report,
-        "$" not in report,
-    ]
-    passed = sum(1 for c in checks if c)
-    return {"passed": passed, "total": len(checks), "rate_pct": _pct(passed, len(checks)), "status": "evaluated"}
-
-
-def write_outputs(metrics: dict[str, Any], base_dir: Path = BASEDIR) -> dict[str, Path]:
-    d = metrics["date"]
-    report_path = base_dir / "data/wiki/summaries/daily" / f"{d}_agent_usage.md"
-    metrics_path = base_dir / "data/ops/reports/daily" / f"{d}_agent_usage.metrics.json"
-    report = render_daily_report(metrics)
-    metrics["policy_compliance"] = _write_policy(report_path, metrics_path, report)
-    report = render_daily_report(metrics)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    metrics_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(report, encoding="utf-8")
-    metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return {"report": report_path, "metrics": metrics_path}
-
-
-def _default_target_date() -> str:
-    kst = timezone(timedelta(hours=9))
-    return (datetime.now(kst).date() - timedelta(days=1)).isoformat()
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date", default=_default_target_date())
-    parser.add_argument("--opencode-db", type=Path, default=DEFAULT_OPENCODE_DB)
-    parser.add_argument("--hermes-db", type=Path, default=DEFAULT_HERMES_DB)
-    parser.add_argument("--base-dir", type=Path, default=BASEDIR)
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--lint", action="store_true")
-    args = parser.parse_args(argv)
-
-    metrics = collect_usage_metrics(args.date, args.opencode_db, args.hermes_db)
-    if args.dry_run:
-        print(render_daily_report(metrics))
-        return 0
-    outputs = write_outputs(metrics, args.base_dir)
-    print("generated:")
-    for key, path in outputs.items():
-        print(f"- {key}: {path}")
-    if args.lint:
-        result = subprocess.run(["uv", "run", "kb-lint-wiki"], cwd=args.base_dir, text=True)
-        return result.returncode
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

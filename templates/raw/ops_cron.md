@@ -12,30 +12,30 @@ tags: []
 
 # Cron: {{job_name}} — {{YYYY-MM-DD HH:MM}} KST
 
-## 실행 결과
+## Result
 
-- **상태**: success | failed | skipped
-- **시작**: 
-- **종료**: 
-- **소요 시간**: N초
+- **Status**: success | failed | skipped
+- **Started at**:
+- **Ended at**:
+- **Duration**: N seconds
 
-## 실행 내용
+## Actions
 
-<!-- 이 cron이 실제로 한 일. 예: daily 리포트 생성, DB 쿼리 범위, 파일 생성 경로 등 -->
+<!-- What this cron job actually did. Example: generated daily report, queried DB range, created output paths. -->
 
-## 출력물
+## Outputs
 
-<!-- 생성/수정된 파일 목록 또는 결과값 -->
+<!-- Created/updated files or result values. -->
 
-| 항목 | 경로 / 값 |
+| Item | Path / Value |
 |------|----------|
 | | |
 
-## 오류 및 경고
+## Errors And Warnings
 
-<!-- status가 success여도 경고가 있으면 기록. 없으면 "없음" -->
+<!-- Record warnings even when status is success. Use "None" if empty. -->
 
-## 후속 조치
+## Follow-Up
 
-<!-- 필요한 수동 개입, 재실행 여부, 다음 cron에 영향 여부 -->
-<!-- 없으면 "없음" -->
+<!-- Required manual intervention, rerun need, or impact on the next cron job. -->
+<!-- Use "None" if empty. -->

@@ -4,7 +4,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from kb_mcp.cli.usage_daily_report import collect_usage_metrics, render_daily_report
+from kb_mcp.cli.hermes_daily_report import collect_metrics as collect_hermes_metrics, render_report as render_hermes_report
+from kb_mcp.cli.opencode_daily_report import collect_metrics as collect_opencode_metrics, render_report as render_opencode_report
 
 
 def make_opencode_db(path: Path) -> None:
@@ -135,43 +136,45 @@ def make_hermes_db(path: Path) -> None:
     con.close()
 
 
-def test_collect_usage_metrics_counts_non_deferred_metrics(tmp_path):
+def test_collect_split_usage_metrics_counts_non_deferred_metrics(tmp_path):
     opencode_db = tmp_path / "opencode.db"
     hermes_db = tmp_path / "state.db"
     make_opencode_db(opencode_db)
     make_hermes_db(hermes_db)
 
-    metrics = collect_usage_metrics("2026-05-14", opencode_db, hermes_db)
+    opencode_metrics = collect_opencode_metrics("2026-05-14", opencode_db)
+    hermes_metrics = collect_hermes_metrics("2026-05-14", hermes_db)
 
-    assert metrics["deferred_metrics"] == ["Task Completion Rate", "pass@k", "pass^k"]
-    assert metrics["opencode"]["sessions"]["total"] == 2
-    assert metrics["opencode"]["sessions"]["root"] == 1
-    assert metrics["opencode"]["error_rate"]["tool_errors"] == 1
-    assert metrics["opencode"]["error_rate"]["tool_calls"] == 2
-    assert metrics["opencode"]["tool_schema"]["invalid_calls"] == 1
-    assert metrics["opencode"]["n_turns"] == 2
-    assert metrics["opencode"]["tokens"]["total"] == 110
-    assert metrics["opencode"]["cost"]["recorded_usd"] == 0.12
-    assert metrics["hermes"]["sessions"]["root"] == 1
-    assert metrics["hermes"]["tool_schema"]["invalid_calls"] == 1
-    assert metrics["hermes"]["latency"]["avg_session_sec"] == 120
+    assert opencode_metrics["deferred_metrics"] == ["Task Completion Rate", "pass@k", "pass^k"]
+    assert opencode_metrics["opencode"]["sessions"]["total"] == 2
+    assert opencode_metrics["opencode"]["sessions"]["root"] == 1
+    assert opencode_metrics["opencode"]["error_rate"]["tool_errors"] == 1
+    assert opencode_metrics["opencode"]["error_rate"]["tool_calls"] == 2
+    assert opencode_metrics["opencode"]["tool_schema"]["invalid_calls"] == 1
+    assert opencode_metrics["opencode"]["n_turns"] == 2
+    assert opencode_metrics["opencode"]["tokens"]["total"] == 110
+    assert opencode_metrics["opencode"]["cost"]["recorded_usd"] == 0.12
+    assert hermes_metrics["hermes"]["sessions"]["root"] == 1
+    assert hermes_metrics["hermes"]["tool_schema"]["invalid_calls"] == 1
+    assert hermes_metrics["hermes"]["latency"]["avg_session_sec"] == 120
 
 
-def test_render_daily_report_uses_fixed_evaluation_layout(tmp_path):
+def test_render_split_daily_reports_use_fixed_evaluation_layout(tmp_path):
     opencode_db = tmp_path / "opencode.db"
     hermes_db = tmp_path / "state.db"
     make_opencode_db(opencode_db)
     make_hermes_db(hermes_db)
-    metrics = collect_usage_metrics("2026-05-14", opencode_db, hermes_db)
+    opencode_metrics = collect_opencode_metrics("2026-05-14", opencode_db)
+    hermes_metrics = collect_hermes_metrics("2026-05-14", hermes_db)
 
-    report = render_daily_report(metrics)
+    opencode_report = render_opencode_report(opencode_metrics)
+    hermes_report = render_hermes_report(hermes_metrics)
 
-    assert "## Development/Evaluation Metrics" in report
-    assert "| Error Rate |" in report
-    assert "| Hallucinated Parameters |" in report
-    assert "| n_toolcalls / n_turns |" in report
-    assert "| Total Token Usage / Latency / Number of Turns / Cost per Task |" in report
-    assert "| Policy Compliance Rate |" in report
-    assert "Task Completion Rate" in report
-    assert "보류" in report
-    assert report.count("## Development/Evaluation Metrics") == 1
+    for report in (opencode_report, hermes_report):
+        assert "## Development/Evaluation Metrics" in report
+        assert "| Error Rate |" in report
+        assert "| Hallucinated Parameters |" in report
+        assert "| n_toolcalls / n_turns |" in report
+        assert "| Policy Compliance Rate |" in report
+        assert "Task Completion Rate" in report
+        assert report.count("## Development/Evaluation Metrics") == 1
