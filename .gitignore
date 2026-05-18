@@ -20,8 +20,8 @@ graphify-out/
 # All operational data lives in nested data/ repo (private, never push)
 data/
 
-# Plans (sisyphus working area)
-.sisyphus/
+# Runtime cron logs and locks
+.cron/
 
 # OS
 .DS_Store
