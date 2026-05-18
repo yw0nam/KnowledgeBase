@@ -4,14 +4,19 @@ import json
 import sqlite3
 from pathlib import Path
 
-from kb_mcp.cli.hermes_daily_report import collect_metrics as collect_hermes_metrics, render_report as render_hermes_report
-from kb_mcp.cli.opencode_daily_report import collect_metrics as collect_opencode_metrics, render_report as render_opencode_report
+from kb_mcp.cli.hermes_daily_report import (
+    collect_metrics as collect_hermes_metrics,
+    render_report as render_hermes_report,
+)
+from kb_mcp.cli.opencode_daily_report import (
+    collect_metrics as collect_opencode_metrics,
+    render_report as render_opencode_report,
+)
 
 
 def make_opencode_db(path: Path) -> None:
     con = sqlite3.connect(path)
-    con.executescript(
-        """
+    con.executescript("""
         CREATE TABLE project (id text PRIMARY KEY, worktree text, name text, time_created integer, time_updated integer);
         CREATE TABLE session (
             id text PRIMARY KEY,
@@ -27,13 +32,18 @@ def make_opencode_db(path: Path) -> None:
         );
         CREATE TABLE message (id text PRIMARY KEY, session_id text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL);
         CREATE TABLE part (id text PRIMARY KEY, message_id text NOT NULL, session_id text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL, data text NOT NULL);
-        """
-    )
+        """)
     # 2026-05-14 01:00 KST == 2026-05-13 16:00 UTC in ms.
     t = 1778688000000
     con.execute("INSERT INTO project VALUES ('p1', '/repo', 'repo', ?, ?)", (t, t))
-    con.execute("INSERT INTO session VALUES ('s1', 'p1', NULL, 'root', '/repo', ?, ?, 1, NULL, 'claude-sonnet-4-6')", (t, t + 60000))
-    con.execute("INSERT INTO session VALUES ('s2', 'p1', 's1', 'sub', '/repo', ?, ?, 0, NULL, 'claude-sonnet-4-6')", (t + 1000, t + 31000))
+    con.execute(
+        "INSERT INTO session VALUES ('s1', 'p1', NULL, 'root', '/repo', ?, ?, 1, NULL, 'claude-sonnet-4-6')",
+        (t, t + 60000),
+    )
+    con.execute(
+        "INSERT INTO session VALUES ('s2', 'p1', 's1', 'sub', '/repo', ?, ?, 0, NULL, 'claude-sonnet-4-6')",
+        (t + 1000, t + 31000),
+    )
     con.execute(
         "INSERT INTO message VALUES ('m1', 's1', ?, ?, ?)",
         (
@@ -64,7 +74,13 @@ def make_opencode_db(path: Path) -> None:
         (
             t,
             t,
-            json.dumps({"type": "tool", "tool": "bash", "state": {"status": "completed", "input": {"command": "pwd"}}}),
+            json.dumps(
+                {
+                    "type": "tool",
+                    "tool": "bash",
+                    "state": {"status": "completed", "input": {"command": "pwd"}},
+                }
+            ),
         ),
     )
     con.execute(
@@ -72,7 +88,16 @@ def make_opencode_db(path: Path) -> None:
         (
             t,
             t,
-            json.dumps({"type": "tool", "tool": "read", "state": {"status": "error", "input": {"filePath": "x", "bogus": True}}}),
+            json.dumps(
+                {
+                    "type": "tool",
+                    "tool": "read",
+                    "state": {
+                        "status": "error",
+                        "input": {"filePath": "x", "bogus": True},
+                    },
+                }
+            ),
         ),
     )
     con.commit()
@@ -81,8 +106,7 @@ def make_opencode_db(path: Path) -> None:
 
 def make_hermes_db(path: Path) -> None:
     con = sqlite3.connect(path)
-    con.executescript(
-        """
+    con.executescript("""
         CREATE TABLE sessions (
             id TEXT PRIMARY KEY,
             source TEXT NOT NULL,
@@ -111,8 +135,7 @@ def make_hermes_db(path: Path) -> None:
             tool_name TEXT,
             timestamp REAL NOT NULL
         );
-        """
-    )
+        """)
     # 2026-05-14 01:00 KST in seconds.
     t = 1778688000
     con.execute(
@@ -125,9 +148,17 @@ def make_hermes_db(path: Path) -> None:
             "h1",
             "assistant",
             "",
-            json.dumps([
-                {"type": "function", "function": {"name": "terminal", "arguments": json.dumps({"command": "date", "extra": 1})}}
-            ]),
+            json.dumps(
+                [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "terminal",
+                            "arguments": json.dumps({"command": "date", "extra": 1}),
+                        },
+                    }
+                ]
+            ),
             None,
             t,
         ),
@@ -145,7 +176,11 @@ def test_collect_split_usage_metrics_counts_non_deferred_metrics(tmp_path):
     opencode_metrics = collect_opencode_metrics("2026-05-14", opencode_db)
     hermes_metrics = collect_hermes_metrics("2026-05-14", hermes_db)
 
-    assert opencode_metrics["deferred_metrics"] == ["Task Completion Rate", "pass@k", "pass^k"]
+    assert opencode_metrics["deferred_metrics"] == [
+        "Task Completion Rate",
+        "pass@k",
+        "pass^k",
+    ]
     assert opencode_metrics["opencode"]["sessions"]["total"] == 2
     assert opencode_metrics["opencode"]["sessions"]["root"] == 1
     assert opencode_metrics["opencode"]["error_rate"]["tool_errors"] == 1

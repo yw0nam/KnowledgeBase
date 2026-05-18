@@ -11,7 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from ..core.ingest import DEFAULT_SCRIPT_PATH as _CORE_DEFAULT
 from ..core.ingest import ingest_github as _ingest_github
 
-
 DEFAULT_SCRIPT_PATH: Path = _CORE_DEFAULT
 
 

@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 from typing import Sequence
 
-
 REPO_PATTERN = re.compile(r"^[\w.-]+/[\w.-]+$")
 DEFAULT_SCRIPT_PATH = Path("scripts/ingest-github.sh")
 

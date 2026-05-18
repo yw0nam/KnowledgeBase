@@ -8,13 +8,14 @@ All documents focus on **Actionability** and **Modularity**.
 
 | Principle | Description |
 |-----------|-------------|
-| **Hard Limit 400** | Code snippets must not exceed 400 lines. Physical limit for agent context windows and human attention span. |
+| **Hard Limit 600** | Code snippets must not exceed 600 lines. Physical limit for agent context windows and human attention span. |
 | **Lazy Loading (Appendix)** | Edge cases and detailed configs go into Appendix for on-demand reference. |
 
-If the content exceeds 400 lines, it should be split into seperate modules
+If the content exceeds 600 lines, it should be split into seperate modules.
+Codes should be seperated
 
 ## 2. Quality Checklist
 
-- [ ] Main body under 400 lines?
+- [ ] Main body under 600 lines?
 - [ ] Edge cases moved to Appendix?
 - [ ] Writing is directive and unambiguous?

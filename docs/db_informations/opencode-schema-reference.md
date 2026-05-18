@@ -45,7 +45,7 @@ project ──< session ──< part
 | `parent_id` | TEXT | NULL = root 세션, 값 있음 = subagent 세션 |
 | `title` | TEXT | 세션 제목 |
 | `model` | TEXT (JSON) | root 세션만 기록. **subagent 세션은 NULL** (upstream 미기록) |
-| `agent` | TEXT | 에이전트 이름 (예: `Sisyphus - Ultraworker`) |
+| `agent` | TEXT | 에이전트 이름 (예: `CodeRabbit-Dev`) |
 | `directory` | TEXT | 작업 디렉토리 경로 |
 | `time_created` | INTEGER | Unix epoch 밀리초 |
 | `time_updated` | INTEGER | Unix epoch 밀리초 |

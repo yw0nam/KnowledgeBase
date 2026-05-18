@@ -246,9 +246,7 @@ def check_raw_captured_at_mtime(result, raw_dir: Path = None) -> None:
             )
 
 
-def check_raw_immutability(
-    result, raw_dir: Path = None, data_dir: Path = None
-) -> None:
+def check_raw_immutability(result, raw_dir: Path = None, data_dir: Path = None) -> None:
     """Reject any raw file modified after its initial commit.
 
     Uses ``_get_modified_raw_files`` to read git's view of the working

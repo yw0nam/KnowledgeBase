@@ -56,7 +56,9 @@ def _tool_table(rows: list[dict[str, Any]]) -> str:
         return "- Tool errors: N/A"
     out = ["| tool | calls | errors | error_rate |", "|---|---:|---:|---:|"]
     for r in rows:
-        out.append(f"| {r.get('tool')} | {_int(r.get('calls'))} | {_int(r.get('errors'))} | {_pct(r.get('error_rate_pct'))} |")
+        out.append(
+            f"| {r.get('tool')} | {_int(r.get('calls'))} | {_int(r.get('errors'))} | {_pct(r.get('error_rate_pct'))} |"
+        )
     return "\n".join(out)
 
 
@@ -67,12 +69,16 @@ def _hourly_lines(rows: list[dict[str, Any]]) -> str:
     for r in rows:
         extra = ""
         if "root" in r:
-            extra = f" (root {_fmt(r.get('root'))} / subagent {_fmt(r.get('subagent'))})"
+            extra = (
+                f" (root {_fmt(r.get('root'))} / subagent {_fmt(r.get('subagent'))})"
+            )
         lines.append(f"  - {r.get('hour')}: {_fmt(r.get('sessions'))} sessions{extra}")
     return "\n".join(lines)
 
 
-def _kv_lines(rows: list[dict[str, Any]], key: str, value: str = "sessions", limit: int = 8) -> str:
+def _kv_lines(
+    rows: list[dict[str, Any]], key: str, value: str = "sessions", limit: int = 8
+) -> str:
     if not rows:
         return "  - N/A"
     return "\n".join(f"  - {r.get(key)}: {_fmt(r.get(value))}" for r in rows[:limit])

@@ -15,20 +15,84 @@ DEFERRED_METRICS = ["Task Completion Rate", "pass@k", "pass^k"]
 
 TOOL_SCHEMAS: dict[str, dict[str, set[str]]] = {
     # Hermes tools
-    "terminal": {"required": {"command"}, "allowed": {"command", "timeout", "workdir", "background", "pty", "notify_on_complete", "watch_patterns"}},
+    "terminal": {
+        "required": {"command"},
+        "allowed": {
+            "command",
+            "timeout",
+            "workdir",
+            "background",
+            "pty",
+            "notify_on_complete",
+            "watch_patterns",
+        },
+    },
     "read_file": {"required": {"path"}, "allowed": {"path", "offset", "limit"}},
-    "search_files": {"required": {"pattern"}, "allowed": {"pattern", "target", "path", "file_glob", "limit", "offset", "output_mode", "context"}},
+    "search_files": {
+        "required": {"pattern"},
+        "allowed": {
+            "pattern",
+            "target",
+            "path",
+            "file_glob",
+            "limit",
+            "offset",
+            "output_mode",
+            "context",
+        },
+    },
     "write_file": {"required": {"path", "content"}, "allowed": {"path", "content"}},
-    "patch": {"required": {"mode"}, "allowed": {"mode", "path", "old_string", "new_string", "replace_all", "patch"}},
+    "patch": {
+        "required": {"mode"},
+        "allowed": {"mode", "path", "old_string", "new_string", "replace_all", "patch"},
+    },
     "skill_view": {"required": {"name"}, "allowed": {"name", "file_path"}},
-    "skill_manage": {"required": {"action", "name"}, "allowed": {"action", "name", "content", "old_string", "new_string", "replace_all", "category", "file_path", "file_content", "absorbed_into"}},
+    "skill_manage": {
+        "required": {"action", "name"},
+        "allowed": {
+            "action",
+            "name",
+            "content",
+            "old_string",
+            "new_string",
+            "replace_all",
+            "category",
+            "file_path",
+            "file_content",
+            "absorbed_into",
+        },
+    },
     "todo": {"required": set(), "allowed": {"todos", "merge"}},
-    "cronjob": {"required": {"action"}, "allowed": {"action", "job_id", "prompt", "schedule", "name", "repeat", "deliver", "skills", "model", "script", "no_agent", "context_from", "enabled_toolsets", "workdir"}},
+    "cronjob": {
+        "required": {"action"},
+        "allowed": {
+            "action",
+            "job_id",
+            "prompt",
+            "schedule",
+            "name",
+            "repeat",
+            "deliver",
+            "skills",
+            "model",
+            "script",
+            "no_agent",
+            "context_from",
+            "enabled_toolsets",
+            "workdir",
+        },
+    },
     # OpenCode tools
-    "bash": {"required": {"command"}, "allowed": {"command", "description", "timeout", "workdir"}},
+    "bash": {
+        "required": {"command"},
+        "allowed": {"command", "description", "timeout", "workdir"},
+    },
     "read": {"required": {"filePath"}, "allowed": {"filePath", "offset", "limit"}},
     "write": {"required": {"filePath", "content"}, "allowed": {"filePath", "content"}},
-    "edit": {"required": {"filePath", "oldString", "newString"}, "allowed": {"filePath", "oldString", "newString", "replaceAll"}},
+    "edit": {
+        "required": {"filePath", "oldString", "newString"},
+        "allowed": {"filePath", "oldString", "newString", "replaceAll"},
+    },
     "todowrite": {"required": {"todos"}, "allowed": {"todos"}},
     "webfetch": {"required": {"url"}, "allowed": {"url", "format", "timeout"}},
 }
@@ -47,12 +111,16 @@ def _one(con: sqlite3.Connection, sql: str, args: tuple[Any, ...]) -> dict[str, 
     return dict(row) if row else {}
 
 
-def _rows(con: sqlite3.Connection, sql: str, args: tuple[Any, ...]) -> list[dict[str, Any]]:
+def _rows(
+    con: sqlite3.Connection, sql: str, args: tuple[Any, ...]
+) -> list[dict[str, Any]]:
     return [dict(row) for row in con.execute(sql, args).fetchall()]
 
 
 def _has_table(con: sqlite3.Connection, name: str) -> bool:
-    row = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone()
+    row = con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone()
     return row is not None
 
 
@@ -271,47 +339,121 @@ def _collect_opencode(target_date: str, db_path: Path) -> dict[str, Any]:
         (target_date,),
     )
     con.close()
-    total_tokens = sum(_num(tokens.get(k)) for k in ("input", "output", "reasoning", "cache_read", "cache_write"))
+    total_tokens = sum(
+        _num(tokens.get(k))
+        for k in ("input", "output", "reasoning", "cache_read", "cache_write")
+    )
     model_usage = []
     for row in model_rows:
-        total = sum(_num(row.get(k)) for k in ("input", "output", "reasoning", "cache_read", "cache_write"))
+        total = sum(
+            _num(row.get(k))
+            for k in ("input", "output", "reasoning", "cache_read", "cache_write")
+        )
         cache_miss = _num(row.get("input"))
         cache_read = _num(row.get("cache_read"))
         total_input = cache_miss + cache_read
-        model_usage.append({
-            "model": row.get("model"),
-            "provider": row.get("provider"),
-            "input": int(total_input),
-            "cache_miss": int(cache_miss),
-            "cache_read": int(cache_read),
-            "output": int(_num(row.get("output"))),
-            "reasoning": int(_num(row.get("reasoning"))),
-            "cache_write": int(_num(row.get("cache_write"))),
-            "total": int(total),
-            "cost": round(_num(row.get("cost")), 6),
-            "cache_hit_pct": _pct(cache_read, total_input),
-            "messages": int(_num(row.get("messages"))),
-        })
+        model_usage.append(
+            {
+                "model": row.get("model"),
+                "provider": row.get("provider"),
+                "input": int(total_input),
+                "cache_miss": int(cache_miss),
+                "cache_read": int(cache_read),
+                "output": int(_num(row.get("output"))),
+                "reasoning": int(_num(row.get("reasoning"))),
+                "cache_write": int(_num(row.get("cache_write"))),
+                "total": int(total),
+                "cost": round(_num(row.get("cost")), 6),
+                "cache_hit_pct": _pct(cache_read, total_input),
+                "messages": int(_num(row.get("messages"))),
+            }
+        )
     todo_counts = {str(r.get("status")): int(_num(r.get("count"))) for r in todo_rows}
     todo_total = sum(todo_counts.values())
     todo_completed = todo_counts.get("completed", 0)
     return {
         "available": True,
-        "sessions": {"total": int(_num(sessions.get("total"))), "root": int(_num(sessions.get("root"))), "subagent": int(_num(sessions.get("subagent"))), "projects": int(_num(sessions.get("projects"))), "summary_files": int(_num(sessions.get("summary_files"))), "compactions": int(_num(sessions.get("compactions")))},
+        "sessions": {
+            "total": int(_num(sessions.get("total"))),
+            "root": int(_num(sessions.get("root"))),
+            "subagent": int(_num(sessions.get("subagent"))),
+            "projects": int(_num(sessions.get("projects"))),
+            "summary_files": int(_num(sessions.get("summary_files"))),
+            "compactions": int(_num(sessions.get("compactions"))),
+        },
         "n_turns": int(_num(turns.get("n_turns"))),
         "n_toolcalls": int(_num(tool.get("tool_calls"))),
-        "error_rate": {"tool_calls": int(_num(tool.get("tool_calls"))), "tool_errors": int(_num(tool.get("tool_errors"))), "rate_pct": _pct(_num(tool.get("tool_errors")), _num(tool.get("tool_calls")))},
-        "tool_schema": _tool_schema_summary([(r.get("tool"), r.get("input")) for r in tool_rows]),
-        "tool_breakdown": [{"tool": r.get("tool"), "calls": int(_num(r.get("calls"))), "errors": int(_num(r.get("errors"))), "error_rate_pct": _pct(_num(r.get("errors")), _num(r.get("calls")))} for r in tool_breakdown],
-        "todo": {"total": todo_total, "completed": todo_completed, "pending": todo_counts.get("pending", 0), "in_progress": todo_counts.get("in_progress", 0), "cancelled": todo_counts.get("cancelled", 0), "completion_rate_pct": _pct(todo_completed, todo_total)},
+        "error_rate": {
+            "tool_calls": int(_num(tool.get("tool_calls"))),
+            "tool_errors": int(_num(tool.get("tool_errors"))),
+            "rate_pct": _pct(
+                _num(tool.get("tool_errors")), _num(tool.get("tool_calls"))
+            ),
+        },
+        "tool_schema": _tool_schema_summary(
+            [(r.get("tool"), r.get("input")) for r in tool_rows]
+        ),
+        "tool_breakdown": [
+            {
+                "tool": r.get("tool"),
+                "calls": int(_num(r.get("calls"))),
+                "errors": int(_num(r.get("errors"))),
+                "error_rate_pct": _pct(_num(r.get("errors")), _num(r.get("calls"))),
+            }
+            for r in tool_breakdown
+        ],
+        "todo": {
+            "total": todo_total,
+            "completed": todo_completed,
+            "pending": todo_counts.get("pending", 0),
+            "in_progress": todo_counts.get("in_progress", 0),
+            "cancelled": todo_counts.get("cancelled", 0),
+            "completion_rate_pct": _pct(todo_completed, todo_total),
+        },
         "model_usage": model_usage,
-        "hourly_sessions": [{"hour": r.get("hour"), "sessions": int(_num(r.get("sessions"))), "root": int(_num(r.get("root"))), "subagent": int(_num(r.get("subagent")))} for r in hourly],
-        "projects": [{"project": r.get("project"), "path": r.get("path"), "sessions": int(_num(r.get("sessions")))} for r in project_rows],
-        "hot_files": [{"file": r.get("file"), "edits": int(_num(r.get("edits")))} for r in hot_files],
-        "tokens": {"input": int(_num(tokens.get("input"))), "output": int(_num(tokens.get("output"))), "reasoning": int(_num(tokens.get("reasoning"))), "cache_read": int(_num(tokens.get("cache_read"))), "cache_write": int(_num(tokens.get("cache_write"))), "total": int(total_tokens)},
-        "latency": {"avg_session_sec": round(_num(sessions.get("avg_session_sec")), 2), "max_session_sec": round(_num(sessions.get("max_session_sec")), 2)},
-        "cost": {"recorded_usd": round(_num(tokens.get("recorded_usd")), 6), "cost_per_session_usd": round(_num(tokens.get("recorded_usd")) / _num(sessions.get("total")), 6) if _num(sessions.get("total")) else None},
+        "hourly_sessions": [
+            {
+                "hour": r.get("hour"),
+                "sessions": int(_num(r.get("sessions"))),
+                "root": int(_num(r.get("root"))),
+                "subagent": int(_num(r.get("subagent"))),
+            }
+            for r in hourly
+        ],
+        "projects": [
+            {
+                "project": r.get("project"),
+                "path": r.get("path"),
+                "sessions": int(_num(r.get("sessions"))),
+            }
+            for r in project_rows
+        ],
+        "hot_files": [
+            {"file": r.get("file"), "edits": int(_num(r.get("edits")))}
+            for r in hot_files
+        ],
+        "tokens": {
+            "input": int(_num(tokens.get("input"))),
+            "output": int(_num(tokens.get("output"))),
+            "reasoning": int(_num(tokens.get("reasoning"))),
+            "cache_read": int(_num(tokens.get("cache_read"))),
+            "cache_write": int(_num(tokens.get("cache_write"))),
+            "total": int(total_tokens),
+        },
+        "latency": {
+            "avg_session_sec": round(_num(sessions.get("avg_session_sec")), 2),
+            "max_session_sec": round(_num(sessions.get("max_session_sec")), 2),
+        },
+        "cost": {
+            "recorded_usd": round(_num(tokens.get("recorded_usd")), 6),
+            "cost_per_session_usd": (
+                round(_num(tokens.get("recorded_usd")) / _num(sessions.get("total")), 6)
+                if _num(sessions.get("total"))
+                else None
+            ),
+        },
     }
+
 
 def _collect_hermes(target_date: str, db_path: Path) -> dict[str, Any]:
     con = _connect(db_path)
@@ -417,39 +559,83 @@ def _collect_hermes(target_date: str, db_path: Path) -> dict[str, Any]:
                 fn = entry.get("function", {}) if isinstance(entry, dict) else {}
                 calls.append((fn.get("name"), fn.get("arguments")))
     con.close()
-    total_tokens = sum(_num(sessions.get(k)) for k in ("input", "output", "reasoning", "cache_read", "cache_write"))
+    total_tokens = sum(
+        _num(sessions.get(k))
+        for k in ("input", "output", "reasoning", "cache_read", "cache_write")
+    )
     model_usage = []
     for row in model_rows:
         cache_miss = _num(row.get("input"))
         cache_read = _num(row.get("cache_read"))
         total_input = cache_miss + cache_read
-        total = sum(_num(row.get(k)) for k in ("input", "output", "reasoning", "cache_read", "cache_write"))
-        model_usage.append({
-            "model": row.get("model"),
-            "provider": row.get("provider"),
-            "sessions": int(_num(row.get("sessions"))),
-            "input": int(total_input),
-            "cache_miss": int(cache_miss),
-            "cache_read": int(cache_read),
-            "output": int(_num(row.get("output"))),
-            "reasoning": int(_num(row.get("reasoning"))),
-            "cache_write": int(_num(row.get("cache_write"))),
-            "total": int(total),
-            "cost": round(_num(row.get("cost")), 6),
-            "cache_hit_pct": _pct(cache_read, total_input),
-        })
+        total = sum(
+            _num(row.get(k))
+            for k in ("input", "output", "reasoning", "cache_read", "cache_write")
+        )
+        model_usage.append(
+            {
+                "model": row.get("model"),
+                "provider": row.get("provider"),
+                "sessions": int(_num(row.get("sessions"))),
+                "input": int(total_input),
+                "cache_miss": int(cache_miss),
+                "cache_read": int(cache_read),
+                "output": int(_num(row.get("output"))),
+                "reasoning": int(_num(row.get("reasoning"))),
+                "cache_write": int(_num(row.get("cache_write"))),
+                "total": int(total),
+                "cost": round(_num(row.get("cost")), 6),
+                "cache_hit_pct": _pct(cache_read, total_input),
+            }
+        )
     return {
         "available": True,
-        "sessions": {"root": int(_num(sessions.get("root"))), "zombie": int(_num(sessions.get("zombie")))},
+        "sessions": {
+            "root": int(_num(sessions.get("root"))),
+            "zombie": int(_num(sessions.get("zombie"))),
+        },
         "n_turns": int(_num(sessions.get("turns"))),
         "n_toolcalls": int(_num(sessions.get("toolcalls"))),
-        "error_rate": {"tool_calls": int(_num(sessions.get("toolcalls"))), "tool_errors": None, "rate_pct": None},
+        "error_rate": {
+            "tool_calls": int(_num(sessions.get("toolcalls"))),
+            "tool_errors": None,
+            "rate_pct": None,
+        },
         "tool_schema": _tool_schema_summary(calls),
         "model_usage": model_usage,
-        "source_distribution": [{"source": r.get("source"), "sessions": int(_num(r.get("sessions")))} for r in source_rows],
-        "end_reason_distribution": [{"end_reason": r.get("end_reason"), "sessions": int(_num(r.get("sessions")))} for r in end_reason_rows],
-        "hourly_sessions": [{"hour": r.get("hour"), "sessions": int(_num(r.get("sessions")))} for r in hourly],
-        "tokens": {"input": int(_num(sessions.get("input"))), "output": int(_num(sessions.get("output"))), "reasoning": int(_num(sessions.get("reasoning"))), "cache_read": int(_num(sessions.get("cache_read"))), "cache_write": int(_num(sessions.get("cache_write"))), "total": int(total_tokens)},
-        "latency": {"avg_session_sec": round(_num(sessions.get("avg_session_sec")), 2), "max_session_sec": round(_num(sessions.get("max_session_sec")), 2)},
-        "cost": {"recorded_usd": round(_num(sessions.get("cost")), 6), "cost_per_session_usd": round(_num(sessions.get("cost")) / _num(sessions.get("root")), 6) if _num(sessions.get("root")) else None},
+        "source_distribution": [
+            {"source": r.get("source"), "sessions": int(_num(r.get("sessions")))}
+            for r in source_rows
+        ],
+        "end_reason_distribution": [
+            {
+                "end_reason": r.get("end_reason"),
+                "sessions": int(_num(r.get("sessions"))),
+            }
+            for r in end_reason_rows
+        ],
+        "hourly_sessions": [
+            {"hour": r.get("hour"), "sessions": int(_num(r.get("sessions")))}
+            for r in hourly
+        ],
+        "tokens": {
+            "input": int(_num(sessions.get("input"))),
+            "output": int(_num(sessions.get("output"))),
+            "reasoning": int(_num(sessions.get("reasoning"))),
+            "cache_read": int(_num(sessions.get("cache_read"))),
+            "cache_write": int(_num(sessions.get("cache_write"))),
+            "total": int(total_tokens),
+        },
+        "latency": {
+            "avg_session_sec": round(_num(sessions.get("avg_session_sec")), 2),
+            "max_session_sec": round(_num(sessions.get("max_session_sec")), 2),
+        },
+        "cost": {
+            "recorded_usd": round(_num(sessions.get("cost")), 6),
+            "cost_per_session_usd": (
+                round(_num(sessions.get("cost")) / _num(sessions.get("root")), 6)
+                if _num(sessions.get("root"))
+                else None
+            ),
+        },
     }

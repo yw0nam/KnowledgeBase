@@ -28,8 +28,7 @@ def _valid_handoff_fm(
     promotion: str | None = None,
 ) -> str:
     promotion_repr = "null" if promotion is None else promotion
-    return dedent(
-        f"""
+    return dedent(f"""
         ---
         handoff_id: "task-foo:null:{role}:{seq:02d}"
         task_slug: "task-foo"
@@ -46,8 +45,7 @@ def _valid_handoff_fm(
         ## 1. Assignment
 
         ## 2. Context received
-    """
-    ).lstrip("\n")
+    """).lstrip("\n")
 
 
 def test_valid_handoff_passes(tmp_path):
@@ -81,8 +79,7 @@ def test_invalid_status_errors(tmp_path):
 def test_secrets_in_final_errors(tmp_path):
     task_dir = _task_dir(tmp_path)
     _write(task_dir / "research_handoff_01.md", _valid_handoff_fm(secrets=True))
-    final_fm = dedent(
-        """
+    final_fm = dedent("""
         ---
         type: handoff_final
         task_slug: "task-foo"
@@ -97,8 +94,7 @@ def test_secrets_in_final_errors(tmp_path):
         ---
 
         # Final
-    """
-    ).lstrip("\n")
+    """).lstrip("\n")
     _write(task_dir / "task-foo_final.md", final_fm)
     result = lh.LintResult()
     lh.lint(result, _handoffs_dir(tmp_path))
@@ -117,7 +113,9 @@ def test_filename_role_mismatch_errors(tmp_path):
 
 def test_uncommon_role_warns_not_errors(tmp_path):
     task_dir = _task_dir(tmp_path)
-    _write(task_dir / "custom-role_handoff_01.md", _valid_handoff_fm(role="custom-role"))
+    _write(
+        task_dir / "custom-role_handoff_01.md", _valid_handoff_fm(role="custom-role")
+    )
     result = lh.LintResult()
     lh.lint(result, _handoffs_dir(tmp_path))
     assert result.errors == [], result.errors

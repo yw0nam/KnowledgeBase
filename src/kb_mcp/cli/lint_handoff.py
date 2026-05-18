@@ -45,6 +45,7 @@ from kb_mcp.cli.handoff.validators import (
 BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
 HANDOFFS_DIR = BASEDIR / "data" / "handoffs"
 
+
 class LintResult:
     def __init__(self) -> None:
         self.errors: list[str] = []

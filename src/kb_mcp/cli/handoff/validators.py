@@ -26,8 +26,7 @@ REQUIRED_FM_KEYS = [
 ]
 
 HANDOFF_ID_RE = re.compile(
-    r"^[a-z0-9-]+:(?:[a-z0-9-]+|null):"
-    r"[a-z][a-z0-9_-]*:\d{2}$"
+    r"^[a-z0-9-]+:(?:[a-z0-9-]+|null):" r"[a-z][a-z0-9_-]*:\d{2}$"
 )
 
 HANDOFF_FILENAME_RE = re.compile(

@@ -32,21 +32,45 @@ def _query_prom(base: str, expr: str, ts: float) -> list[dict[str, Any]]:
     req = urllib.request.Request(f"{base}/api/v1/query?{params}")
     with urllib.request.urlopen(req, timeout=15) as resp:
         body = json.load(resp)
-    return body.get("data", {}).get("result", []) if body.get("status") == "success" else []
+    return (
+        body.get("data", {}).get("result", [])
+        if body.get("status") == "success"
+        else []
+    )
 
 
-def _query_loki(base: str, expr: str, start_ns: int, end_ns: int, limit: int = 5000, step: str | None = None) -> list[dict[str, Any]]:
-    payload: dict[str, str] = {"query": expr, "start": str(start_ns), "end": str(end_ns), "limit": str(limit), "direction": "forward"}
+def _query_loki(
+    base: str,
+    expr: str,
+    start_ns: int,
+    end_ns: int,
+    limit: int = 5000,
+    step: str | None = None,
+) -> list[dict[str, Any]]:
+    payload: dict[str, str] = {
+        "query": expr,
+        "start": str(start_ns),
+        "end": str(end_ns),
+        "limit": str(limit),
+        "direction": "forward",
+    }
     if step:
         payload["step"] = step
     params = urllib.parse.urlencode(payload)
     req = urllib.request.Request(f"{base}/loki/api/v1/query_range?{params}")
     with urllib.request.urlopen(req, timeout=60) as resp:
         body = json.load(resp)
-    return body.get("data", {}).get("result", []) if body.get("status") == "success" else []
+    return (
+        body.get("data", {}).get("result", [])
+        if body.get("status") == "success"
+        else []
+    )
 
 
-def _vec_sum(vec: list[dict[str, Any]], key_fn: Callable[[dict[str, str]], Any] = lambda m: "_all") -> dict[Any, float]:
+def _vec_sum(
+    vec: list[dict[str, Any]],
+    key_fn: Callable[[dict[str, str]], Any] = lambda m: "_all",
+) -> dict[Any, float]:
     out: dict[Any, float] = defaultdict(float)
     for r in vec:
         out[key_fn(r["metric"])] += float(r["value"][1])
@@ -62,19 +86,47 @@ def _collect_prometheus(target_date: str, prom: str) -> dict[str, Any]:
             body = f"sum by ({grouping}) ({body})"
         return body
 
-    token_vec = _query_prom(prom, inc("claude_code_token_usage_tokens_total", "user_email,model,type"), end_ts)
-    cost_vec = _query_prom(prom, inc("claude_code_cost_usage_USD_total", "user_email,model"), end_ts)
+    token_vec = _query_prom(
+        prom,
+        inc("claude_code_token_usage_tokens_total", "user_email,model,type"),
+        end_ts,
+    )
+    cost_vec = _query_prom(
+        prom, inc("claude_code_cost_usage_USD_total", "user_email,model"), end_ts
+    )
     # session_count is emitted once per session-start, so increase() yields 0.
     # Counting unique series under the day window via a 24h-bracketed selector is more reliable.
-    session_series = _query_prom(prom, f"count(count by (session_id) (last_over_time(claude_code_session_count_total[24h] @ {end_ts:.0f})))", end_ts)
+    session_series = _query_prom(
+        prom,
+        f"count(count by (session_id) (last_over_time(claude_code_session_count_total[24h] @ {end_ts:.0f})))",
+        end_ts,
+    )
     sessions = float(session_series[0]["value"][1]) if session_series else 0.0
-    active = _vec_sum(_query_prom(prom, inc("claude_code_active_time_seconds_total", "type"), end_ts), lambda m: m.get("type", "?"))
-    lines = _vec_sum(_query_prom(prom, inc("claude_code_lines_of_code_count_total", "type"), end_ts), lambda m: m.get("type", "?"))
-    decisions = _vec_sum(_query_prom(prom, inc("claude_code_code_edit_tool_decision_total", "decision"), end_ts), lambda m: m.get("decision", "?"))
-    qsrc = _vec_sum(_query_prom(prom, inc("claude_code_token_usage_tokens_total", "query_source"), end_ts), lambda m: m.get("query_source", "?"))
+    active = _vec_sum(
+        _query_prom(prom, inc("claude_code_active_time_seconds_total", "type"), end_ts),
+        lambda m: m.get("type", "?"),
+    )
+    lines = _vec_sum(
+        _query_prom(prom, inc("claude_code_lines_of_code_count_total", "type"), end_ts),
+        lambda m: m.get("type", "?"),
+    )
+    decisions = _vec_sum(
+        _query_prom(
+            prom, inc("claude_code_code_edit_tool_decision_total", "decision"), end_ts
+        ),
+        lambda m: m.get("decision", "?"),
+    )
+    qsrc = _vec_sum(
+        _query_prom(
+            prom, inc("claude_code_token_usage_tokens_total", "query_source"), end_ts
+        ),
+        lambda m: m.get("query_source", "?"),
+    )
 
     # Pivot tokens to (user_email, model) -> {type: count}
-    tokens_by_pair: dict[tuple[str, str], dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    tokens_by_pair: dict[tuple[str, str], dict[str, float]] = defaultdict(
+        lambda: defaultdict(float)
+    )
     for r in token_vec:
         m = r["metric"]
         pair = (m.get("user_email", "?"), m.get("model", "?"))
@@ -83,11 +135,15 @@ def _collect_prometheus(target_date: str, prom: str) -> dict[str, Any]:
     cost_by_pair: dict[tuple[str, str], float] = defaultdict(float)
     for r in cost_vec:
         m = r["metric"]
-        cost_by_pair[(m.get("user_email", "?"), m.get("model", "?"))] += float(r["value"][1])
+        cost_by_pair[(m.get("user_email", "?"), m.get("model", "?"))] += float(
+            r["value"][1]
+        )
 
     model_usage = []
     totals = defaultdict(float)
-    for pair, type_map in sorted(tokens_by_pair.items(), key=lambda kv: -sum(kv[1].values())):
+    for pair, type_map in sorted(
+        tokens_by_pair.items(), key=lambda kv: -sum(kv[1].values())
+    ):
         user_email, model = pair
         input_t = type_map.get("input", 0.0)
         output = type_map.get("output", 0.0)
@@ -96,18 +152,20 @@ def _collect_prometheus(target_date: str, prom: str) -> dict[str, Any]:
         total_input = input_t + cache_read
         total = input_t + output + cache_read + cache_write
         cost = cost_by_pair.get(pair, 0.0)
-        model_usage.append({
-            "user_email": user_email,
-            "model": model,
-            "input": int(total_input),
-            "cache_miss": int(input_t),
-            "cache_read": int(cache_read),
-            "output": int(output),
-            "cache_write": int(cache_write),
-            "total": int(total),
-            "cost": round(cost, 6),
-            "cache_hit_pct": _pct_or_none(cache_read, total_input),
-        })
+        model_usage.append(
+            {
+                "user_email": user_email,
+                "model": model,
+                "input": int(total_input),
+                "cache_miss": int(input_t),
+                "cache_read": int(cache_read),
+                "output": int(output),
+                "cache_write": int(cache_write),
+                "total": int(total),
+                "cost": round(cost, 6),
+                "cache_hit_pct": _pct_or_none(cache_read, total_input),
+            }
+        )
         totals["input"] += input_t
         totals["output"] += output
         totals["cache_read"] += cache_read
@@ -132,7 +190,9 @@ def _collect_prometheus(target_date: str, prom: str) -> dict[str, Any]:
         },
         "cost": {
             "recorded_usd": round(totals["cost"], 6),
-            "cost_per_session_usd": round(totals["cost"] / sessions, 6) if sessions else None,
+            "cost_per_session_usd": (
+                round(totals["cost"] / sessions, 6) if sessions else None
+            ),
         },
         "model_usage": model_usage,
         "active_time_seconds": {k: round(v, 2) for k, v in active.items()},
@@ -157,9 +217,13 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
     tool_streams = _query_loki(
         loki,
         'sum by (tool_name, success) (count_over_time({service_name="claude-code"} | event_name="tool_result" [24h]))',
-        start_ns, end_ns, limit=5000,
+        start_ns,
+        end_ns,
+        limit=5000,
     )
-    tool_breakdown: dict[str, dict[str, int]] = defaultdict(lambda: {"calls": 0, "errors": 0})
+    tool_breakdown: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"calls": 0, "errors": 0}
+    )
     for stream in tool_streams:
         labels = stream.get("metric") or stream.get("stream") or {}
         tool = labels.get("tool_name", "unknown")
@@ -169,7 +233,10 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
         if success != "true":
             tool_breakdown[tool]["errors"] += count
     tool_rows = sorted(
-        ({"tool": t, **v, "error_rate_pct": _pct_or_none(v["errors"], v["calls"])} for t, v in tool_breakdown.items()),
+        (
+            {"tool": t, **v, "error_rate_pct": _pct_or_none(v["errors"], v["calls"])}
+            for t, v in tool_breakdown.items()
+        ),
         key=lambda r: (-r["calls"], r["tool"]),
     )
     total_calls = sum(v["calls"] for v in tool_breakdown.values())
@@ -178,7 +245,10 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
     hourly_streams = _query_loki(
         loki,
         'sum by (session_id) (count_over_time({service_name="claude-code"}[1h]))',
-        start_ns, end_ns, limit=5000, step="1h",
+        start_ns,
+        end_ns,
+        limit=5000,
+        step="1h",
     )
     hourly: dict[str, set[str]] = defaultdict(set)
     sessions_seen: set[str] = set()
@@ -192,38 +262,58 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
                 continue
             hour_kst = datetime.fromtimestamp(float(ts), tz=KST).strftime("%H")
             hourly[hour_kst].add(sid)
-    hourly_rows = [{"hour": h, "sessions": len(sids)} for h, sids in sorted(hourly.items())]
+    hourly_rows = [
+        {"hour": h, "sessions": len(sids)} for h, sids in sorted(hourly.items())
+    ]
 
     duration_streams = _query_loki(
         loki,
         'avg by (tool_name) (avg_over_time({service_name="claude-code"} | event_name="tool_result" | unwrap duration_ms [24h]))',
-        start_ns, end_ns, limit=2000,
+        start_ns,
+        end_ns,
+        limit=2000,
     )
     latency_by_tool = []
     for stream in duration_streams:
         labels = stream.get("metric") or stream.get("stream") or {}
-        vals = [float(v[1]) for v in stream.get("values", []) if v[1] not in ("NaN", "+Inf", "-Inf")]
+        vals = [
+            float(v[1])
+            for v in stream.get("values", [])
+            if v[1] not in ("NaN", "+Inf", "-Inf")
+        ]
         if not vals:
             continue
-        latency_by_tool.append({"tool": labels.get("tool_name", "?"), "avg_ms": round(sum(vals) / len(vals), 2), "max_ms": round(max(vals), 2)})
+        latency_by_tool.append(
+            {
+                "tool": labels.get("tool_name", "?"),
+                "avg_ms": round(sum(vals) / len(vals), 2),
+                "max_ms": round(max(vals), 2),
+            }
+        )
     latency_by_tool.sort(key=lambda r: -r["avg_ms"])
 
     # Count distinct sessions per terminal_type, not raw entry counts.
     terminal_streams = _query_loki(
         loki,
         'sum by (terminal_type, session_id) (count_over_time({service_name="claude-code"}[24h]))',
-        start_ns, end_ns, limit=5000,
+        start_ns,
+        end_ns,
+        limit=5000,
     )
     terminal_sessions: dict[str, set[str]] = defaultdict(set)
     for s in terminal_streams:
         labels = s.get("metric") or s.get("stream") or {}
-        terminal_sessions[labels.get("terminal_type", "?")].add(labels.get("session_id", "?"))
+        terminal_sessions[labels.get("terminal_type", "?")].add(
+            labels.get("session_id", "?")
+        )
     terminal = {k: len(v) for k, v in terminal_sessions.items()}
 
     prompts = _query_loki(
         loki,
         'sum by (session_id) (count_over_time({service_name="claude-code"} | event_name="user_prompt" [24h]))',
-        start_ns, end_ns, limit=5000,
+        start_ns,
+        end_ns,
+        limit=5000,
     )
     n_turns = 0
     for s in prompts:
@@ -234,7 +324,11 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
         "sessions": {"loki_distinct": len(sessions_seen)},
         "n_turns": n_turns,
         "n_toolcalls": total_calls,
-        "error_rate": {"tool_calls": total_calls, "tool_errors": total_errors, "rate_pct": _pct_or_none(total_errors, total_calls)},
+        "error_rate": {
+            "tool_calls": total_calls,
+            "tool_errors": total_errors,
+            "rate_pct": _pct_or_none(total_errors, total_calls),
+        },
         "tool_breakdown": tool_rows,
         "tool_latency": latency_by_tool[:10],
         "hourly_sessions": hourly_rows,
@@ -242,15 +336,26 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
     }
 
 
-def collect_claude_code_metrics(target_date: str, prom: str = DEFAULT_PROM, loki: str = DEFAULT_LOKI) -> dict[str, Any]:
+def collect_claude_code_metrics(
+    target_date: str, prom: str = DEFAULT_PROM, loki: str = DEFAULT_LOKI
+) -> dict[str, Any]:
     p = _collect_prometheus(target_date, prom)
-    l = _collect_loki(target_date, loki)
+    lk = _collect_loki(target_date, loki)
     return {
         "date": target_date,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "deferred_metrics": DEFERRED_METRICS,
-        "claude_code": {**p, **{k: v for k, v in l.items() if k != "sessions"}, "sessions": {**p.get("sessions", {}), **l.get("sessions", {})}},
-        "policy_compliance": {"passed": 0, "total": 0, "rate_pct": None, "status": "not_evaluated_until_write"},
+        "claude_code": {
+            **p,
+            **{k: v for k, v in lk.items() if k != "sessions"},
+            "sessions": {**p.get("sessions", {}), **lk.get("sessions", {})},
+        },
+        "policy_compliance": {
+            "passed": 0,
+            "total": 0,
+            "rate_pct": None,
+            "status": "not_evaluated_until_write",
+        },
     }
 
 
@@ -275,7 +380,9 @@ def _tool_table(rows: list[dict[str, Any]]) -> str:
         return "- Tool usage: N/A"
     out = ["| tool | calls | errors | error_rate |", "|---|---:|---:|---:|"]
     for r in rows:
-        out.append(f"| {r.get('tool')} | {_int(r.get('calls'))} | {_int(r.get('errors'))} | {_pct(r.get('error_rate_pct'))} |")
+        out.append(
+            f"| {r.get('tool')} | {_int(r.get('calls'))} | {_int(r.get('errors'))} | {_pct(r.get('error_rate_pct'))} |"
+        )
     return "\n".join(out)
 
 
@@ -284,20 +391,27 @@ def _latency_table(rows: list[dict[str, Any]]) -> str:
         return "- Average tool duration: N/A"
     out = ["| tool | avg_ms | max_ms |", "|---|---:|---:|"]
     for r in rows:
-        out.append(f"| {r.get('tool')} | {_fmt(r.get('avg_ms'))} | {_fmt(r.get('max_ms'))} |")
+        out.append(
+            f"| {r.get('tool')} | {_fmt(r.get('avg_ms'))} | {_fmt(r.get('max_ms'))} |"
+        )
     return "\n".join(out)
 
 
 def _hourly_lines(rows: list[dict[str, Any]]) -> str:
     if not rows:
         return "- Hourly distribution: N/A"
-    return "\n".join(f"  - {r.get('hour')}: {_fmt(r.get('sessions'))} sessions" for r in rows)
+    return "\n".join(
+        f"  - {r.get('hour')}: {_fmt(r.get('sessions'))} sessions" for r in rows
+    )
 
 
 def _dict_lines(d: dict[str, Any], suffix: str = "") -> str:
     if not d:
         return "  - N/A"
-    return "\n".join(f"  - {k}: {_fmt(v)}{suffix}" for k, v in sorted(d.items(), key=lambda kv: -_num(kv[1])))
+    return "\n".join(
+        f"  - {k}: {_fmt(v)}{suffix}"
+        for k, v in sorted(d.items(), key=lambda kv: -_num(kv[1]))
+    )
 
 
 def _observations(metrics: dict[str, Any]) -> list[str]:
@@ -306,28 +420,40 @@ def _observations(metrics: dict[str, Any]) -> list[str]:
     tokens = cc.get("tokens", {})
     hit = tokens.get("cache_hit_pct")
     if hit is not None and hit >= 90:
-        obs.append(f"Cache hit rate is {_pct(hit)}; repeated-context work is likely reducing cost. Monitor cache_read share changes.")
+        obs.append(
+            f"Cache hit rate is {_pct(hit)}; repeated-context work is likely reducing cost. Monitor cache_read share changes."
+        )
     elif hit is not None and hit < 50 and tokens.get("total", 0) > 0:
-        obs.append(f"Cache hit rate is low at {_pct(hit)}; many new sessions or frequent context invalidation may be reducing cost efficiency.")
+        obs.append(
+            f"Cache hit rate is low at {_pct(hit)}; many new sessions or frequent context invalidation may be reducing cost efficiency."
+        )
     err = cc.get("error_rate", {})
     if err.get("rate_pct") is not None and err.get("rate_pct") > 5:
-        obs.append(f"Overall tool error rate is {_pct(err.get('rate_pct'))}; review precheck and tool-call patterns.")
+        obs.append(
+            f"Overall tool error rate is {_pct(err.get('rate_pct'))}; review precheck and tool-call patterns."
+        )
     decisions = cc.get("code_edit_decisions", {})
     accept = _num(decisions.get("accept"))
     reject = _num(decisions.get("reject"))
     if accept + reject > 0:
         accept_rate = _pct_or_none(accept, accept + reject)
-        obs.append(f"Code edit accept rate is {_pct(accept_rate)} ({int(accept)}/{int(accept + reject)}); low rates may signal prompt or tool-result quality issues.")
+        obs.append(
+            f"Code edit accept rate is {_pct(accept_rate)} ({int(accept)}/{int(accept + reject)}); low rates may signal prompt or tool-result quality issues."
+        )
     hourly = cc.get("hourly_sessions", [])
     if hourly:
         peak = max(hourly, key=lambda r: _num(r.get("sessions")))
-        obs.append(f"Usage peak at hour {peak.get('hour')} with {_fmt(peak.get('sessions'))} sessions; useful for automation and focus-pattern tracking.")
+        obs.append(
+            f"Usage peak at hour {peak.get('hour')} with {_fmt(peak.get('sessions'))} sessions; useful for automation and focus-pattern tracking."
+        )
     qsrc = cc.get("query_source", {})
     aux = _num(qsrc.get("auxiliary"))
     main = _num(qsrc.get("main"))
     if main + aux > 0:
         aux_pct = _pct_or_none(aux, main + aux)
-        obs.append(f"Auxiliary query share is {_pct(aux_pct)}; this is a rough proxy for sub-agent/background workload.")
+        obs.append(
+            f"Auxiliary query share is {_pct(aux_pct)}; this is a rough proxy for sub-agent/background workload."
+        )
     if not obs:
         obs.append("No notable signals. Current values can be used as baseline.")
     return obs
@@ -338,7 +464,7 @@ def render_daily_report(metrics: dict[str, Any]) -> str:
     cc = metrics["claude_code"]
     pc = metrics["policy_compliance"]
     sessions = cc.get("sessions", {})
-    n_sessions = sessions.get("total") or sessions.get("loki_distinct") or 0
+    sessions.get("total") or sessions.get("loki_distinct") or 0
     tokens = cc.get("tokens", {})
     cost = cc.get("cost", {})
     err = cc.get("error_rate", {})
@@ -436,21 +562,37 @@ def _write_policy(report_path: Path, metrics_path: Path, report: str) -> dict[st
         "$" not in report,
     ]
     passed = sum(1 for c in checks if c)
-    return {"passed": passed, "total": len(checks), "rate_pct": _pct_or_none(passed, len(checks)), "status": "evaluated"}
+    return {
+        "passed": passed,
+        "total": len(checks),
+        "rate_pct": _pct_or_none(passed, len(checks)),
+        "status": "evaluated",
+    }
 
 
 def write_outputs(metrics: dict[str, Any], base_dir: Path = BASEDIR) -> dict[str, Path]:
     d = metrics["date"]
     year, month, _ = d.split("-")
-    report_path = base_dir / "data/wiki/summaries" / year / month / f"{d}-claude-code-usage.md"
-    metrics_path = base_dir / "data/ops/reports" / year / month / f"{d}-claude-code-usage.metrics.json"
+    report_path = (
+        base_dir / "data/wiki/summaries" / year / month / f"{d}-claude-code-usage.md"
+    )
+    metrics_path = (
+        base_dir
+        / "data/ops/reports"
+        / year
+        / month
+        / f"{d}-claude-code-usage.metrics.json"
+    )
     report = render_daily_report(metrics)
     metrics["policy_compliance"] = _write_policy(report_path, metrics_path, report)
     report = render_daily_report(metrics)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
-    metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    metrics_path.write_text(
+        json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     return {"report": report_path, "metrics": metrics_path}
 
 
@@ -477,7 +619,9 @@ def main(argv: list[str] | None = None) -> int:
     for key, path in outputs.items():
         print(f"- {key}: {path}")
     if args.lint:
-        result = subprocess.run(["uv", "run", "kb-lint-wiki"], cwd=args.base_dir, text=True)
+        result = subprocess.run(
+            ["uv", "run", "kb-lint-wiki"], cwd=args.base_dir, text=True
+        )
         return result.returncode
     return 0
 

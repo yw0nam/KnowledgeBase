@@ -10,8 +10,22 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from kb_mcp.cli.usage_reports.collect import BASEDIR, DEFAULT_HERMES_DB, DEFERRED_METRICS, _collect_hermes, _pct
-from kb_mcp.cli.usage_reports.render import _fmt, _hourly_lines, _int, _kv_lines, _model_table, _pct as _pct_text, _schema_cell
+from kb_mcp.cli.usage_reports.collect import (
+    BASEDIR,
+    DEFAULT_HERMES_DB,
+    DEFERRED_METRICS,
+    _collect_hermes,
+    _pct,
+)
+from kb_mcp.cli.usage_reports.render import (
+    _fmt,
+    _hourly_lines,
+    _int,
+    _kv_lines,
+    _model_table,
+    _pct as _pct_text,
+    _schema_cell,
+)
 
 KST = timezone(timedelta(hours=9))
 
@@ -26,13 +40,20 @@ def _metrics_dir(base_dir: Path, target_date: str) -> Path:
     return base_dir / "data/ops/reports" / year / month
 
 
-def collect_metrics(target_date: str, db_path: Path = DEFAULT_HERMES_DB) -> dict[str, Any]:
+def collect_metrics(
+    target_date: str, db_path: Path = DEFAULT_HERMES_DB
+) -> dict[str, Any]:
     return {
         "date": target_date,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "deferred_metrics": DEFERRED_METRICS,
         "hermes": _collect_hermes(target_date, Path(db_path)),
-        "policy_compliance": {"passed": 0, "total": 0, "rate_pct": None, "status": "not_evaluated_until_write"},
+        "policy_compliance": {
+            "passed": 0,
+            "total": 0,
+            "rate_pct": None,
+            "status": "not_evaluated_until_write",
+        },
     }
 
 
@@ -42,7 +63,9 @@ def _observations(metrics: dict[str, Any]) -> list[str]:
         return [f"Hermes DB unavailable: {he.get('reason')}"]
     obs: list[str] = []
     if float(he.get("sessions", {}).get("zombie") or 0) > 0:
-        obs.append(f"Zombie sessions {_fmt(he.get('sessions', {}).get('zombie'))} found. Check TUI/cron shutdown handling.")
+        obs.append(
+            f"Zombie sessions {_fmt(he.get('sessions', {}).get('zombie'))} found. Check TUI/cron shutdown handling."
+        )
     if not obs:
         obs.append("No notable signals. Current values can be used as baseline.")
     return obs
@@ -129,7 +152,12 @@ def _write_policy(report_path: Path, metrics_path: Path, report: str) -> dict[st
         "$" not in report,
     ]
     passed = sum(1 for c in checks if c)
-    return {"passed": passed, "total": len(checks), "rate_pct": _pct(passed, len(checks)), "status": "evaluated"}
+    return {
+        "passed": passed,
+        "total": len(checks),
+        "rate_pct": _pct(passed, len(checks)),
+        "status": "evaluated",
+    }
 
 
 def write_outputs(metrics: dict[str, Any], base_dir: Path = BASEDIR) -> dict[str, Path]:
@@ -142,7 +170,10 @@ def write_outputs(metrics: dict[str, Any], base_dir: Path = BASEDIR) -> dict[str
     report_path.parent.mkdir(parents=True, exist_ok=True)
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
-    metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    metrics_path.write_text(
+        json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     return {"report": report_path, "metrics": metrics_path}
 
 
@@ -168,7 +199,9 @@ def main(argv: list[str] | None = None) -> int:
     for key, path in outputs.items():
         print(f"- {key}: {path}")
     if args.lint:
-        result = subprocess.run(["uv", "run", "kb-lint-wiki"], cwd=args.base_dir, text=True)
+        result = subprocess.run(
+            ["uv", "run", "kb-lint-wiki"], cwd=args.base_dir, text=True
+        )
         return result.returncode
     return 0
 

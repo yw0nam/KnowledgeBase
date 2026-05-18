@@ -51,6 +51,7 @@ Time/subject rollups grouped by year and month. Path: `summaries/{YYYY}/{MM}/{pe
 - Use `[[FileName]]` or `[[FileName|Display Text]]`. Never include `.md` extension.
 - Only link to pages that exist. If a concept has no wiki page, use plain text.
 - Raw sources are cited in frontmatter `sources:` array, never as inline links.
+- **`[[Name]]` must match the target file's stem exactly (filename without `.md`).** `kb-lint-wiki` does NOT resolve `aliases:` from frontmatter when validating links — alias entries help humans find the page but they do not satisfy wikilink resolution. If you want `[[short-name]]` to link to `long-descriptive-filename.md`, either rename the file or rewrite the link.
 
 ### Tags
 
@@ -91,6 +92,10 @@ Check that the target page exists before creating the link. If it doesn't, use p
 **Using non-flat tags**
 Tags are flat. Use `project`, not `projects/myproject`. Use `tool`, not `tools/python`.
 
+**Wikilink fails despite the target page existing under an alias**
+`kb-lint-wiki` matches link targets against the file stem only (the part before `.md`), not against `aliases:` in frontmatter. If your link reads `[[deltatocumulative-processor-decision]]` but the actual file is `2026-05-18-deltatocumulative-processor.md`, lint reports "dead link" even when `aliases:` lists `deltatocumulative-processor-decision`. Fix by either renaming the file so its stem equals the link text, or rewriting all links to use the existing stem.
+
 ### B. PatchNote
 
 - 2026-05-08: Initial restructure from CLAUDE.md. Reorganized to follow Standard Document Structure (Synopsis, Core Logic, Usage, Appendix). All 7 categories, naming rules, wikilink rules, and tag conventions preserved verbatim.
+- 2026-05-18: Documented stem-only wikilink matching; aliases are not resolved by `kb-lint-wiki`.
