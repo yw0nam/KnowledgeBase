@@ -25,7 +25,7 @@ from pathlib import Path
 
 import yaml
 
-from kb_mcp.cli._handoff_validators import (
+from kb_mcp.cli.handoff.validators import (
     CANONICAL_BODY_SECTIONS as CANONICAL_BODY_SECTIONS,
     FINAL_FILENAME_RE,
     HANDOFF_FILENAME_RE,

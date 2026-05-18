@@ -36,7 +36,7 @@ import re
 import sys
 from pathlib import Path
 
-from kb_mcp.cli._wiki_checks import (
+from kb_mcp.cli.wiki.checks import (
     CAPTURED_AT_MTIME_TOLERANCE_SEC,
     RAW_FM_REQUIRED,
     RAW_INGEST_TOPLEVEL,
@@ -46,7 +46,7 @@ from kb_mcp.cli._wiki_checks import (
     check_raw_immutability,
     _get_modified_raw_files,
 )
-from kb_mcp.cli._wiki_utils import (
+from kb_mcp.cli.wiki.utils import (
     _find_relative,
     _parse_yaml_frontmatter,
     collect_pages,
@@ -54,7 +54,7 @@ from kb_mcp.cli._wiki_utils import (
     get_raw_frontmatter,
     parse_frontmatter,
 )
-from kb_mcp.cli._wiki_validators import (
+from kb_mcp.cli.wiki.validators import (
     IMPROVEMENT_DOMAIN_VALUES,
     IMPROVEMENT_KIND_VALUES,
     IMPROVEMENT_SEVERITY_VALUES,

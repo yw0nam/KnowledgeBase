@@ -7,7 +7,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from kb_mcp.cli._wiki_utils import _find_relative, _parse_yaml_frontmatter, extract_links
+from kb_mcp.cli.wiki.utils import _find_relative, _parse_yaml_frontmatter, extract_links
 
 BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
 WIKI_DIR = BASEDIR / "data" / "wiki"
