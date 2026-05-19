@@ -1,10 +1,11 @@
 ---
 type: improvement
+review_status: not_processed
 kind: improvement
 observed_at: ""
 domain: ""
 severity: ""
-status: open
+issue_status: open
 related: []
 created: ""
 updated: ""
