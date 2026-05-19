@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError, approvePage, fetchQueue, rejectPage } from './api';
 import { clearDraft, readDraft } from './feedback';
 import type { QueueResponse, ReviewPage } from './types';
+import { CommandPalette } from './components/CommandPalette';
 import { DecisionDock } from './components/DecisionDock';
 import { EmptyState } from './components/EmptyState';
 import { PageDetail } from './components/PageDetail';
@@ -33,6 +34,7 @@ export function App() {
   const [reloadKey, setReloadKey] = useState(0);
   const [mode, setMode] = useState<ActionMode>('idle');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,11 +119,44 @@ export function App() {
     setMode('idle');
   }, [mode]);
 
-  // Keyboard shortcuts: a/r/Enter/Esc. Skip when focus is inside an
-  // editable element (the Feedback textarea), so typing 'a' or 'r'
-  // there doesn't trigger the action.
+  const handleReload = useCallback(() => {
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  const handlePaletteClose = useCallback(() => setPaletteOpen(false), []);
+
+  const handlePaletteApprove = useCallback(() => {
+    setPaletteOpen(false);
+    handleApprove();
+  }, [handleApprove]);
+
+  const handlePaletteRejectStart = useCallback(() => {
+    setPaletteOpen(false);
+    handleRejectStart();
+  }, [handleRejectStart]);
+
+  const handlePaletteReload = useCallback(() => {
+    setPaletteOpen(false);
+    handleReload();
+  }, [handleReload]);
+
+  const handlePaletteSelect = useCallback((stem: string) => {
+    setPaletteOpen(false);
+    setSelectedStem(stem);
+  }, []);
+
+  // Keyboard shortcuts: a/r/Enter/Esc/j/k. Skip when focus is inside
+  // an editable element (the Feedback textarea), so typing those keys
+  // there doesn't trigger the action. Cmd/Ctrl-K is the universal
+  // escape hatch and works even in editors.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+      if (paletteOpen) return;
       const t = e.target as HTMLElement | null;
       const inEditor =
         !!t &&
@@ -139,11 +174,48 @@ export function App() {
       } else if (e.key === 'Escape' && mode === 'reject-confirm') {
         e.preventDefault();
         handleRejectCancel();
+      } else if (e.key === 'j' && mode === 'idle') {
+        if (pages.length === 0) return;
+        e.preventDefault();
+        if (selectedStem === null) {
+          const first = pages[0];
+          if (first) setSelectedStem(first.stem);
+          return;
+        }
+        const idx = pages.findIndex((p) => p.stem === selectedStem);
+        if (idx < 0) {
+          const first = pages[0];
+          if (first) setSelectedStem(first.stem);
+          return;
+        }
+        const next = pages[idx + 1];
+        if (next) setSelectedStem(next.stem);
+      } else if (e.key === 'k' && mode === 'idle') {
+        if (pages.length === 0) return;
+        e.preventDefault();
+        if (selectedStem === null) {
+          const first = pages[0];
+          if (first) setSelectedStem(first.stem);
+          return;
+        }
+        const idx = pages.findIndex((p) => p.stem === selectedStem);
+        if (idx <= 0) return;
+        const prev = pages[idx - 1];
+        if (prev) setSelectedStem(prev.stem);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [mode, handleApprove, handleRejectStart, handleRejectConfirm, handleRejectCancel]);
+  }, [
+    mode,
+    pages,
+    selectedStem,
+    paletteOpen,
+    handleApprove,
+    handleRejectStart,
+    handleRejectConfirm,
+    handleRejectCancel,
+  ]);
 
   return (
     <div className={styles.app}>
@@ -184,6 +256,18 @@ export function App() {
             ? readDraft(selectedStem)
             : undefined
         }
+      />
+      <CommandPalette
+        open={paletteOpen}
+        pages={pages}
+        selectedStem={selectedStem}
+        mode={mode}
+        canDecide={!!selected && state.status === 'ready'}
+        onClose={handlePaletteClose}
+        onApprove={handlePaletteApprove}
+        onRejectStart={handlePaletteRejectStart}
+        onReload={handlePaletteReload}
+        onSelect={handlePaletteSelect}
       />
     </div>
   );

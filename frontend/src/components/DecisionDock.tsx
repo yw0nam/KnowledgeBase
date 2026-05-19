@@ -119,6 +119,16 @@ export function DecisionDock({
             <kbd className={styles.kbd}>Esc</kbd>
           </dt>
           <dd>cancel reject</dd>
+          <dt>
+            <kbd className={styles.kbd}>j</kbd>
+            <kbd className={styles.kbd}>k</kbd>
+          </dt>
+          <dd>navigate queue</dd>
+          <dt>
+            <kbd className={styles.kbd}>⌘</kbd>
+            <kbd className={styles.kbd}>K</kbd>
+          </dt>
+          <dd>command palette</dd>
         </dl>
       </div>
     </aside>
