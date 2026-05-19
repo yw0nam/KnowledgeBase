@@ -95,6 +95,28 @@ git add raw/ wiki/ log.md
 git commit -m "ingest: [source] description"
 ```
 
+### Review console (web UI)
+
+Local-only web app for reviewing `pending_for_approve` wiki pages.
+See [PRODUCT.md](PRODUCT.md) and [DESIGN.md](DESIGN.md) for the
+strategic and visual specs.
+
+```bash
+# First run only — install JS deps. The script also does this for you
+# if frontend/node_modules is missing.
+(cd frontend && npm install)
+
+# Run FastAPI + Vite together. Ctrl-C cleans up both.
+./scripts/dev-web.sh
+
+# Optional: point at a non-default data tree (handy in a worktree
+# created from the main branch, where `data/` is not present).
+KB_DATA_DIR=/path/to/data ./scripts/dev-web.sh
+```
+
+Open <http://127.0.0.1:5173>. The empty queue is honestly empty;
+the UI does not fabricate placeholder content.
+
 ## Files
 
 | File | Role |

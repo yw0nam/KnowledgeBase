@@ -8,7 +8,6 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from kb_mcp import REPO_ROOT as BASEDIR
 
 DEFAULT_OPENCODE_DB = Path.home() / ".local/share/opencode/opencode.db"
 DEFAULT_HERMES_DB = Path.home() / ".hermes/state.db"
