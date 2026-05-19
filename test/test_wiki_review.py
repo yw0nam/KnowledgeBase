@@ -106,3 +106,58 @@ def test_get_field_reads_value(tmp_path):
     assert _store.get_frontmatter_field(p, "review_status") == "approved"
     assert _store.get_frontmatter_field(p, "type") == "entity"
     assert _store.get_frontmatter_field(p, "missing") is None
+
+
+def test_append_feedback_creates_section(tmp_path):
+    from kb_mcp.cli.wiki_review import _feedback
+
+    p = tmp_path / "page.md"
+    p.write_text(
+        "---\ntype: entity\n---\n\n# Title\n\nSome body.\n"
+    )
+    _feedback.append_feedback_line(p, "2026-05-19", "Approved", "Looks good.")
+    text = p.read_text()
+    assert "## User Feedback" in text
+    assert "2026-05-19-Approved: Looks good." in text
+    # Section appears at end of body.
+    body = text.split("---", 2)[2]
+    assert body.rstrip().endswith("2026-05-19-Approved: Looks good.")
+
+
+def test_append_feedback_appends_to_existing_section(tmp_path):
+    from kb_mcp.cli.wiki_review import _feedback
+
+    p = tmp_path / "page.md"
+    p.write_text(
+        "---\ntype: entity\n---\n\n# Title\n\nBody.\n\n"
+        "## User Feedback\n\n2026-05-18-Rejected: Bad sources.\n"
+    )
+    _feedback.append_feedback_line(p, "2026-05-19", "Approved", "Fixed.")
+    text = p.read_text()
+    # Both lines present, in order, under a single header.
+    assert text.count("## User Feedback") == 1
+    assert "2026-05-18-Rejected: Bad sources." in text
+    assert "2026-05-19-Approved: Fixed." in text
+    # Order: existing first, then appended.
+    assert text.index("2026-05-18") < text.index("2026-05-19")
+
+
+def test_append_feedback_skip_empty_input(tmp_path):
+    from kb_mcp.cli.wiki_review import _feedback
+
+    p = tmp_path / "page.md"
+    original = "---\ntype: entity\n---\n\n# Title\n\nBody.\n"
+    p.write_text(original)
+    _feedback.append_feedback_line(p, "2026-05-19", "Approved", "")
+    # File unchanged when feedback is empty.
+    assert p.read_text() == original
+
+
+def test_append_feedback_strips_input_whitespace(tmp_path):
+    from kb_mcp.cli.wiki_review import _feedback
+
+    p = tmp_path / "page.md"
+    p.write_text("---\ntype: entity\n---\n\n# Title\n")
+    _feedback.append_feedback_line(p, "2026-05-19", "Rejected", "   \n  trim me  \n")
+    text = p.read_text()
+    assert "2026-05-19-Rejected: trim me" in text
