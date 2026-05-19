@@ -124,3 +124,79 @@ def test_build_index_dates_derived_from_pages(tmp_path):
     assert "created: 2026-04-01" in head
     # Latest derived page date = LatePage.updated (2026-06-20).
     assert "updated: 2026-06-20" in head
+
+
+def test_build_index_excludes_non_approved(tmp_path):
+    """build_index should skip pages with review_status != approved."""
+    from kb_mcp.cli.wiki.index import build_index
+
+    wiki = tmp_path / "wiki"
+    (wiki / "entities" / "Subj").mkdir(parents=True)
+    (wiki / "concepts").mkdir(parents=True)
+
+    approved = """\
+---
+type: entity
+review_status: approved
+created: "2026-05-19"
+updated: "2026-05-19"
+sources: []
+tags: []
+---
+
+# Approved
+"""
+    pending = """\
+---
+type: concept
+review_status: pending_for_approve
+created: "2026-05-19"
+updated: "2026-05-19"
+sources: []
+tags: []
+---
+
+# Pending
+"""
+    not_processed = """\
+---
+type: concept
+review_status: not_processed
+created: "2026-05-19"
+updated: "2026-05-19"
+sources: []
+tags: []
+---
+
+# NotProcessed
+"""
+    (wiki / "entities" / "Subj" / "Approved.md").write_text(approved)
+    (wiki / "concepts" / "Pending.md").write_text(pending)
+    (wiki / "concepts" / "NotProcessed.md").write_text(not_processed)
+
+    content = build_index(wiki)
+    assert "[[Approved]]" in content
+    assert "[[Pending]]" not in content
+    assert "[[NotProcessed]]" not in content
+
+
+def test_build_index_includes_pages_without_review_status(tmp_path):
+    """Pages of types outside REVIEW_STATUS_TYPES (e.g. summary) appear regardless."""
+    from kb_mcp.cli.wiki.index import build_index
+
+    wiki = tmp_path / "wiki"
+    (wiki / "summaries" / "2026" / "05").mkdir(parents=True)
+    summary = """\
+---
+type: summary
+created: "2026-05-19"
+updated: "2026-05-19"
+sources: []
+tags: []
+---
+
+# Daily memory
+"""
+    (wiki / "summaries" / "2026" / "05" / "2026-05-19-memory.md").write_text(summary)
+    content = build_index(wiki)
+    assert "[[2026-05-19-memory]]" in content
