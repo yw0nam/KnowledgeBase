@@ -16,7 +16,7 @@ Checks:
  10. Orphan pages (no inbound links from other wiki pages)
  11. Subject _index.md ↔ disk sync (listed pages exist, on-disk pages listed)
  11b. Global INDEX.md sync (matches output of ``kb-wiki-index``)
- 12. Improvement enum validation (kind, observed_at, domain, severity, status,
+ 12. Improvement enum validation (kind, observed_at, domain, severity, issue_status,
      related path resolution)
  13. Checklist items must use markdown task-list syntax under ``## Items``
  14. Raw frontmatter required fields (source_url, type, captured_at,
@@ -60,12 +60,15 @@ from kb_mcp.cli.wiki.utils import (
 )
 from kb_mcp.cli.wiki.validators import (
     IMPROVEMENT_DOMAIN_VALUES,
+    IMPROVEMENT_ISSUE_STATUS_VALUES,
     IMPROVEMENT_KIND_VALUES,
     IMPROVEMENT_SEVERITY_VALUES,
-    IMPROVEMENT_STATUS_VALUES,
     ISO_DATE_RE,
+    REVIEW_STATUS_TYPES,
+    REVIEW_STATUS_VALUES,
     _validate_checklist_items,
     _validate_improvement_fm,
+    _validate_review_status,
 )
 
 __all__ = [
@@ -73,15 +76,17 @@ __all__ = [
     "CAPTURED_AT_MTIME_TOLERANCE_SEC",
     "COLLISION_EXEMPT_STEMS",
     "IMPROVEMENT_DOMAIN_VALUES",
+    "IMPROVEMENT_ISSUE_STATUS_VALUES",
     "IMPROVEMENT_KIND_VALUES",
     "IMPROVEMENT_SEVERITY_VALUES",
-    "IMPROVEMENT_STATUS_VALUES",
     "ISO_DATE_RE",
     "LintResult",
     "RAW_DIR",
     "RAW_FM_REQUIRED",
     "RAW_INGEST_TOPLEVEL",
     "REQUIRED_FM_FIELDS",
+    "REVIEW_STATUS_TYPES",
+    "REVIEW_STATUS_VALUES",
     "STUB_THRESHOLD_CHARS",
     "WIKI_DIR",
     "_find_relative",
@@ -89,6 +94,7 @@ __all__ = [
     "_parse_yaml_frontmatter",
     "_validate_checklist_items",
     "_validate_improvement_fm",
+    "_validate_review_status",
     "check_global_index_sync",
     "check_index_sync",
     "check_raw_captured_at_mtime",
@@ -109,28 +115,29 @@ RAW_DIR = BASEDIR / "data" / "raw"
 STUB_THRESHOLD_CHARS = 100
 
 REQUIRED_FM_FIELDS = {
-    "entity": ["type", "created", "updated", "sources", "tags"],
-    "concept": ["type", "created", "updated", "sources", "tags"],
-    "decision": ["type", "created", "updated", "sources", "tags"],
+    "entity": ["type", "review_status", "created", "updated", "sources", "tags"],
+    "concept": ["type", "review_status", "created", "updated", "sources", "tags"],
+    "decision": ["type", "review_status", "created", "updated", "sources", "tags"],
     # Improvement adds the lifecycle/severity/domain triplet plus
     # observation timestamp and back-references; enums are checked by
     # ``_validate_improvement_fm`` after the required-field loop.
     "improvement": [
         "type",
+        "review_status",
         "kind",
         "observed_at",
         "domain",
         "severity",
-        "status",
+        "issue_status",
         "related",
         "created",
         "updated",
         "sources",
         "tags",
     ],
-    "checklist": ["type", "created", "updated", "sources", "tags"],
+    "checklist": ["type", "review_status", "created", "updated", "sources", "tags"],
     "summary": ["type", "created", "updated", "sources", "tags"],
-    "question": ["type", "created", "updated", "sources", "tags"],
+    "question": ["type", "review_status", "created", "updated", "sources", "tags"],
     "index": ["type", "created", "updated"],
 }
 
@@ -282,6 +289,9 @@ def lint(
         elif page_type == "checklist":
             _validate_checklist_items(rel, body, result)
 
+        if page_type in REVIEW_STATUS_TYPES:
+            _validate_review_status(rel, fm, result)
+
         # ── 6. Empty relation parens ────────────────────────────────────
         if "## Relationships" in body:
             rel_section = body.split("## Relationships")[1].split("##")[0]
@@ -326,9 +336,15 @@ def lint(
     # Subject hubs (`_index.md`) and the global INDEX.md are not link targets
     # by convention (subject hubs start with `_`; INDEX.md is the auto-TOC),
     # so they cannot accumulate inbound links and must be excluded from
-    # orphan detection.
+    # orphan detection. Non-approved pages are also excluded because they are
+    # not yet "official wiki" — they are awaiting review/promotion.
     for stem in all_stems:
         if stem in ("index", "_index", INDEX_STEM):
+            continue
+        page_content = pages.get(stem, "")
+        page_fm = parse_frontmatter(page_content) or {}
+        if page_fm.get("review_status") not in (None, "approved"):
+            # not_processed or pending_for_approve — not yet a wiki citizen
             continue
         if not inbound.get(stem):
             result.warn(

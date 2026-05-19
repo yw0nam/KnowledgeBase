@@ -9,7 +9,31 @@ ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 IMPROVEMENT_KIND_VALUES = frozenset({"improvement", "issue", "proposal"})
 IMPROVEMENT_DOMAIN_VALUES = frozenset({"cost", "correctness", "perf", "dx", "security"})
 IMPROVEMENT_SEVERITY_VALUES = frozenset({"low", "med", "high"})
-IMPROVEMENT_STATUS_VALUES = frozenset({"open", "acknowledged", "resolved", "wontfix"})
+IMPROVEMENT_ISSUE_STATUS_VALUES = frozenset(
+    {"open", "acknowledged", "resolved", "wontfix"}
+)
+
+REVIEW_STATUS_VALUES = frozenset({"not_processed", "pending_for_approve", "approved"})
+# Types that participate in the approval workflow (must carry review_status).
+REVIEW_STATUS_TYPES = frozenset(
+    {"entity", "concept", "decision", "improvement", "checklist", "question"}
+)
+
+
+def _validate_review_status(rel: str, fm: dict, result) -> None:
+    """Validate `review_status` enum for in-scope page types.
+
+    Existence of the field is checked by REQUIRED_FM_FIELDS in lint_wiki;
+    this only validates the value when present.
+    """
+    rs = fm.get("review_status")
+    if rs is None:
+        return
+    if rs not in REVIEW_STATUS_VALUES:
+        result.error(
+            rel,
+            f"invalid review_status: {rs!r} (must be one of {sorted(REVIEW_STATUS_VALUES)})",
+        )
 
 
 def _validate_improvement_fm(
@@ -48,11 +72,14 @@ def _validate_improvement_fm(
             f"invalid severity: {severity!r} (must be one of {sorted(IMPROVEMENT_SEVERITY_VALUES)})",
         )
 
-    status = fm.get("status")
-    if status not in (None, "") and status not in IMPROVEMENT_STATUS_VALUES:
+    issue_status = fm.get("issue_status")
+    if (
+        issue_status not in (None, "")
+        and issue_status not in IMPROVEMENT_ISSUE_STATUS_VALUES
+    ):
         result.error(
             rel,
-            f"invalid status: {status!r} (must be one of {sorted(IMPROVEMENT_STATUS_VALUES)})",
+            f"invalid issue_status: {issue_status!r} (must be one of {sorted(IMPROVEMENT_ISSUE_STATUS_VALUES)})",
         )
 
     related = fm.get("related", [])

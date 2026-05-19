@@ -23,6 +23,7 @@ def lint_mod():
 FM = """\
 ---
 type: entity
+review_status: approved
 created: "2026-04-27"
 updated: "2026-04-27"
 sources: []
@@ -520,7 +521,7 @@ def _improvement_fm(
     observed_at: str = "2026-05-08",
     domain: str = "cost",
     severity: str = "high",
-    status: str = "open",
+    issue_status: str = "open",
     related: list[str] | None = None,
 ) -> str:
     related = related if related is not None else []
@@ -535,7 +536,8 @@ def _improvement_fm(
         f'observed_at: "{observed_at}"\n'
         f"domain: {domain}\n"
         f"severity: {severity}\n"
-        f"status: {status}\n"
+        f"issue_status: {issue_status}\n"
+        "review_status: approved\n"
         f"related: {related_yaml}\n"
         'created: "2026-05-08"\n'
         'updated: "2026-05-08"\n'
@@ -643,7 +645,7 @@ def test_improvement_invalid_status_errors(lint_mod, tmp_path):
     write_page(
         wiki / "improvements" / "2026-05" / "BadStatus.md",
         body="# Title\n\n" + PADDING_BODY,
-        fm=_improvement_fm(status="paused"),
+        fm=_improvement_fm(issue_status="paused"),
     )
 
     result = lint_mod.LintResult()
@@ -1032,7 +1034,9 @@ def test_global_index_missing_errors(lint_mod, tmp_path):
     lint_mod.lint(result, wiki_dir=wiki)
 
     idx_errors = [e for e in result.errors if "INDEX.md" in e and "missing" in e]
-    assert len(idx_errors) == 1, f"expected one missing-INDEX error, got: {result.errors}"
+    assert (
+        len(idx_errors) == 1
+    ), f"expected one missing-INDEX error, got: {result.errors}"
 
 
 def test_global_index_in_sync_passes(lint_mod, tmp_path):
@@ -1056,7 +1060,9 @@ def test_global_index_stale_errors(lint_mod, tmp_path):
 
     wiki = make_wiki_root(tmp_path)
     _seed_wiki_with_page(wiki)
-    (wiki / INDEX_FILENAME).write_text("---\ntype: index\ncreated: 2026-05-01\nupdated: 2026-05-01\n---\n\n# stale\n")
+    (wiki / INDEX_FILENAME).write_text(
+        "---\ntype: index\ncreated: 2026-05-01\nupdated: 2026-05-01\n---\n\n# stale\n"
+    )
 
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki)
@@ -1079,8 +1085,7 @@ def test_global_index_does_not_mask_orphans(lint_mod, tmp_path):
 
     orphans = [w for w in result.warnings if "Foo.md" in w and "orphan" in w]
     assert len(orphans) == 1, (
-        "INDEX.md must not count as inbound for orphan detection: "
-        f"{result.warnings}"
+        "INDEX.md must not count as inbound for orphan detection: " f"{result.warnings}"
     )
 
 
@@ -1090,7 +1095,9 @@ def test_dead_link_across_categories_errors(lint_mod, tmp_path):
     from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
 
     wiki = make_wiki_root(tmp_path)
-    body = "This page has plenty of content. " * 5 + " It references [[Ghost]] in passing."
+    body = (
+        "This page has plenty of content. " * 5 + " It references [[Ghost]] in passing."
+    )
     write_page(wiki / "concepts" / "Real.md", body=body)
     (wiki / INDEX_FILENAME).write_text(build_index(wiki))
 
@@ -1099,3 +1106,142 @@ def test_dead_link_across_categories_errors(lint_mod, tmp_path):
 
     dead = [e for e in result.errors if "Real.md" in e and "dead link [[Ghost]]" in e]
     assert len(dead) == 1, f"expected one dead-link error, got: {result.errors}"
+
+
+def test_improvement_issue_status_enum_renamed(lint_mod):
+    """IMPROVEMENT_STATUS_VALUES is renamed to IMPROVEMENT_ISSUE_STATUS_VALUES."""
+    from kb_mcp.cli.wiki import validators
+
+    assert hasattr(validators, "IMPROVEMENT_ISSUE_STATUS_VALUES")
+    assert validators.IMPROVEMENT_ISSUE_STATUS_VALUES == frozenset(
+        {"open", "acknowledged", "resolved", "wontfix"}
+    )
+    assert not hasattr(validators, "IMPROVEMENT_STATUS_VALUES")
+
+
+def test_review_status_values_enum(lint_mod):
+    from kb_mcp.cli.wiki import validators
+
+    assert validators.REVIEW_STATUS_VALUES == frozenset(
+        {"not_processed", "pending_for_approve", "approved"}
+    )
+
+
+def test_review_status_required_for_in_scope_types(lint_mod, tmp_path):
+    """Pages of in-scope types must declare review_status."""
+    wiki = make_wiki_root(tmp_path)
+    fm_no_review_status = """\
+---
+type: entity
+created: "2026-04-27"
+updated: "2026-04-27"
+sources: []
+aliases: []
+tags: []
+---
+"""
+    body = "Body content. " * 10
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[Foo]]\n",
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Foo.md",
+        body=body,
+        fm=fm_no_review_status,
+    )
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+    field_errors = [e for e in result.errors if "Foo.md" in e and "review_status" in e]
+    assert len(field_errors) == 1, result.errors
+
+
+def test_orphan_warning_skipped_for_non_approved(lint_mod, tmp_path):
+    """non-approved pages do not trigger orphan warnings."""
+    wiki = make_wiki_root(tmp_path)
+    fm_pending = """\
+---
+type: entity
+review_status: pending_for_approve
+created: "2026-04-27"
+updated: "2026-04-27"
+sources: []
+aliases: []
+tags: []
+---
+"""
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n",  # empty pages list — Foo is not listed
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Foo.md",
+        body="Body content. " * 10,
+        fm=fm_pending,
+    )
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+    orphan_warns = [w for w in result.warnings if "Foo.md" in w and "orphan" in w]
+    assert orphan_warns == []
+
+
+def test_subject_index_sync_skips_non_approved(lint_mod, tmp_path):
+    """A pending page on disk that's not listed in _index.md should NOT warn."""
+    wiki = make_wiki_root(tmp_path)
+    fm_pending = """\
+---
+type: entity
+review_status: pending_for_approve
+created: "2026-04-27"
+updated: "2026-04-27"
+sources: []
+aliases: []
+tags: []
+---
+"""
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n",
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Foo.md",
+        body="Body content. " * 10,
+        fm=fm_pending,
+    )
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+    listing_warns = [
+        w for w in result.warnings if "Foo.md" in w and "not listed in" in w
+    ]
+    assert listing_warns == []
+
+
+def test_subject_index_sync_still_warns_for_approved(lint_mod, tmp_path):
+    """An approved page on disk that's not listed in _index.md SHOULD warn."""
+    wiki = make_wiki_root(tmp_path)
+    fm_approved = """\
+---
+type: entity
+review_status: approved
+created: "2026-04-27"
+updated: "2026-04-27"
+sources: []
+aliases: []
+tags: []
+---
+"""
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n",
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Foo.md",
+        body="Body content. " * 10,
+        fm=fm_approved,
+    )
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+    listing_warns = [
+        w for w in result.warnings if "Foo.md" in w and "not listed in" in w
+    ]
+    assert len(listing_warns) == 1

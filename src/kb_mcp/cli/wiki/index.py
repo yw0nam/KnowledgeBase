@@ -39,7 +39,13 @@ def _page_date(path: Path, fm: dict | None) -> str:
 
 
 def _scan_pages(root: Path) -> list[tuple[Path, dict | None]]:
-    """Walk root for *.md, skipping per-subject _index.md hubs."""
+    """Walk root for *.md, skipping per-subject _index.md hubs and
+    pages whose review_status is set but not 'approved'.
+
+    Pages without review_status (e.g. summary type, which is out of scope)
+    are included unconditionally — only review_status-bearing pages can
+    be filtered out by approval state.
+    """
     if not root.exists():
         return []
     out: list[tuple[Path, dict | None]] = []
@@ -47,6 +53,10 @@ def _scan_pages(root: Path) -> list[tuple[Path, dict | None]]:
         if f.name == "_index.md":
             continue
         fm = parse_frontmatter(f.read_text())
+        if fm is not None:
+            review_status = fm.get("review_status")
+            if review_status is not None and review_status != "approved":
+                continue
         out.append((f, fm))
     return out
 

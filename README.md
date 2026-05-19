@@ -39,6 +39,7 @@ data/                             Nested git repo (local-only)
 │   ├── improvements/             Open-ended improvements
 │   ├── checklists/               Operational checklists
 │   └── summaries/                Time/subject rollups
+├── rejected/                     Rejected wiki pages (created by `kb-wiki-review reject`)
 └── log.md                        Operation record
 ```
 
@@ -102,6 +103,7 @@ git commit -m "ingest: [source] description"
 | `scripts/ingest-github.sh` | GitHub source collection |
 | `src/kb_mcp/cli/lint_wiki.py` | Wiki validation |
 | `src/kb_mcp/cli/lint_handoff.py` | Handoff validation |
+| `src/kb_mcp/cli/wiki_review/` | Wiki page approval CLI (`kb-wiki-review`) |
 | `data/log.md` | Operation record |
 | `data/raw/` | Immutable sources |
 | `data/wiki/` | LLM-generated pages |
@@ -118,6 +120,7 @@ git commit -m "ingest: [source] description"
 - [Frontmatter](docs/reference/frontmatter.md) — Raw, Wiki, and Handoff frontmatter schemas
 - [Wiki Categories](docs/reference/wiki-categories.md) — 7 categories, naming, wikilinks, tags
 - [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion
+- [Wiki Approval Workflow](docs/workflows/wiki-approval-workflow.md) — `review_status` lifecycle, `kb-wiki-review` CLI, TTL cron
 - [Commands](docs/reference/commands.md) — Full CLI command reference
 
 See [CLAUDE.md](CLAUDE.md) for the LLM entry point.

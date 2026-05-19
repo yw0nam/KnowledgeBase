@@ -28,6 +28,7 @@ For cron-based memory builds, read:
 6. `docs/reference/frontmatter.md`
 7. `docs/reference/wiki-categories.md`
 8. `docs/workflows/handoff-system.md`
+9. `docs/workflows/wiki-approval-workflow.md`
 
 ### Directory Map
 
@@ -55,6 +56,7 @@ Use `workflows/` for ordered execution steps. Use `reference/` for facts that ag
 | Handle handoff lifecycle | `docs/workflows/handoff-system.md` |
 | Write valid frontmatter | `docs/reference/frontmatter.md` |
 | Choose wiki category/path | `docs/reference/wiki-categories.md` |
+| Approve/reject wiki pages | `docs/workflows/wiki-approval-workflow.md` |
 | Run CLI commands | `docs/reference/commands.md` |
 
 ---
@@ -63,6 +65,7 @@ Use `workflows/` for ordered execution steps. Use `reference/` for facts that ag
 
 ### A. PatchNote
 
+- 2026-05-19: Added wiki approval workflow to cron read order and usage table.
 - 2026-05-18: Added cron job workflow to memory build read order.
 - 2026-05-18: Added usage report workflow for source-specific OpenCode/Hermes reports.
 - 2026-05-18: Initial documentation index after workflow/reference split.

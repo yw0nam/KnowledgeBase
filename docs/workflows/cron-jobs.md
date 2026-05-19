@@ -47,6 +47,7 @@ Use KST-oriented windows and avoid running jobs at the exact same minute.
 | Daily memory build | `30 3 * * *` | yesterday | Capture and triage new raw data |
 | Weekly memory build | `15 4 * * 1` | previous ISO week | Synthesize patterns and promotions |
 | Monthly memory maintenance | `45 4 1 * *` | previous month | Consolidate, cleanup, and close loops |
+| Wiki TTL sweep | `30 0 * * *` | `not_processed` > 7d | Auto-reject stale draft pages |
 
 Daily should run first. Weekly and monthly should run later so they can consume completed daily summaries.
 
@@ -60,6 +61,7 @@ Use separate lock files:
 .cron/locks/daily.lock
 .cron/locks/weekly.lock
 .cron/locks/monthly.lock
+.cron/locks/wiki-ttl-sweep.lock
 ```
 
 If a lock is held, skip the run and write a wrapper log line. Do not start overlapping agents against the same `data/` repo.
@@ -104,6 +106,7 @@ PATH=/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin
 30 3 * * * <repo-root>/scripts/cron/kb-memory-daily.sh
 15 4 * * 1 <repo-root>/scripts/cron/kb-memory-weekly.sh
 45 4 1 * * <repo-root>/scripts/cron/kb-memory-monthly.sh
+30 0 * * * <repo-root>/scripts/cron/kb-wiki-ttl-sweep.sh
 ```
 
 Optional usage report jobs should be added only after the user selects a mode:
@@ -229,4 +232,5 @@ cd data && git status --short
 
 ### B. PatchNote
 
+- 2026-05-19: Added wiki TTL sweep job (00:30 daily) for auto-rejecting stale `not_processed` pages.
 - 2026-05-18: Initial cron job design for periodic memory workflows.

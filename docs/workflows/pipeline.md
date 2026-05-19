@@ -34,6 +34,7 @@ Read raw files and create or update wiki pages in `data/wiki/`.
 - Create or update the relevant wiki page
 - Ensure `sources:` in frontmatter references actual raw file paths
 - Only use wikilinks to pages that exist
+- New pages of 6 in-scope types (entity, concept, decision, improvement, checklist, question) inherit `review_status: not_processed` from the template; promote to review later with `kb-wiki-review promote`
 
 ### Stage 3: Log
 
@@ -78,6 +79,8 @@ kb-lint-handoff                   # validate handoffs
 kb-lint-wiki
 ```
 
+5b. (Optional) Manage approval queue. INDEX.md only includes `approved` pages — anything new starts hidden. See `docs/workflows/wiki-approval-workflow.md`.
+
 6. Commit to nested repo:
 ```bash
 cd data
@@ -107,4 +110,5 @@ git commit -m "ingest: owner/repo description"
 
 ### B. PatchNote
 
+- 2026-05-19: Noted `review_status: not_processed` template default on Fill stage; added cross-ref to wiki approval workflow.
 - 2026-05-08: Initial split from CLAUDE.md and restructured to follow docs/CLAUDE.md Standard Document Structure. Preserved all 4 stages, bash commands, and lint check categories.

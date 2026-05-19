@@ -13,6 +13,8 @@ Use this skill when a user wants to start using this KnowledgeBase on a fresh cl
 - Treat the current repository as the KnowledgeBase root.
 - Never write private operational data into the outer repo except `.cron/` wrappers if the user approves cron setup.
 - Never edit existing files under `data/raw/`.
+- New wiki pages of types `entity`, `concept`, `decision`, `improvement`, `checklist`, `question` start as `review_status: not_processed` (template default) and graduate to `pending_for_approve` → `approved` via `kb-wiki-review`. Non-approved pages are intentionally excluded from `INDEX.md` and orphan/sync warnings.
+- The `## User Feedback` heading inside a wiki page body is reserved exclusively for the `kb-wiki-review` CLI. Never use that exact heading as a regular content section.
 - Do not create, modify, or install cron jobs until the user approves the exact job list.
 - Prefer relative paths and repo-root-derived paths. Do not hard-code machine-specific absolute paths.
 - If `data/` already exists, preserve it and only create missing directories/files.
@@ -31,6 +33,7 @@ Read these documents before changing files:
 8. `docs/reference/frontmatter.md`
 9. `docs/reference/wiki-categories.md`
 10. `docs/workflows/handoff-system.md`
+11. `docs/workflows/wiki-approval-workflow.md`
 
 ## Phase 1: Inspect
 
@@ -38,8 +41,9 @@ Check:
 
 - whether `data/` exists
 - whether `data/.git/` exists
+- whether `data/rejected/` exists (created on first reject; absence is normal on a fresh init)
 - whether `uv sync` has been run
-- whether `kb-lint-wiki` and `kb-lint-handoff` work through `uv run`
+- whether `kb-lint-wiki`, `kb-lint-handoff`, and `kb-wiki-review` work through `uv run`
 - whether `.cron/` or `scripts/cron/` already exists
 - whether the user wants usage reports for OpenCode, Hermes, both, or neither
 
@@ -72,6 +76,7 @@ data/
     summaries/
       YYYY/
         MM/
+  rejected/                  # populated lazily by `kb-wiki-review reject`; mirrors wiki/ paths
   ops/
     reports/
       YYYY/
@@ -99,6 +104,7 @@ Run from the KnowledgeBase root:
 uv sync
 uv run kb-lint-wiki
 uv run kb-lint-handoff
+uv run kb-wiki-review list --counts   # smoke test review CLI (0/0/0 on a fresh init)
 ```
 
 If lint fails because the wiki is empty, record the result and continue only if there are no structural errors that block initialization. If lint fails due to existing user data, do not rewrite data automatically; report the errors and create a handoff if appropriate.
@@ -128,6 +134,7 @@ KnowledgeBase memory jobs:
 - daily memory build: 03:30 every day
 - weekly memory build: 04:15 every Monday
 - monthly memory maintenance: 04:45 on day 1 of each month
+- wiki TTL sweep: 00:30 every day (auto-reject not_processed pages older than 7d)
 
 Optional usage report jobs:
 - OpenCode daily usage report: 03:10 every day
@@ -141,6 +148,7 @@ Bind usage report jobs to these commands:
 OpenCode: uv run kb-opencode-daily-report --date <YYYY-MM-DD> --lint
 Hermes: uv run kb-hermes-daily-report --date <YYYY-MM-DD> --lint
 Claude Code: uv run kb-claude-code-daily-report --date <YYYY-MM-DD> --lint
+Wiki TTL sweep: uv run kb-wiki-review ttl-sweep --days 7   (wrapper: scripts/cron/kb-wiki-ttl-sweep.sh)
 ```
 
 Ask one short question:
