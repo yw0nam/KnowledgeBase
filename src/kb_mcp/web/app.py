@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from kb_mcp.web import config
-from kb_mcp.web.routes import queue
+from kb_mcp.web.routes import pages, queue
 
 
 def create_app() -> FastAPI:
@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
     )
     app.state.config = cfg
     app.include_router(queue.router, prefix="/api")
+    app.include_router(pages.router, prefix="/api")
     return app
 
 

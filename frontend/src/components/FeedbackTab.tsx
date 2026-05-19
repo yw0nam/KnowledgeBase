@@ -4,33 +4,19 @@
 // until Phase B sends it along with approve / reject.
 
 import { useEffect, useState } from 'react';
+import { readDraft, writeDraft } from '../feedback';
 import styles from './FeedbackTab.module.css';
 
 interface Props {
   stem: string;
 }
 
-const KEY_PREFIX = 'kb-review-feedback:';
-const storageKey = (stem: string) => `${KEY_PREFIX}${stem}`;
-
-function readDraft(stem: string): string {
-  if (typeof window === 'undefined') return '';
-  return window.localStorage.getItem(storageKey(stem)) ?? '';
-}
-
-function writeDraft(stem: string, value: string): void {
-  if (typeof window === 'undefined') return;
-  if (value === '') {
-    window.localStorage.removeItem(storageKey(stem));
-  } else {
-    window.localStorage.setItem(storageKey(stem), value);
-  }
-}
-
 export function FeedbackTab({ stem }: Props) {
   const [draft, setDraft] = useState<string>(() => readDraft(stem));
 
   // Re-read when the focused page changes — drafts are per-stem.
+  // Also rescans when stem stays the same but localStorage was
+  // cleared by a successful approve/reject in App.
   useEffect(() => {
     setDraft(readDraft(stem));
   }, [stem]);
@@ -46,7 +32,7 @@ export function FeedbackTab({ stem }: Props) {
         className={styles.textarea}
         value={draft}
         onChange={(e) => update(e.target.value)}
-        placeholder="Notes about this page — what's right, what's missing, what to fix. Saved locally; sent with approve / reject when Phase B lands."
+        placeholder="Notes about this page — what's right, what's missing, what to fix. Sent as the User Feedback line on approve, or attached to the rejected file on reject."
         rows={8}
         spellCheck
         aria-label="Feedback notes for this page"

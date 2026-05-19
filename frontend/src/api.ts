@@ -34,6 +34,39 @@ export function fetchQueue(): Promise<QueueResponse> {
   return getJson<QueueResponse>('/api/queue');
 }
 
+interface DecisionResponse {
+  stem: string;
+  status: 'approved' | 'rejected';
+}
+
+async function postDecision(path: string, feedback: string): Promise<DecisionResponse> {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ feedback }),
+  });
+  if (!res.ok) {
+    // FastAPI returns { detail: "..." } on HTTPException.
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body?.detail) detail = body.detail;
+    } catch {
+      // body wasn't json; keep the status-line detail.
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return (await res.json()) as DecisionResponse;
+}
+
+export function approvePage(stem: string, feedback: string): Promise<DecisionResponse> {
+  return postDecision(`/api/pages/${encodeURIComponent(stem)}/approve`, feedback);
+}
+
+export function rejectPage(stem: string, feedback: string): Promise<DecisionResponse> {
+  return postDecision(`/api/pages/${encodeURIComponent(stem)}/reject`, feedback);
+}
+
 // ── Frontmatter accessors. ────────────────────────────────────
 // These keep the rest of the app from knowing how frontmatter is
 // structured. Unknown values fall back to honest empty/undefined,
