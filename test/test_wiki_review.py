@@ -161,3 +161,83 @@ def test_append_feedback_strips_input_whitespace(tmp_path):
     _feedback.append_feedback_line(p, "2026-05-19", "Rejected", "   \n  trim me  \n")
     text = p.read_text()
     assert "2026-05-19-Rejected: trim me" in text
+
+
+def _make_page(wiki: Path, type_: str, stem: str, status: str = "not_processed",
+                created: str = "2026-05-19", subj: str = "subj") -> Path:
+    """Helper to write a syntactically valid wiki page."""
+    if type_ == "entity":
+        path = wiki / "entities" / subj / "2026-05" / f"{stem}.md"
+    else:
+        path = wiki / f"{type_}s" / f"{stem}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    extra = ""
+    if type_ == "entity":
+        extra = "aliases: []\n"
+    if type_ == "improvement":
+        extra = (
+            "kind: improvement\n"
+            "observed_at: \"2026-05-19\"\n"
+            "domain: dx\n"
+            "severity: low\n"
+            "issue_status: open\n"
+            "related: []\n"
+        )
+    fm = (
+        "---\n"
+        f"type: {type_}\n"
+        f"review_status: {status}\n"
+        f"{extra}"
+        f"created: \"{created}\"\n"
+        f"updated: \"{created}\"\n"
+        "sources: []\n"
+        "tags: []\n"
+        "---\n"
+        "\n"
+        f"# {stem}\n\nBody. " * 5
+    )
+    path.write_text(fm)
+    return path
+
+
+def test_promote_transitions_to_pending(tmp_path):
+    from kb_mcp.cli.wiki_review import _commands, _store
+
+    wiki = tmp_path / "wiki"
+    page = _make_page(wiki, "entity", "Foo", status="not_processed")
+    rc = _commands.cmd_promote(wiki, "Foo")
+    assert rc == 0
+    assert _store.get_frontmatter_field(page, "review_status") == "pending_for_approve"
+    # No User Feedback section added (system action).
+    assert "## User Feedback" not in page.read_text()
+
+
+def test_promote_errors_when_already_pending(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    _make_page(wiki, "entity", "Foo", status="pending_for_approve")
+    rc = _commands.cmd_promote(wiki, "Foo")
+    assert rc == 1
+    captured = capsys.readouterr()
+    assert "promote only from not_processed" in captured.err
+
+
+def test_promote_errors_when_already_approved(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    _make_page(wiki, "entity", "Foo", status="approved")
+    rc = _commands.cmd_promote(wiki, "Foo")
+    assert rc == 1
+    assert "promote only from not_processed" in capsys.readouterr().err
+
+
+def test_promote_errors_when_page_not_found(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    wiki.mkdir()
+    rc = _commands.cmd_promote(wiki, "Nope")
+    assert rc == 1
+    assert "page not found in wiki/" in capsys.readouterr().err
