@@ -17,7 +17,9 @@ graphify-out/
 .skeletons/
 .kb_state/
 
-# All operational data lives in nested data/ repo (private, never push)
+# All operational data lives in nested data/ repo (private, never push).
+# Match the bare name too — git-worktrees commonly symlink `data` here.
+data
 data/
 
 # Runtime cron logs and locks

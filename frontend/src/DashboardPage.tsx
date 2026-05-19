@@ -23,6 +23,19 @@ import styles from './DashboardPage.module.css';
 
 const WINDOW_OPTIONS: DashboardWindow[] = [4, 8, 12, 24];
 
+// Six review-status wiki types; "summary" is excluded — summaries do not
+// flow through the approve/reject lifecycle and therefore never appear in
+// recent rejections. Order matches docs/reference/wiki-categories.md so the
+// chip row reads top-down the same way the wiki is structured.
+const CANONICAL_REVIEW_TYPES = [
+  'entity',
+  'concept',
+  'decision',
+  'improvement',
+  'checklist',
+  'question',
+] as const;
+
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; data: DashboardResponse }
@@ -548,31 +561,104 @@ interface RecentRejectionsCardProps {
   items: RecentRejection[];
 }
 
+const ALL_TYPES_FILTER = '__all__';
+
 function RecentRejectionsCard({ items }: RecentRejectionsCardProps) {
+  const [filter, setFilter] = useState<string>(ALL_TYPES_FILTER);
   const count = items.length;
+
+  const countsByType = items.reduce<Record<string, number>>((acc, it) => {
+    const key = it.type || '(untyped)';
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  // Type chips render in canonical order so the row stays stable across reloads.
+  const typesPresent = CANONICAL_REVIEW_TYPES.filter((t) => (countsByType[t] ?? 0) > 0);
+  const showChips = typesPresent.length >= 2;
+
+  const filteredItems =
+    filter === ALL_TYPES_FILTER ? items : items.filter((it) => it.type === filter);
+
   return (
     <section className={styles.card}>
       <h2 className={styles.cardHeading}>Recent Rejections (last {count})</h2>
       {items.length === 0 ? (
         <p className={styles.empty}>No rejections in the last 5 cycles.</p>
       ) : (
-        <div className={styles.recentList}>
-          {items.map((it) => (
-            <article key={it.stem} className={styles.recentRow}>
-              <h3 className={styles.recentTitle}>{it.title || it.stem}</h3>
-              <div className={styles.recentMeta}>
-                {it.type} · {it.source_kinds.join(', ') || '—'} · {it.rejected_by} ·{' '}
-                {formatIsoDate(it.rejected_at)}
-              </div>
-              {it.feedback_excerpt ? (
-                <p className={styles.recentQuote}>{it.feedback_excerpt}</p>
-              ) : (
-                <p className={styles.recentNoFeedback}>no feedback recorded.</p>
-              )}
-            </article>
-          ))}
-        </div>
+        <>
+          {showChips ? (
+            <div
+              className={styles.recentChips}
+              role="tablist"
+              aria-label="Filter recent rejections by type"
+            >
+              <RecentChip
+                label="All"
+                value={ALL_TYPES_FILTER}
+                count={count}
+                active={filter === ALL_TYPES_FILTER}
+                onSelect={setFilter}
+              />
+              {typesPresent.map((t) => (
+                <RecentChip
+                  key={t}
+                  label={capitalize(t)}
+                  value={t}
+                  count={countsByType[t] ?? 0}
+                  active={filter === t}
+                  onSelect={setFilter}
+                />
+              ))}
+            </div>
+          ) : null}
+          {filteredItems.length === 0 ? (
+            <p className={styles.empty}>No rejections of this type in view.</p>
+          ) : (
+            <div className={styles.recentList}>
+              {filteredItems.map((it) => (
+                <article key={it.stem} className={styles.recentRow}>
+                  <h3 className={styles.recentTitle}>{it.title || it.stem}</h3>
+                  <div className={styles.recentMeta}>
+                    {it.type} · {it.source_kinds.join(', ') || '—'} · {it.rejected_by} ·{' '}
+                    {formatIsoDate(it.rejected_at)}
+                  </div>
+                  {it.feedback_excerpt ? (
+                    <p className={styles.recentQuote}>{it.feedback_excerpt}</p>
+                  ) : (
+                    <p className={styles.recentNoFeedback}>no feedback recorded.</p>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </section>
+  );
+}
+
+interface RecentChipProps {
+  label: string;
+  value: string;
+  count: number;
+  active: boolean;
+  onSelect: (value: string) => void;
+}
+
+function RecentChip({ label, value, count, active, onSelect }: RecentChipProps) {
+  const cls = active
+    ? `${styles.recentChip} ${styles.recentChipActive}`
+    : styles.recentChip;
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      className={cls}
+      onClick={() => onSelect(value)}
+    >
+      <span>{label}</span>
+      <span className={styles.recentChipCount}>{count}</span>
+    </button>
   );
 }
