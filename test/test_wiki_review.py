@@ -452,3 +452,30 @@ def test_ttl_sweep_rejects_old_not_processed(tmp_path, capsys):
     assert "Auto-rejected" in moved.read_text()
     assert young.exists()
     assert pending.exists()
+
+
+def test_main_dispatch_list(tmp_path, capsys, monkeypatch):
+    from kb_mcp.cli import wiki_review
+
+    wiki = tmp_path / "wiki"
+    _make_page(wiki, "entity", "A", status="pending_for_approve")
+
+    # Force REPO_ROOT to our tmp tree.
+    monkeypatch.setattr(
+        "kb_mcp.cli.wiki_review._store.WIKI_DIR", wiki
+    )
+    monkeypatch.setattr(
+        "kb_mcp.cli.wiki_review._store.REJECTED_DIR", tmp_path / "rejected"
+    )
+
+    rc = wiki_review.main(["list"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "A" in out
+
+
+def test_main_unknown_command(capsys):
+    from kb_mcp.cli import wiki_review
+
+    rc = wiki_review.main(["bogus"])
+    assert rc != 0
