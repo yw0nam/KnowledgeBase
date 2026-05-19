@@ -86,7 +86,12 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.cmd == "promote":
-        return _commands.cmd_promote(_store.WIKI_DIR, args.stem)
+        return _commands.cmd_promote(
+            wiki_dir=_store.WIKI_DIR,
+            data_dir=_store.WIKI_DIR.parent,
+            stem=args.stem,
+            today=today,
+        )
 
     if args.cmd == "approve":
         feedback = (
@@ -94,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return _commands.cmd_approve(
             wiki_dir=_store.WIKI_DIR,
+            data_dir=_store.WIKI_DIR.parent,
             stem=args.stem,
             feedback=feedback,
             today=today,

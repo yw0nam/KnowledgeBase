@@ -12,7 +12,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from kb_mcp.cli.wiki_review import _feedback, _store
+from kb_mcp.cli.wiki_review import _feedback, _log, _store
 
 
 def _err(msg: str) -> None:
@@ -31,7 +31,7 @@ def _resolve_or_print(wiki_dir: Path, stem: str) -> Path | None:
         return None
 
 
-def cmd_promote(wiki_dir: Path, stem: str) -> int:
+def cmd_promote(wiki_dir: Path, data_dir: Path, stem: str, today: str) -> int:
     """not_processed → pending_for_approve."""
     path = _resolve_or_print(wiki_dir, stem)
     if path is None:
@@ -41,12 +41,19 @@ def cmd_promote(wiki_dir: Path, stem: str) -> int:
         _err(f"promote only from not_processed (current: {current!r})")
         return 1
     _store.set_frontmatter_field(path, "review_status", "pending_for_approve")
+    page_type = _store.get_frontmatter_field(path, "type") or ""
+    _log.append_action(data_dir / "log.md", today, "promote", stem, page_type)
     print(f"✓ Promoted: {path.relative_to(wiki_dir)}")
     return 0
 
 
 def cmd_approve(
-    wiki_dir: Path, stem: str, feedback: str, today: str, now_iso: str
+    wiki_dir: Path,
+    data_dir: Path,
+    stem: str,
+    feedback: str,
+    today: str,
+    now_iso: str,
 ) -> int:
     """pending_for_approve → approved.
 
@@ -67,6 +74,8 @@ def cmd_approve(
     _store.set_frontmatter_field(path, "review_status", "approved")
     _store.add_frontmatter_lines(path, [f'approved_at: "{now_iso}"'])
     _feedback.append_feedback_line(path, today, "Approved", feedback)
+    page_type = _store.get_frontmatter_field(path, "type") or ""
+    _log.append_action(data_dir / "log.md", today, "approve", stem, page_type)
     print(f"✓ Approved: {path.relative_to(wiki_dir)}")
     return 0
 
@@ -117,6 +126,7 @@ def cmd_reject(
         return 1
 
     dest.parent.mkdir(parents=True, exist_ok=True)
+    page_type = _store.get_frontmatter_field(path, "type") or ""
 
     # Step 1: update frontmatter + body BEFORE the move so git tracks the
     # rename + modification as a single change.
@@ -143,6 +153,9 @@ def cmd_reject(
         _err(f"git mv failed: {exc.stderr.strip()}")
         return 1
 
+    _log.append_action(
+        data_dir / "log.md", today, "reject", stem, page_type, rejected_by
+    )
     print(f"✓ Rejected: {rel} → {dest.relative_to(data_dir)}")
     return 0
 

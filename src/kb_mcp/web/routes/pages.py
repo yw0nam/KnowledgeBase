@@ -66,6 +66,7 @@ def approve_page(stem: str, body: DecisionBody, request: Request) -> DecisionRes
     rc, _, err = _run_capturing_output(
         _commands.cmd_approve,
         wiki_dir=cfg.wiki_dir,
+        data_dir=cfg.data_dir,
         stem=stem,
         feedback=body.feedback,
         today=_today_kst(),
