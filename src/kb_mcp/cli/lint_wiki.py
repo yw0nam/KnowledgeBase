@@ -16,7 +16,7 @@ Checks:
  10. Orphan pages (no inbound links from other wiki pages)
  11. Subject _index.md ↔ disk sync (listed pages exist, on-disk pages listed)
  11b. Global INDEX.md sync (matches output of ``kb-wiki-index``)
- 12. Improvement enum validation (kind, observed_at, domain, severity, status,
+ 12. Improvement enum validation (kind, observed_at, domain, severity, issue_status,
      related path resolution)
  13. Checklist items must use markdown task-list syntax under ``## Items``
  14. Raw frontmatter required fields (source_url, type, captured_at,
@@ -60,9 +60,9 @@ from kb_mcp.cli.wiki.utils import (
 )
 from kb_mcp.cli.wiki.validators import (
     IMPROVEMENT_DOMAIN_VALUES,
+    IMPROVEMENT_ISSUE_STATUS_VALUES,
     IMPROVEMENT_KIND_VALUES,
     IMPROVEMENT_SEVERITY_VALUES,
-    IMPROVEMENT_STATUS_VALUES,
     ISO_DATE_RE,
     _validate_checklist_items,
     _validate_improvement_fm,
@@ -73,9 +73,9 @@ __all__ = [
     "CAPTURED_AT_MTIME_TOLERANCE_SEC",
     "COLLISION_EXEMPT_STEMS",
     "IMPROVEMENT_DOMAIN_VALUES",
+    "IMPROVEMENT_ISSUE_STATUS_VALUES",
     "IMPROVEMENT_KIND_VALUES",
     "IMPROVEMENT_SEVERITY_VALUES",
-    "IMPROVEMENT_STATUS_VALUES",
     "ISO_DATE_RE",
     "LintResult",
     "RAW_DIR",
@@ -121,7 +121,7 @@ REQUIRED_FM_FIELDS = {
         "observed_at",
         "domain",
         "severity",
-        "status",
+        "issue_status",
         "related",
         "created",
         "updated",

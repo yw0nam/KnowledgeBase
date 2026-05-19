@@ -520,7 +520,7 @@ def _improvement_fm(
     observed_at: str = "2026-05-08",
     domain: str = "cost",
     severity: str = "high",
-    status: str = "open",
+    issue_status: str = "open",
     related: list[str] | None = None,
 ) -> str:
     related = related if related is not None else []
@@ -535,7 +535,8 @@ def _improvement_fm(
         f'observed_at: "{observed_at}"\n'
         f"domain: {domain}\n"
         f"severity: {severity}\n"
-        f"status: {status}\n"
+        f"issue_status: {issue_status}\n"
+        "review_status: approved\n"
         f"related: {related_yaml}\n"
         'created: "2026-05-08"\n'
         'updated: "2026-05-08"\n'
@@ -643,7 +644,7 @@ def test_improvement_invalid_status_errors(lint_mod, tmp_path):
     write_page(
         wiki / "improvements" / "2026-05" / "BadStatus.md",
         body="# Title\n\n" + PADDING_BODY,
-        fm=_improvement_fm(status="paused"),
+        fm=_improvement_fm(issue_status="paused"),
     )
 
     result = lint_mod.LintResult()
@@ -1099,3 +1100,22 @@ def test_dead_link_across_categories_errors(lint_mod, tmp_path):
 
     dead = [e for e in result.errors if "Real.md" in e and "dead link [[Ghost]]" in e]
     assert len(dead) == 1, f"expected one dead-link error, got: {result.errors}"
+
+
+def test_improvement_issue_status_enum_renamed(lint_mod):
+    """IMPROVEMENT_STATUS_VALUES is renamed to IMPROVEMENT_ISSUE_STATUS_VALUES."""
+    from kb_mcp.cli.wiki import validators
+
+    assert hasattr(validators, "IMPROVEMENT_ISSUE_STATUS_VALUES")
+    assert validators.IMPROVEMENT_ISSUE_STATUS_VALUES == frozenset(
+        {"open", "acknowledged", "resolved", "wontfix"}
+    )
+    assert not hasattr(validators, "IMPROVEMENT_STATUS_VALUES")
+
+
+def test_review_status_values_enum(lint_mod):
+    from kb_mcp.cli.wiki import validators
+
+    assert validators.REVIEW_STATUS_VALUES == frozenset(
+        {"not_processed", "pending_for_approve", "approved"}
+    )
