@@ -251,6 +251,48 @@
   text-overflow: ellipsis;
 }
 
+/* Used when the rate row's label is a clickable drilldown target. The
+   button strips browser chrome and inherits typography; the active
+   visual cue lives on the parent .rateRow via .rateRowActive so the
+   whole row reads as the selected unit. */
+.rateLabelButton {
+  display: block;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.rateLabelButton:hover {
+  color: var(--color-ink);
+}
+
+.rateLabelButton:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Active drilldown row: bold the label and add a thin Signal left
+   border via inset box-shadow (1.5px max per design language — no
+   side-stripe widths above that). Padding-left compensates so text
+   doesn't shift when the active state toggles. */
+.rateRowActive {
+  box-shadow: inset 1.5px 0 0 var(--color-signal);
+  padding-left: var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+}
+
+.rateRowActive .rateLabel,
+.rateRowActive .rateLabelButton {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
 .rateTrack {
   height: 6px;
   background: var(--color-hairline);
@@ -333,6 +375,68 @@
 }
 
 /* ── Recent rejections ───────────────────────────────────────── */
+
+/* Stacks the two chip rows (type + source) with a small gutter so the
+   operator can distinguish axes at a glance. The .recentChipGroupLabel
+   on each row uses the same letter-tracked muted treatment as
+   .windowLabel so the dashboard's UPPERCASE label vocabulary stays
+   consistent across the page. */
+.recentChipGroups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.recentChipGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.recentChipGroupLabel {
+  font: var(--type-label);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-ink-dim);
+}
+
+.recentChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.recentChip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.recentChip:hover {
+  color: var(--color-ink);
+}
+
+.recentChipActive {
+  background: color-mix(in oklch, var(--color-signal) 14%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--color-signal);
+  color: var(--color-ink);
+}
+
+.recentChipCount {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-dim);
+}
+
+.recentChipActive .recentChipCount {
+  color: var(--color-ink);
+}
 
 .recentList {
   display: flex;
@@ -472,14 +576,49 @@
   min-width: 8rem;
 }
 
-.matrixCell {
+.matrixTable td.matrixCell {
   font: var(--type-body);
   color: var(--color-ink);
   text-align: left;
+  padding: 0;
 }
 
 .matrixCell:hover {
   background: var(--color-rail);
+}
+
+/* Row whose type matches the active Recent Rejections chip. Background
+   tint is intentionally subtler than .matrixCellButton:focus-visible so
+   focus state stays the louder cue when the operator is keyboard-driving. */
+.matrixCellActive {
+  background: color-mix(in oklch, var(--color-signal) 8%, transparent);
+}
+
+.matrixRowHeaderActive {
+  color: var(--color-ink);
+  box-shadow: inset 2px 0 0 var(--color-signal);
+}
+
+/* Full-bleed button wrapper so the whole cell is the click target without
+   nesting another box. Padding moves from the td onto the button so the
+   focus ring tracks the cell's visible bounds. */
+.matrixCellButton {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.matrixCellButton:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: -2px;
 }
 
 .matrixRate {
@@ -495,9 +634,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-.matrixEmpty {
+.matrixTable td.matrixEmpty {
   color: var(--color-ink-dim);
   text-align: center;
+  padding: var(--space-2) var(--space-3);
 }
 
 /* ── Activity table (under chart) ────────────────────────────── */
