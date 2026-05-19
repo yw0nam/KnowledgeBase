@@ -7,9 +7,10 @@ import re
 import subprocess
 from pathlib import Path
 
+from kb_mcp import REPO_ROOT as BASEDIR
+from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
 from kb_mcp.cli.wiki.utils import _find_relative, _parse_yaml_frontmatter, extract_links
 
-BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
 WIKI_DIR = BASEDIR / "data" / "wiki"
 RAW_DIR = BASEDIR / "data" / "raw"
 
@@ -101,6 +102,24 @@ def check_index_sync(result, wiki_dir: Path = None) -> None:
                 page_rel,
                 f"page not listed in {subject}/_index.md",
             )
+
+
+def check_global_index_sync(result, wiki_dir: Path = None) -> None:
+    """Assert ``data/wiki/INDEX.md`` matches what ``kb-wiki-index`` would emit.
+
+    Treats INDEX.md as a checked-in build artifact. Missing or stale content
+    is reported as ERROR — re-run ``kb-wiki-index`` to fix.
+    """
+    wiki_dir = wiki_dir if wiki_dir is not None else WIKI_DIR
+    if not wiki_dir.exists():
+        return
+    index_path = wiki_dir / INDEX_FILENAME
+    expected = build_index(wiki_dir)
+    if not index_path.exists():
+        result.error(INDEX_FILENAME, "missing — run `kb-wiki-index` to generate")
+        return
+    if index_path.read_text() != expected:
+        result.error(INDEX_FILENAME, "stale — run `kb-wiki-index` to regenerate")
 
 
 def _get_modified_raw_files(data_dir: Path) -> set[Path] | None:

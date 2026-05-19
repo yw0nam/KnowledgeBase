@@ -25,6 +25,7 @@ from pathlib import Path
 
 import yaml
 
+from kb_mcp import REPO_ROOT as BASEDIR
 from kb_mcp.cli.handoff.validators import (
     CANONICAL_BODY_SECTIONS as CANONICAL_BODY_SECTIONS,
     FINAL_FILENAME_RE,
@@ -42,7 +43,6 @@ from kb_mcp.cli.handoff.validators import (
     _validate_readme,
 )
 
-BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
 HANDOFFS_DIR = BASEDIR / "data" / "handoffs"
 
 

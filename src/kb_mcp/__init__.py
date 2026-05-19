@@ -1,1 +1,7 @@
-"""kb_mcp — MCP server exposing KnowledgeBase graph search + ingest."""
+"""kb_mcp — KnowledgeBase lint and reporting CLI tooling."""
+
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+__all__ = ["REPO_ROOT"]

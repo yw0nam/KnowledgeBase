@@ -10,12 +10,11 @@ KnowledgeBase is a memory-workflow system (v0) that captures knowledge from mult
 
 ```
 KnowledgeBase/                    # Outer repo: code, lint, templates, docs
-├── src/kb_mcp/                   # MCP server + CLI tools
-│   ├── cli/
-│   │   ├── ingest.py             # kb-mcp ingest command
-│   │   ├── lint_wiki.py          # kb-lint-wiki command
-│   │   └── lint_handoff.py       # kb-lint-handoff command
-│   └── mcp_server.py
+├── src/kb_mcp/                   # CLI tools (lint, daily reports)
+│   └── cli/
+│       ├── lint_wiki.py          # kb-lint-wiki command
+│       ├── lint_handoff.py       # kb-lint-handoff command
+│       └── wiki_index.py         # kb-wiki-index command (regen wiki/INDEX.md)
 ├── src/CLAUDE.md                 # CLAUDE.md file for src/
 ├── scripts/
 │   └── ingest-github.sh          # GitHub source collection
@@ -112,7 +111,7 @@ Never commit `data/` contents to the outer repository.
 - [Frontmatter Conventions](docs/reference/frontmatter.md) — Raw, Wiki, Handoff frontmatter schemas
 - [Wiki Categories](docs/reference/wiki-categories.md) — 7 categories, naming, wikilinks, tags
 - [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion, frontmatter
-- [Commands](docs/reference/commands.md) — kb-mcp, kb-lint-wiki, kb-lint-handoff
+- [Commands](docs/reference/commands.md) — kb-lint-wiki, kb-lint-handoff, kb-wiki-index
 
 ## Reference
 

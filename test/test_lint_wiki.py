@@ -168,6 +168,8 @@ def test_index_sync_clean(lint_mod, tmp_path):
 
 def test_clean_minimal_wiki_zero_errors(lint_mod, tmp_path):
     """A minimal but well-formed wiki triggers no errors at all."""
+    from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+
     wiki = make_wiki_root(tmp_path)
     long_body = (
         "This is a real page with enough content to clear the stub threshold. "
@@ -178,6 +180,7 @@ def test_clean_minimal_wiki_zero_errors(lint_mod, tmp_path):
         wiki / "entities" / "Subj" / "_index.md",
         "# Subj\n\n## Pages\n\n- [[Alpha]]\n",
     )
+    (wiki / INDEX_FILENAME).write_text(build_index(wiki))
 
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki)
@@ -1010,3 +1013,89 @@ def test_get_modified_raw_files_classifies_status_codes(lint_mod, tmp_path):
     assert "raw/github/issues/deleted.md" in rels
     assert "raw/github/issues/untracked.md" not in rels
     assert "raw/github/issues/added.md" not in rels
+
+
+# ── Global INDEX.md sync + cross-category wikilink integrity ────────
+
+
+def _seed_wiki_with_page(wiki: Path) -> None:
+    long_body = "This page has plenty of content. " * 10
+    write_page(wiki / "concepts" / "Foo.md", body=long_body)
+
+
+def test_global_index_missing_errors(lint_mod, tmp_path):
+    """No INDEX.md at wiki root → lint emits a single targeted ERROR."""
+    wiki = make_wiki_root(tmp_path)
+    _seed_wiki_with_page(wiki)
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    idx_errors = [e for e in result.errors if "INDEX.md" in e and "missing" in e]
+    assert len(idx_errors) == 1, f"expected one missing-INDEX error, got: {result.errors}"
+
+
+def test_global_index_in_sync_passes(lint_mod, tmp_path):
+    """INDEX.md matching build_index() output → no sync errors."""
+    from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+
+    wiki = make_wiki_root(tmp_path)
+    _seed_wiki_with_page(wiki)
+    (wiki / INDEX_FILENAME).write_text(build_index(wiki))
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    idx_errors = [e for e in result.errors if "INDEX.md" in e]
+    assert idx_errors == [], f"unexpected INDEX errors: {idx_errors}"
+
+
+def test_global_index_stale_errors(lint_mod, tmp_path):
+    """INDEX.md with arbitrary content → lint reports stale, not missing."""
+    from kb_mcp.cli.wiki.index import INDEX_FILENAME
+
+    wiki = make_wiki_root(tmp_path)
+    _seed_wiki_with_page(wiki)
+    (wiki / INDEX_FILENAME).write_text("---\ntype: index\ncreated: 2026-05-01\nupdated: 2026-05-01\n---\n\n# stale\n")
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    stale = [e for e in result.errors if "INDEX.md" in e and "stale" in e]
+    assert len(stale) == 1, f"expected stale-INDEX error, got: {result.errors}"
+
+
+def test_global_index_does_not_mask_orphans(lint_mod, tmp_path):
+    """INDEX.md links to every page, but orphan detection must still surface
+    pages with no contextual inbound links."""
+    from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+
+    wiki = make_wiki_root(tmp_path)
+    _seed_wiki_with_page(wiki)
+    (wiki / INDEX_FILENAME).write_text(build_index(wiki))
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    orphans = [w for w in result.warnings if "Foo.md" in w and "orphan" in w]
+    assert len(orphans) == 1, (
+        "INDEX.md must not count as inbound for orphan detection: "
+        f"{result.warnings}"
+    )
+
+
+def test_dead_link_across_categories_errors(lint_mod, tmp_path):
+    """A wikilink in one category pointing at a non-existent stem in another
+    must be flagged as ERROR — the cross-category integrity gate."""
+    from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+
+    wiki = make_wiki_root(tmp_path)
+    body = "This page has plenty of content. " * 5 + " It references [[Ghost]] in passing."
+    write_page(wiki / "concepts" / "Real.md", body=body)
+    (wiki / INDEX_FILENAME).write_text(build_index(wiki))
+
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+
+    dead = [e for e in result.errors if "Real.md" in e and "dead link [[Ghost]]" in e]
+    assert len(dead) == 1, f"expected one dead-link error, got: {result.errors}"

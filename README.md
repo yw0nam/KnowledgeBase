@@ -11,7 +11,7 @@ KnowledgeBase separates code from data:
 
 ```
 KnowledgeBase/
-├── src/kb_mcp/                   MCP server + CLI tools
+├── src/kb_mcp/                   CLI tools (lint, daily reports)
 ├── scripts/
 │   └── ingest-github.sh          GitHub source collection
 ├── templates/                    Frontmatter + handoff templates

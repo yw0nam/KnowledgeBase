@@ -10,7 +10,7 @@
 <!-- Check all that apply. -->
 
 - [ ] `scripts/` (ingest-github.sh / kb_update.sh / lint.sh)
-- [ ] `src/kb_mcp/` (core / tools / server)
+- [ ] `src/kb_mcp/` (CLI tools)
 - [ ] `test/`
 - [ ] `.github/` (CI / templates)
 - [ ] `CLAUDE.md` / docs

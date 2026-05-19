@@ -1,21 +1,13 @@
 # Commands
 
-Updated: 2026-05-08
+Updated: 2026-05-18
 
 ## 1. Synopsis
 
-- **Purpose**: KnowledgeBase CLI commands for running the MCP server and validating wiki/handoff content.
-- **I/O**: Shell command → MCP server process / lint report (exit 0 = pass, non-zero = fail).
+- **Purpose**: KnowledgeBase CLI commands for validating wiki/handoff content and generating reports.
+- **I/O**: Shell command → lint report (exit 0 = pass, non-zero = fail).
 
 ## 2. Core Logic
-
-### kb-mcp
-
-MCP server. Exposes tools for ingest and other operations.
-
-```bash
-kb-mcp
-```
 
 ### kb-lint-wiki
 
@@ -35,6 +27,16 @@ Validate handoff documents.
 kb-lint-handoff
 ```
 
+### kb-wiki-index
+
+Regenerate `data/wiki/INDEX.md`, the auto-built table of contents grouping all
+wiki pages by category. Idempotent — running on an unchanged wiki rewrites
+nothing. `kb-lint-wiki` will ERROR if INDEX.md is stale.
+
+```bash
+kb-wiki-index
+```
+
 ## 3. Usage
 
 Run the typical workflow in order:
@@ -45,7 +47,10 @@ Run the typical workflow in order:
 
 # Step 2: Write wiki pages (LLM step, no command)
 
-# Step 3: Validate wiki
+# Step 3a: Refresh global TOC (after any wiki page change)
+kb-wiki-index
+
+# Step 3b: Validate wiki
 kb-lint-wiki
 
 # Step 4: Validate handoffs
@@ -75,10 +80,9 @@ A raw file was modified. Revert the raw file to its original state.
 **kb-lint-handoff fails on missing frontmatter field**
 Add the missing field to the handoff document frontmatter.
 
-**kb-mcp fails to start**
-Check that `uv sync` was run and the entry point is on PATH.
-
 ### B. PatchNote
 
+- 2026-05-18: Added kb-wiki-index — generates `data/wiki/INDEX.md`. Enforced by `kb-lint-wiki`.
+- 2026-05-18: Removed kb-mcp (MCP server retired in favor of direct CLI usage by Claude Code agents).
 - 2026-05-18: Added pointer to periodic memory workflow for cron agents.
 - 2026-05-08: Initial split from CLAUDE.md and restructured to follow docs/CLAUDE.md Standard Document Structure.

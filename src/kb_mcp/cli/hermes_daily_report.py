@@ -199,6 +199,11 @@ def main(argv: list[str] | None = None) -> int:
     for key, path in outputs.items():
         print(f"- {key}: {path}")
     if args.lint:
+        index_result = subprocess.run(
+            ["uv", "run", "kb-wiki-index"], cwd=args.base_dir, text=True
+        )
+        if index_result.returncode != 0:
+            return index_result.returncode
         result = subprocess.run(
             ["uv", "run", "kb-lint-wiki"], cwd=args.base_dir, text=True
         )

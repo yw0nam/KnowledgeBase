@@ -15,6 +15,7 @@ Checks:
   9. Stub pages (body length below STUB_THRESHOLD_CHARS)
  10. Orphan pages (no inbound links from other wiki pages)
  11. Subject _index.md ↔ disk sync (listed pages exist, on-disk pages listed)
+ 11b. Global INDEX.md sync (matches output of ``kb-wiki-index``)
  12. Improvement enum validation (kind, observed_at, domain, severity, status,
      related path resolution)
  13. Checklist items must use markdown task-list syntax under ``## Items``
@@ -36,16 +37,19 @@ import re
 import sys
 from pathlib import Path
 
+from kb_mcp import REPO_ROOT as BASEDIR
 from kb_mcp.cli.wiki.checks import (
     CAPTURED_AT_MTIME_TOLERANCE_SEC,
     RAW_FM_REQUIRED,
     RAW_INGEST_TOPLEVEL,
+    check_global_index_sync,
     check_index_sync,
     check_raw_captured_at_mtime,
     check_raw_frontmatter,
     check_raw_immutability,
     _get_modified_raw_files,
 )
+from kb_mcp.cli.wiki.index import INDEX_STEM
 from kb_mcp.cli.wiki.utils import (
     _find_relative,
     _parse_yaml_frontmatter,
@@ -85,6 +89,7 @@ __all__ = [
     "_parse_yaml_frontmatter",
     "_validate_checklist_items",
     "_validate_improvement_fm",
+    "check_global_index_sync",
     "check_index_sync",
     "check_raw_captured_at_mtime",
     "check_raw_frontmatter",
@@ -97,7 +102,6 @@ __all__ = [
     "parse_frontmatter",
 ]
 
-BASEDIR = Path(__file__).resolve().parent.parent.parent.parent
 WIKI_DIR = BASEDIR / "data" / "wiki"
 RAW_DIR = BASEDIR / "data" / "raw"
 
@@ -130,7 +134,7 @@ REQUIRED_FM_FIELDS = {
     "index": ["type", "created", "updated"],
 }
 
-COLLISION_EXEMPT_STEMS = frozenset({"_index"})
+COLLISION_EXEMPT_STEMS = frozenset({"_index", INDEX_STEM})
 
 
 class LintResult:
@@ -213,9 +217,14 @@ def lint(
         )
 
         # ── 1. Dead wikilinks ───────────────────────────────────────────
+        # INDEX.md is the auto-generated TOC: it links to every page, so
+        # crediting it as an inbound source would mask real orphan pages.
+        # Dead-link / .md-extension / self-link checks still apply to it.
+        is_global_index = stem == INDEX_STEM
         for link in links:
             if link in all_stems:
-                inbound[link].add(stem)
+                if not is_global_index:
+                    inbound[link].add(stem)
             else:
                 result.error(rel, f"dead link [[{link}]]")
 
@@ -314,12 +323,12 @@ def lint(
                 )
 
     # ── 10. Orphan pages ────────────────────────────────────────────────
-    # Subject hubs (`_index.md`) are not link targets by convention
-    # (files starting with `_` are excluded from the link index by
-    # convention), so they cannot accumulate inbound links and must be
-    # excluded from orphan detection.
+    # Subject hubs (`_index.md`) and the global INDEX.md are not link targets
+    # by convention (subject hubs start with `_`; INDEX.md is the auto-TOC),
+    # so they cannot accumulate inbound links and must be excluded from
+    # orphan detection.
     for stem in all_stems:
-        if stem in ("index", "_index"):
+        if stem in ("index", "_index", INDEX_STEM):
             continue
         if not inbound.get(stem):
             result.warn(
@@ -328,6 +337,9 @@ def lint(
 
     # ── 11. Subject _index.md ↔ disk sync ───────────────────────────────
     check_index_sync(result, wiki_dir)
+
+    # ── 11b. Global INDEX.md sync ───────────────────────────────────────
+    check_global_index_sync(result, wiki_dir)
 
     # ── 12. Raw frontmatter required fields (always-on) ─────────────────
     check_raw_frontmatter(result, raw_dir)
