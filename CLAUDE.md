@@ -125,3 +125,10 @@ Never commit `data/` contents to the outer repository.
 - [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion, frontmatter
 - [Wiki Approval Workflow](docs/workflows/wiki-approval-workflow.md) — review_status lifecycle, CLI, TTL cron
 - [Commands](docs/reference/commands.md) — kb-lint-wiki, kb-lint-handoff, kb-wiki-index
+
+## Linting
+
+Use lint for src code before commit
+```bash
+./scripts/lint.sh
+```

@@ -19,9 +19,7 @@ from pathlib import Path
 HEADER = "## User Feedback"
 
 
-def append_feedback_line(
-    path: Path, date_str: str, label: str, raw_input: str
-) -> None:
+def append_feedback_line(path: Path, date_str: str, label: str, raw_input: str) -> None:
     """Append a feedback line of the form ``YYYY-MM-DD-Label: <text>``.
 
     If raw_input is empty/whitespace, the file is not modified.

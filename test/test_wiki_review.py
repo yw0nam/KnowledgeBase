@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -24,9 +25,15 @@ def test_resolve_stem_unique(tmp_path):
     wiki = tmp_path / "wiki"
     _write_page(
         wiki / "entities" / "Subj" / "2026-05" / "Foo.md",
-        {"type": "entity", "review_status": "not_processed",
-         "created": '"2026-05-01"', "updated": '"2026-05-01"',
-         "sources": "[]", "aliases": "[]", "tags": "[]"},
+        {
+            "type": "entity",
+            "review_status": "not_processed",
+            "created": '"2026-05-01"',
+            "updated": '"2026-05-01"',
+            "sources": "[]",
+            "aliases": "[]",
+            "tags": "[]",
+        },
     )
     assert _store.resolve_stem(wiki, "Foo").name == "Foo.md"
 
@@ -35,15 +42,27 @@ def test_resolve_stem_collision_errors(tmp_path):
     wiki = tmp_path / "wiki"
     _write_page(
         wiki / "entities" / "A" / "Foo.md",
-        {"type": "entity", "review_status": "not_processed",
-         "created": '"2026-05-01"', "updated": '"2026-05-01"',
-         "sources": "[]", "aliases": "[]", "tags": "[]"},
+        {
+            "type": "entity",
+            "review_status": "not_processed",
+            "created": '"2026-05-01"',
+            "updated": '"2026-05-01"',
+            "sources": "[]",
+            "aliases": "[]",
+            "tags": "[]",
+        },
     )
     _write_page(
         wiki / "entities" / "B" / "Foo.md",
-        {"type": "entity", "review_status": "not_processed",
-         "created": '"2026-05-01"', "updated": '"2026-05-01"',
-         "sources": "[]", "aliases": "[]", "tags": "[]"},
+        {
+            "type": "entity",
+            "review_status": "not_processed",
+            "created": '"2026-05-01"',
+            "updated": '"2026-05-01"',
+            "sources": "[]",
+            "aliases": "[]",
+            "tags": "[]",
+        },
     )
     with pytest.raises(_store.StemCollision) as exc:
         _store.resolve_stem(wiki, "Foo")
@@ -64,7 +83,7 @@ def test_set_field_updates_existing(tmp_path):
         "---\n"
         "type: entity\n"
         "review_status: not_processed\n"
-        "created: \"2026-05-19\"\n"
+        'created: "2026-05-19"\n'
         "---\n"
         "\nBody.\n"
     )
@@ -77,13 +96,7 @@ def test_set_field_updates_existing(tmp_path):
 
 def test_set_field_appends_when_missing(tmp_path):
     p = tmp_path / "page.md"
-    p.write_text(
-        "---\n"
-        "type: entity\n"
-        "created: \"2026-05-19\"\n"
-        "---\n"
-        "\nBody.\n"
-    )
+    p.write_text("---\n" "type: entity\n" 'created: "2026-05-19"\n' "---\n" "\nBody.\n")
     _store.set_frontmatter_field(p, "review_status", "pending_for_approve")
     text = p.read_text()
     assert "review_status: pending_for_approve\n" in text
@@ -99,7 +112,7 @@ def test_get_field_reads_value(tmp_path):
         "---\n"
         "type: entity\n"
         "review_status: approved\n"
-        "created: \"2026-05-19\"\n"
+        'created: "2026-05-19"\n'
         "---\n"
         "\nBody.\n"
     )
@@ -112,9 +125,7 @@ def test_append_feedback_creates_section(tmp_path):
     from kb_mcp.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
-    p.write_text(
-        "---\ntype: entity\n---\n\n# Title\n\nSome body.\n"
-    )
+    p.write_text("---\ntype: entity\n---\n\n# Title\n\nSome body.\n")
     _feedback.append_feedback_line(p, "2026-05-19", "Approved", "Looks good.")
     text = p.read_text()
     assert "## User Feedback" in text
@@ -163,8 +174,14 @@ def test_append_feedback_strips_input_whitespace(tmp_path):
     assert "2026-05-19-Rejected: trim me" in text
 
 
-def _make_page(wiki: Path, type_: str, stem: str, status: str = "not_processed",
-                created: str = "2026-05-19", subj: str = "subj") -> Path:
+def _make_page(
+    wiki: Path,
+    type_: str,
+    stem: str,
+    status: str = "not_processed",
+    created: str = "2026-05-19",
+    subj: str = "subj",
+) -> Path:
     """Helper to write a syntactically valid wiki page."""
     if type_ == "entity":
         path = wiki / "entities" / subj / "2026-05" / f"{stem}.md"
@@ -177,7 +194,7 @@ def _make_page(wiki: Path, type_: str, stem: str, status: str = "not_processed",
     if type_ == "improvement":
         extra = (
             "kind: improvement\n"
-            "observed_at: \"2026-05-19\"\n"
+            'observed_at: "2026-05-19"\n'
             "domain: dx\n"
             "severity: low\n"
             "issue_status: open\n"
@@ -188,8 +205,8 @@ def _make_page(wiki: Path, type_: str, stem: str, status: str = "not_processed",
         f"type: {type_}\n"
         f"review_status: {status}\n"
         f"{extra}"
-        f"created: \"{created}\"\n"
-        f"updated: \"{created}\"\n"
+        f'created: "{created}"\n'
+        f'updated: "{created}"\n'
         "sources: []\n"
         "tags: []\n"
         "---\n"
@@ -287,22 +304,30 @@ def test_approve_errors_on_already_approved(tmp_path, capsys):
     assert "already approved" in capsys.readouterr().err
 
 
-import subprocess
-
-
 def _init_data_repo(data_dir: Path) -> None:
     """Init a real git repo at data_dir for git mv tests."""
     data_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=data_dir, check=True)
     subprocess.run(
-        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
-         "commit", "--allow-empty", "-q", "-m", "init"],
-        cwd=data_dir, check=True,
+        [
+            "git",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "--allow-empty",
+            "-q",
+            "-m",
+            "init",
+        ],
+        cwd=data_dir,
+        check=True,
     )
 
 
 def test_reject_moves_file_to_rejected_tree(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb_mcp.cli.wiki_review import _commands
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -311,15 +336,30 @@ def test_reject_moves_file_to_rejected_tree(tmp_path):
     page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
     subprocess.run(["git", "add", "."], cwd=data, check=True)
     subprocess.run(
-        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
-         "commit", "-q", "-m", "add Foo"],
-        cwd=data, check=True,
+        [
+            "git",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "add Foo",
+        ],
+        cwd=data,
+        check=True,
     )
 
     rc = _commands.cmd_reject(
-        wiki_dir=wiki, rejected_dir=rejected, data_dir=data,
-        stem="Foo", feedback="Bad sources.", today="2026-05-19",
-        now_iso="2026-05-19T14:30:00+09:00", rejected_by="user",
+        wiki_dir=wiki,
+        rejected_dir=rejected,
+        data_dir=data,
+        stem="Foo",
+        feedback="Bad sources.",
+        today="2026-05-19",
+        now_iso="2026-05-19T14:30:00+09:00",
+        rejected_by="user",
     )
     assert rc == 0
     assert not page.exists()
@@ -340,9 +380,14 @@ def test_reject_errors_on_not_pending(tmp_path, capsys):
     wiki = data / "wiki"
     _make_page(wiki, "entity", "Foo", status="not_processed")
     rc = _commands.cmd_reject(
-        wiki_dir=wiki, rejected_dir=data / "rejected", data_dir=data,
-        stem="Foo", feedback="x", today="2026-05-19",
-        now_iso="2026-05-19T14:30:00+09:00", rejected_by="user",
+        wiki_dir=wiki,
+        rejected_dir=data / "rejected",
+        data_dir=data,
+        stem="Foo",
+        feedback="x",
+        today="2026-05-19",
+        now_iso="2026-05-19T14:30:00+09:00",
+        rejected_by="user",
     )
     assert rc == 1
     assert "must be pending_for_approve" in capsys.readouterr().err
@@ -362,9 +407,14 @@ def test_reject_collision_errors(tmp_path, capsys):
     dest.write_text("already here")
 
     rc = _commands.cmd_reject(
-        wiki_dir=wiki, rejected_dir=rejected, data_dir=data,
-        stem="Foo", feedback="x", today="2026-05-19",
-        now_iso="2026-05-19T14:30:00+09:00", rejected_by="user",
+        wiki_dir=wiki,
+        rejected_dir=rejected,
+        data_dir=data,
+        stem="Foo",
+        feedback="x",
+        today="2026-05-19",
+        now_iso="2026-05-19T14:30:00+09:00",
+        rejected_by="user",
     )
     assert rc == 1
     assert "already exists" in capsys.readouterr().err
@@ -380,7 +430,9 @@ def test_list_filters_by_status(tmp_path, capsys):
     _make_page(wiki, "entity", "B", status="pending_for_approve", created="2026-05-16")
     _make_page(wiki, "concept", "C", status="approved", created="2026-05-17")
 
-    rc = _commands.cmd_list(wiki, status="pending_for_approve", counts=False, today="2026-05-19")
+    rc = _commands.cmd_list(
+        wiki, status="pending_for_approve", counts=False, today="2026-05-19"
+    )
     assert rc == 0
     out = capsys.readouterr().out
     assert "B" in out
@@ -427,21 +479,40 @@ def test_ttl_sweep_rejects_old_not_processed(tmp_path, capsys):
     wiki = data / "wiki"
     rejected = data / "rejected"
     # 8 days old → should be swept.
-    old = _make_page(wiki, "entity", "Stale", status="not_processed", created="2026-05-11")
+    old = _make_page(
+        wiki, "entity", "Stale", status="not_processed", created="2026-05-11"
+    )
     # 6 days old → not swept.
-    young = _make_page(wiki, "entity", "Fresh", status="not_processed", created="2026-05-13")
+    young = _make_page(
+        wiki, "entity", "Fresh", status="not_processed", created="2026-05-13"
+    )
     # pending — not swept regardless of age.
-    pending = _make_page(wiki, "concept", "Pending", status="pending_for_approve", created="2026-05-01")
+    pending = _make_page(
+        wiki, "concept", "Pending", status="pending_for_approve", created="2026-05-01"
+    )
     subprocess.run(["git", "add", "."], cwd=data, check=True)
     subprocess.run(
-        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
-         "commit", "-q", "-m", "seed"],
-        cwd=data, check=True,
+        [
+            "git",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "user.name=t",
+            "commit",
+            "-q",
+            "-m",
+            "seed",
+        ],
+        cwd=data,
+        check=True,
     )
 
     rc = _commands.cmd_ttl_sweep(
-        wiki_dir=wiki, rejected_dir=rejected, data_dir=data,
-        days=7, today="2026-05-19",
+        wiki_dir=wiki,
+        rejected_dir=rejected,
+        data_dir=data,
+        days=7,
+        today="2026-05-19",
         now_iso="2026-05-19T00:30:00+09:00",
     )
     assert rc == 0
@@ -461,9 +532,7 @@ def test_main_dispatch_list(tmp_path, capsys, monkeypatch):
     _make_page(wiki, "entity", "A", status="pending_for_approve")
 
     # Force REPO_ROOT to our tmp tree.
-    monkeypatch.setattr(
-        "kb_mcp.cli.wiki_review._store.WIKI_DIR", wiki
-    )
+    monkeypatch.setattr("kb_mcp.cli.wiki_review._store.WIKI_DIR", wiki)
     monkeypatch.setattr(
         "kb_mcp.cli.wiki_review._store.REJECTED_DIR", tmp_path / "rejected"
     )

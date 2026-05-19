@@ -9,7 +9,9 @@ ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 IMPROVEMENT_KIND_VALUES = frozenset({"improvement", "issue", "proposal"})
 IMPROVEMENT_DOMAIN_VALUES = frozenset({"cost", "correctness", "perf", "dx", "security"})
 IMPROVEMENT_SEVERITY_VALUES = frozenset({"low", "med", "high"})
-IMPROVEMENT_ISSUE_STATUS_VALUES = frozenset({"open", "acknowledged", "resolved", "wontfix"})
+IMPROVEMENT_ISSUE_STATUS_VALUES = frozenset(
+    {"open", "acknowledged", "resolved", "wontfix"}
+)
 
 REVIEW_STATUS_VALUES = frozenset({"not_processed", "pending_for_approve", "approved"})
 # Types that participate in the approval workflow (must carry review_status).
@@ -71,7 +73,10 @@ def _validate_improvement_fm(
         )
 
     issue_status = fm.get("issue_status")
-    if issue_status not in (None, "") and issue_status not in IMPROVEMENT_ISSUE_STATUS_VALUES:
+    if (
+        issue_status not in (None, "")
+        and issue_status not in IMPROVEMENT_ISSUE_STATUS_VALUES
+    ):
         result.error(
             rel,
             f"invalid issue_status: {issue_status!r} (must be one of {sorted(IMPROVEMENT_ISSUE_STATUS_VALUES)})",

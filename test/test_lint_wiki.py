@@ -1034,7 +1034,9 @@ def test_global_index_missing_errors(lint_mod, tmp_path):
     lint_mod.lint(result, wiki_dir=wiki)
 
     idx_errors = [e for e in result.errors if "INDEX.md" in e and "missing" in e]
-    assert len(idx_errors) == 1, f"expected one missing-INDEX error, got: {result.errors}"
+    assert (
+        len(idx_errors) == 1
+    ), f"expected one missing-INDEX error, got: {result.errors}"
 
 
 def test_global_index_in_sync_passes(lint_mod, tmp_path):
@@ -1058,7 +1060,9 @@ def test_global_index_stale_errors(lint_mod, tmp_path):
 
     wiki = make_wiki_root(tmp_path)
     _seed_wiki_with_page(wiki)
-    (wiki / INDEX_FILENAME).write_text("---\ntype: index\ncreated: 2026-05-01\nupdated: 2026-05-01\n---\n\n# stale\n")
+    (wiki / INDEX_FILENAME).write_text(
+        "---\ntype: index\ncreated: 2026-05-01\nupdated: 2026-05-01\n---\n\n# stale\n"
+    )
 
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki)
@@ -1081,8 +1085,7 @@ def test_global_index_does_not_mask_orphans(lint_mod, tmp_path):
 
     orphans = [w for w in result.warnings if "Foo.md" in w and "orphan" in w]
     assert len(orphans) == 1, (
-        "INDEX.md must not count as inbound for orphan detection: "
-        f"{result.warnings}"
+        "INDEX.md must not count as inbound for orphan detection: " f"{result.warnings}"
     )
 
 
@@ -1092,7 +1095,9 @@ def test_dead_link_across_categories_errors(lint_mod, tmp_path):
     from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
 
     wiki = make_wiki_root(tmp_path)
-    body = "This page has plenty of content. " * 5 + " It references [[Ghost]] in passing."
+    body = (
+        "This page has plenty of content. " * 5 + " It references [[Ghost]] in passing."
+    )
     write_page(wiki / "concepts" / "Real.md", body=body)
     (wiki / INDEX_FILENAME).write_text(build_index(wiki))
 
@@ -1147,10 +1152,7 @@ tags: []
     )
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki)
-    field_errors = [
-        e for e in result.errors
-        if "Foo.md" in e and "review_status" in e
-    ]
+    field_errors = [e for e in result.errors if "Foo.md" in e and "review_status" in e]
     assert len(field_errors) == 1, result.errors
 
 
@@ -1179,9 +1181,7 @@ tags: []
     )
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki)
-    orphan_warns = [
-        w for w in result.warnings if "Foo.md" in w and "orphan" in w
-    ]
+    orphan_warns = [w for w in result.warnings if "Foo.md" in w and "orphan" in w]
     assert orphan_warns == []
 
 
@@ -1211,8 +1211,7 @@ tags: []
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki)
     listing_warns = [
-        w for w in result.warnings
-        if "Foo.md" in w and "not listed in" in w
+        w for w in result.warnings if "Foo.md" in w and "not listed in" in w
     ]
     assert listing_warns == []
 
@@ -1243,7 +1242,6 @@ tags: []
     result = lint_mod.LintResult()
     lint_mod.lint(result, wiki_dir=wiki)
     listing_warns = [
-        w for w in result.warnings
-        if "Foo.md" in w and "not listed in" in w
+        w for w in result.warnings if "Foo.md" in w and "not listed in" in w
     ]
     assert len(listing_warns) == 1

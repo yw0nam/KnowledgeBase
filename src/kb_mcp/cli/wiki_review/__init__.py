@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import sys
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from kb_mcp.cli.wiki_review import _commands, _store
@@ -40,29 +39,33 @@ def main(argv: list[str] | None = None) -> int:
         default="pending_for_approve",
         choices=["not_processed", "pending_for_approve", "approved", "all"],
     )
-    p_list.add_argument("--counts", action="store_true",
-                        help="Print one-line summary instead of listing")
+    p_list.add_argument(
+        "--counts",
+        action="store_true",
+        help="Print one-line summary instead of listing",
+    )
 
-    p_promote = sub.add_parser("promote",
-                               help="not_processed → pending_for_approve")
+    p_promote = sub.add_parser("promote", help="not_processed → pending_for_approve")
     p_promote.add_argument("stem")
 
-    p_approve = sub.add_parser("approve",
-                               help="pending_for_approve → approved")
+    p_approve = sub.add_parser("approve", help="pending_for_approve → approved")
     p_approve.add_argument("stem")
-    p_approve.add_argument("--feedback", default=None,
-                           help="Feedback text (omit for interactive prompt)")
+    p_approve.add_argument(
+        "--feedback", default=None, help="Feedback text (omit for interactive prompt)"
+    )
 
-    p_reject = sub.add_parser("reject",
-                              help="pending_for_approve → rejected (moves file)")
+    p_reject = sub.add_parser(
+        "reject", help="pending_for_approve → rejected (moves file)"
+    )
     p_reject.add_argument("stem")
-    p_reject.add_argument("--feedback", default=None,
-                          help="Feedback text (omit for interactive prompt)")
+    p_reject.add_argument(
+        "--feedback", default=None, help="Feedback text (omit for interactive prompt)"
+    )
 
-    p_ttl = sub.add_parser("ttl-sweep",
-                           help="Auto-reject stale not_processed pages")
-    p_ttl.add_argument("--days", type=int, default=7,
-                       help="TTL in days from `created` (default 7)")
+    p_ttl = sub.add_parser("ttl-sweep", help="Auto-reject stale not_processed pages")
+    p_ttl.add_argument(
+        "--days", type=int, default=7, help="TTL in days from `created` (default 7)"
+    )
 
     try:
         args = parser.parse_args(argv)
@@ -86,7 +89,9 @@ def main(argv: list[str] | None = None) -> int:
         return _commands.cmd_promote(_store.WIKI_DIR, args.stem)
 
     if args.cmd == "approve":
-        feedback = args.feedback if args.feedback is not None else _read_feedback_interactive()
+        feedback = (
+            args.feedback if args.feedback is not None else _read_feedback_interactive()
+        )
         return _commands.cmd_approve(
             wiki_dir=_store.WIKI_DIR,
             stem=args.stem,
@@ -95,7 +100,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     if args.cmd == "reject":
-        feedback = args.feedback if args.feedback is not None else _read_feedback_interactive()
+        feedback = (
+            args.feedback if args.feedback is not None else _read_feedback_interactive()
+        )
         return _commands.cmd_reject(
             wiki_dir=_store.WIKI_DIR,
             rejected_dir=_store.REJECTED_DIR,

@@ -44,10 +44,7 @@ def resolve_stem(wiki_dir: Path, stem: str) -> Path:
 
     Raises PageNotFound or StemCollision when ambiguous.
     """
-    matches = [
-        p for p in wiki_dir.rglob(f"{stem}.md")
-        if p.name != "_index.md"
-    ]
+    matches = [p for p in wiki_dir.rglob(f"{stem}.md") if p.name != "_index.md"]
     if not matches:
         raise PageNotFound(f"no page with stem {stem!r} in wiki/")
     if len(matches) > 1:

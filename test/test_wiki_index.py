@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
-
+from kb_mcp.cli.wiki.index import build_index
 
 FM = """\
 ---
@@ -26,7 +25,15 @@ def _write_page(path: Path, body: str = "stub body", fm: str = FM) -> None:
 
 def _make_wiki(tmp_path: Path) -> Path:
     wiki = tmp_path / "wiki"
-    for sub in ("entities", "concepts", "decisions", "questions", "improvements", "checklists", "summaries"):
+    for sub in (
+        "entities",
+        "concepts",
+        "decisions",
+        "questions",
+        "improvements",
+        "checklists",
+        "summaries",
+    ):
         (wiki / sub).mkdir(parents=True, exist_ok=True)
     return wiki
 
@@ -35,7 +42,15 @@ def test_build_index_empty_wiki_returns_skeleton(tmp_path):
     wiki = _make_wiki(tmp_path)
     out = build_index(wiki)
     assert out.startswith("---\ntype: index\n")
-    for title in ("Entities", "Concepts", "Decisions", "Questions", "Improvements", "Checklists", "Summaries"):
+    for title in (
+        "Entities",
+        "Concepts",
+        "Decisions",
+        "Questions",
+        "Improvements",
+        "Checklists",
+        "Summaries",
+    ):
         assert f"## {title}" in out
         # Empty sections show "(none)"
     assert out.count("(none)") == 7
@@ -78,8 +93,10 @@ def test_build_index_skips_underscore_index(tmp_path):
     """Per-subject ``_index.md`` hubs are NOT listed in the global TOC."""
     wiki = _make_wiki(tmp_path)
     _write_page(wiki / "concepts" / "Alpha.md")
-    _write_page(wiki / "entities" / "kb-daily-reports" / "_index.md",
-                fm="---\ntype: index\ncreated: 2026-05-01\nupdated: 2026-05-01\n---\n")
+    _write_page(
+        wiki / "entities" / "kb-daily-reports" / "_index.md",
+        fm="---\ntype: index\ncreated: 2026-05-01\nupdated: 2026-05-01\n---\n",
+    )
 
     out = build_index(wiki)
     assert "[[_index]]" not in out
@@ -109,11 +126,11 @@ def test_build_index_dates_derived_from_pages(tmp_path):
     ``updated`` → fall back to ``created``) so re-runs are stable.
     """
     wiki = _make_wiki(tmp_path)
-    fm_a = FM.replace("created: \"2026-05-01\"", "created: \"2026-03-15\"").replace(
-        "updated: \"2026-05-10\"", "updated: \"2026-04-01\""
+    fm_a = FM.replace('created: "2026-05-01"', 'created: "2026-03-15"').replace(
+        'updated: "2026-05-10"', 'updated: "2026-04-01"'
     )
-    fm_b = FM.replace("created: \"2026-05-01\"", "created: \"2026-06-01\"").replace(
-        "updated: \"2026-05-10\"", "updated: \"2026-06-20\""
+    fm_b = FM.replace('created: "2026-05-01"', 'created: "2026-06-01"').replace(
+        'updated: "2026-05-10"', 'updated: "2026-06-20"'
     )
     _write_page(wiki / "concepts" / "EarlyPage.md", fm=fm_a)
     _write_page(wiki / "concepts" / "LatePage.md", fm=fm_b)

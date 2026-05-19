@@ -56,8 +56,7 @@ def cmd_approve(wiki_dir: Path, stem: str, feedback: str, today: str) -> int:
         return 1
     if current != "pending_for_approve":
         _err(
-            f"must be pending_for_approve (current: {current!r}); "
-            "run promote first"
+            f"must be pending_for_approve (current: {current!r}); " "run promote first"
         )
         return 1
     _store.set_frontmatter_field(path, "review_status", "approved")
@@ -184,8 +183,12 @@ def cmd_list(wiki_dir: Path, status: str, counts: bool, today: str) -> int:
         rows.append((st, age_str, p.stem, str(p.rel)))
     width_status = max(len(r[0]) for r in rows)
     width_stem = max(len(r[2]) for r in rows)
-    for st, age, stem, rel in sorted(rows, key=lambda r: (r[0], -int(r[1].rstrip("d") or 0))):
-        print(f"{st.ljust(width_status)}  {age.rjust(4)}  {stem.ljust(width_stem)}  {rel}")
+    for st, age, stem, rel in sorted(
+        rows, key=lambda r: (r[0], -int(r[1].rstrip("d") or 0))
+    ):
+        print(
+            f"{st.ljust(width_status)}  {age.rjust(4)}  {stem.ljust(width_stem)}  {rel}"
+        )
     return 0
 
 
