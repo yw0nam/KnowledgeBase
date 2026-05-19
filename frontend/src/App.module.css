@@ -1,0 +1,60 @@
+.app {
+  display: grid;
+  grid-template-columns: var(--rail-width) 1fr var(--dock-width);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  background: var(--color-bench);
+  color: var(--color-ink);
+}
+
+.center {
+  background: var(--color-panel);
+  border-left: 1px solid var(--color-hairline);
+  border-right: 1px solid var(--color-hairline);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.centerInner {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Loading/error states — kept short, single line. No skeleton. */
+
+.systemLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-10) var(--space-8);
+  font: var(--type-body);
+  color: var(--color-ink-muted);
+}
+
+.errorCode {
+  font: var(--type-body-mono);
+  color: var(--color-danger);
+}
+
+.retry {
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font: var(--type-label);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  background: var(--color-panel);
+  cursor: pointer;
+}
+
+.retry:hover {
+  border-color: var(--color-ink-muted);
+  color: var(--color-ink);
+}

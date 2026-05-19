@@ -1,0 +1,565 @@
+.page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--color-bench);
+  color: var(--color-ink);
+  padding: var(--space-6) var(--space-8);
+}
+
+.inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ── Top strip ───────────────────────────────────────────────── */
+
+.topStrip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-panel);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+}
+
+.windowSelector {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.windowLabel {
+  font: var(--type-label);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-ink-dim);
+  margin-right: var(--space-2);
+}
+
+.windowOption {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.windowOption:hover {
+  color: var(--color-ink);
+}
+
+.windowOptionActive {
+  background: color-mix(in oklch, var(--color-signal) 14%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--color-signal);
+  color: var(--color-ink);
+}
+
+.ttlMeta {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+}
+
+/* ── Middle band ─────────────────────────────────────────────── */
+
+.middleBand {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: var(--space-5);
+}
+
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .middleBand {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Card ────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--color-panel);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-sm);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.cardHeading {
+  font: var(--type-label);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-ink-dim);
+  margin: 0;
+}
+
+.empty {
+  font: var(--type-body);
+  color: var(--color-ink-muted);
+  margin: 0;
+}
+
+/* ── Activity chart ──────────────────────────────────────────── */
+
+.chartArea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.chart {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-2);
+  height: 220px;
+  border-bottom: 1px solid var(--color-hairline-strong);
+}
+
+.barWrap {
+  position: relative;
+  flex: 1;
+  min-width: 8px;
+  max-width: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  height: 100%;
+}
+
+.bar {
+  display: flex;
+  flex-direction: column-reverse;
+  height: 100%;
+  width: 100%;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  overflow: hidden;
+}
+
+.segApproved {
+  background: color-mix(in oklch, var(--color-ink) 75%, transparent);
+}
+
+.segRejectedUser {
+  background: color-mix(in oklch, var(--color-danger) 55%, transparent);
+}
+
+.segRejectedAuto {
+  background: color-mix(in oklch, var(--color-danger) 25%, transparent);
+}
+
+.tooltip {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-panel);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-xs);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+  z-index: 10;
+}
+
+.barWrap:hover .tooltip,
+.barWrap:focus-within .tooltip {
+  opacity: 1;
+}
+
+.tooltipWeek {
+  font: var(--type-body-mono);
+  color: var(--color-ink);
+  margin-bottom: var(--space-1);
+}
+
+.tooltipLine {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+  display: flex;
+  gap: var(--space-2);
+}
+
+.tooltipLine span:last-child {
+  color: var(--color-ink);
+}
+
+.axisRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.axisLabelWrap {
+  flex: 1;
+  min-width: 8px;
+  max-width: 28px;
+  display: flex;
+  justify-content: center;
+}
+
+.axisLabel {
+  font: var(--type-body-mono);
+  font-size: 11px;
+  color: var(--color-ink-dim);
+}
+
+.axisLabelHidden {
+  visibility: hidden;
+}
+
+/* ── Rate panel ──────────────────────────────────────────────── */
+
+.rateList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.rateRow {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.rateLabel {
+  font: var(--type-body);
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rateTrack {
+  height: 6px;
+  background: var(--color-hairline);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+/* When showing dual-encoding (rate + volume), the track becomes a flex
+ * column holding two 6px bars separated by a 2px gap. Total = 14px. */
+.rateTrackDual {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 14px;
+  background: transparent;
+  overflow: visible;
+}
+
+.rateBar {
+  height: 100%;
+  background: color-mix(in oklch, var(--color-ink) 30%, transparent);
+  border-radius: var(--radius-xs);
+}
+
+.rateBarSlot {
+  height: 6px;
+  background: var(--color-hairline);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.volumeBar {
+  height: 100%;
+  background: var(--color-hairline-strong);
+  border-radius: var(--radius-xs);
+}
+
+.rateValue {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+
+.rateValueEmpty {
+  color: var(--color-ink-dim);
+}
+
+/* ── Expiring soon ───────────────────────────────────────────── */
+
+.expiringList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.expiringRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.expiringTitle {
+  font: var(--type-body);
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.expiringMeta {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+  display: flex;
+  gap: var(--space-2);
+}
+
+.expiringCountdownSignal {
+  color: var(--color-signal);
+}
+
+/* ── Recent rejections ───────────────────────────────────────── */
+
+.recentList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.recentRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.recentRow + .recentRow {
+  border-top: 1px solid var(--color-hairline);
+  padding-top: var(--space-5);
+}
+
+.recentTitle {
+  font: var(--type-title);
+  color: var(--color-ink);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recentMeta {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+}
+
+.recentQuote {
+  font: var(--type-body-mono);
+  color: var(--color-ink);
+  font-style: italic;
+  margin: 0;
+  padding-left: 4ch;
+  position: relative;
+}
+
+.recentQuote::before {
+  content: '▍';
+  position: absolute;
+  left: 1.5ch;
+  font-style: normal;
+  color: var(--color-ink-dim);
+}
+
+.recentNoFeedback {
+  font: var(--type-body-mono);
+  color: var(--color-ink-dim);
+  margin: 0;
+  padding-left: 4ch;
+}
+
+/* ── Load + error states ─────────────────────────────────────── */
+
+.systemLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) 0;
+  font: var(--type-body);
+  color: var(--color-ink-muted);
+}
+
+.errorCode {
+  font: var(--type-body-mono);
+  color: var(--color-danger);
+}
+
+.retry {
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  font: var(--type-label);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-ink-muted);
+  background: var(--color-panel);
+  cursor: pointer;
+}
+
+.retry:hover {
+  border-color: var(--color-ink-muted);
+  color: var(--color-ink);
+}
+
+/* ── Type × Source matrix ────────────────────────────────────── */
+
+.matrixScroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.matrixTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.matrixTable th,
+.matrixTable td {
+  border-right: 1px solid var(--color-hairline);
+  border-bottom: 1px solid var(--color-hairline);
+  padding: var(--space-2) var(--space-3);
+  min-width: 7rem;
+  vertical-align: middle;
+  text-align: left;
+}
+
+.matrixTable th:last-child,
+.matrixTable td:last-child {
+  border-right: none;
+}
+
+.matrixTable tr:last-child th,
+.matrixTable tr:last-child td {
+  border-bottom: none;
+}
+
+.matrixCorner {
+  background: transparent;
+}
+
+.matrixColHeader {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+  font-weight: 400;
+}
+
+.matrixRowHeader {
+  font: var(--type-body);
+  color: var(--color-ink);
+  font-weight: 500;
+  min-width: 8rem;
+}
+
+.matrixCell {
+  font: var(--type-body);
+  color: var(--color-ink);
+  text-align: left;
+}
+
+.matrixCell:hover {
+  background: var(--color-rail);
+}
+
+.matrixRate {
+  font: var(--type-body);
+  font-weight: 500;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.matrixCount {
+  font: var(--type-body-mono);
+  color: var(--color-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.matrixEmpty {
+  color: var(--color-ink-dim);
+  text-align: center;
+}
+
+/* ── Activity table (under chart) ────────────────────────────── */
+
+.activityTableWrap {
+  max-height: 360px;
+  overflow-y: auto;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.activityTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.activityTable th,
+.activityTable td {
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-hairline);
+  font: var(--type-body-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.activityTable tr:last-child td {
+  border-bottom: none;
+}
+
+.activityTable thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-panel);
+  color: var(--color-ink-muted);
+  font-weight: 400;
+  text-align: right;
+}
+
+.activityTable thead th:first-child {
+  text-align: left;
+}
+
+.activityWeekCell {
+  text-align: left;
+  color: var(--color-ink);
+}
+
+.activityNumApproved {
+  text-align: right;
+  color: var(--color-ink);
+}
+
+.activityNumRejectedUser {
+  text-align: right;
+  color: var(--color-ink);
+}
+
+.activityNumRejectedAuto {
+  text-align: right;
+  color: var(--color-ink-muted);
+}
+
+.activityNumTotal {
+  text-align: right;
+  color: var(--color-ink);
+  font-weight: 500;
+}

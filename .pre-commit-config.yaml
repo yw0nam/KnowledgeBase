@@ -23,3 +23,27 @@ repos:
     hooks:
       - id: black
         language_version: python3.13
+
+  # Frontend hooks — local because they shell out to the workspace's
+  # own npm scripts. Each narrows via `files:` so they no-op when
+  # frontend/ wasn't touched.
+  - repo: local
+    hooks:
+      - id: frontend-format
+        name: prettier --check (frontend)
+        entry: bash -c 'cd frontend && npm run format:check'
+        language: system
+        files: ^frontend/.*\.(ts|tsx|css)$
+        pass_filenames: false
+      - id: frontend-lint
+        name: eslint (frontend)
+        entry: bash -c 'cd frontend && npm run lint'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false
+      - id: frontend-typecheck
+        name: tsc -b (frontend)
+        entry: bash -c 'cd frontend && npm run typecheck'
+        language: system
+        files: ^frontend/.*\.(ts|tsx)$
+        pass_filenames: false

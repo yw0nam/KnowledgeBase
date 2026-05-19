@@ -23,5 +23,8 @@ data/
 # Runtime cron logs and locks
 .cron/
 
+# Playwright MCP local artifacts (screenshots, snapshots, console logs)
+.playwright-mcp/
+
 # OS
 .DS_Store
