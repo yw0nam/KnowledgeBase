@@ -125,8 +125,3 @@ Never commit `data/` contents to the outer repository.
 - [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion, frontmatter
 - [Wiki Approval Workflow](docs/workflows/wiki-approval-workflow.md) — review_status lifecycle, CLI, TTL cron
 - [Commands](docs/reference/commands.md) — kb-lint-wiki, kb-lint-handoff, kb-wiki-index
-
-## Reference
-
-- Handoff system spec: external local reference, not required for normal operation.
-- Migration plan: `.sisyphus/plans/memory-workflow-migration-v0.md` if present.
