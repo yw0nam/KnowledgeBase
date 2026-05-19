@@ -56,3 +56,14 @@ export function capitalize(word: string): string {
   if (!word) return word;
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
+
+// Whole-hours diff between `now` and an ISO timestamp. Returns 0 if iso is
+// null or unparseable. Used by the stale banner; we render it as
+// "{N} {hour/hours} ago" with the integer-rounded count.
+export function hoursAgo(iso: string | null, now: Date = new Date()): number {
+  if (!iso) return 0;
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return 0;
+  const ms = now.getTime() - then.getTime();
+  return Math.max(0, Math.round(ms / 3_600_000));
+}

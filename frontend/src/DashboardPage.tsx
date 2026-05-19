@@ -12,10 +12,13 @@ import type {
   AutoRejectSoonEntry,
   DashboardResponse,
   DashboardWindow,
+  MatrixCell,
   RecentRejection,
   RejectionBySourceKind,
+  RejectionByTypeAndSource,
 } from './dashboardTypes';
 import { CommandPalette } from './components/CommandPalette';
+import { StaleBanner } from './components/StaleBanner';
 import styles from './DashboardPage.module.css';
 
 const WINDOW_OPTIONS: DashboardWindow[] = [4, 8, 12, 24];
@@ -85,6 +88,13 @@ export function DashboardPage({ onMetaChange }: Props) {
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
+        {state.status === 'ready' && state.data.meta.is_stale ? (
+          <StaleBanner
+            isStale={state.data.meta.is_stale}
+            logLastEntry={state.data.meta.log_last_entry}
+          />
+        ) : null}
+
         <TopStrip
           weeks={weeks}
           onChange={setWeeks}
@@ -129,9 +139,11 @@ export function DashboardPage({ onMetaChange }: Props) {
                     }),
                   )}
                   capitalizeLabels
+                  showVolume
                 />
               </div>
             </div>
+            <TypeSourceMatrix matrix={state.data.rejection_by_type_and_source} />
             <RecentRejectionsCard items={state.data.recent_rejections} />
           </>
         )}
@@ -238,7 +250,51 @@ function ActivityCard({ activity, weeks }: ActivityCardProps) {
           <p className={styles.empty}>No review activity in the last {weeks} weeks.</p>
         ) : null}
       </div>
+      <ActivityTable activity={activity} />
     </section>
+  );
+}
+
+interface ActivityTableProps {
+  activity: ActivityWeek[];
+}
+
+// Compact below-chart table so operators don't have to hover each bar to
+// read the numbers. Internal scroll only — never lifts the card height.
+function ActivityTable({ activity }: ActivityTableProps) {
+  if (activity.length === 0) return null;
+  return (
+    <div className={styles.activityTableWrap}>
+      <table className={styles.activityTable}>
+        <thead>
+          <tr>
+            <th>week</th>
+            <th>approved</th>
+            <th>rejected (user)</th>
+            <th>rejected (auto)</th>
+            <th>total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {activity.map((w) => {
+            const total = w.approved + w.rejected_user + w.rejected_auto_ttl;
+            return (
+              <tr key={w.week_start}>
+                <td className={styles.activityWeekCell}>
+                  {formatIsoDate(w.week_start)}
+                </td>
+                <td className={styles.activityNumApproved}>{w.approved}</td>
+                <td className={styles.activityNumRejectedUser}>{w.rejected_user}</td>
+                <td className={styles.activityNumRejectedAuto}>
+                  {w.rejected_auto_ttl}
+                </td>
+                <td className={styles.activityNumTotal}>{total}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -303,9 +359,11 @@ interface RateCardProps {
   heading: string;
   rows: Array<{ label: string; rate: number; total: number }>;
   capitalizeLabels: boolean;
+  showVolume?: boolean;
 }
 
-function RateCard({ heading, rows, capitalizeLabels }: RateCardProps) {
+function RateCard({ heading, rows, capitalizeLabels, showVolume }: RateCardProps) {
+  const maxTotal = showVolume ? rows.reduce((m, r) => Math.max(m, r.total), 0) : 0;
   return (
     <section className={styles.card}>
       <h2 className={styles.cardHeading}>{heading}</h2>
@@ -314,11 +372,30 @@ function RateCard({ heading, rows, capitalizeLabels }: RateCardProps) {
           const isEmpty = row.total === 0;
           const display = capitalizeLabels ? capitalize(row.label) : row.label;
           const pct = Math.round(row.rate * 100);
+          const volPct = showVolume && maxTotal > 0 ? (row.total / maxTotal) * 100 : 0;
           return (
             <div key={row.label} className={styles.rateRow}>
               <span className={styles.rateLabel}>{display}</span>
-              {isEmpty ? (
+              {isEmpty && !showVolume ? (
                 <span />
+              ) : showVolume ? (
+                <div className={`${styles.rateTrack} ${styles.rateTrackDual}`}>
+                  <div className={styles.rateBarSlot}>
+                    {!isEmpty ? (
+                      <div
+                        className={styles.rateBar}
+                        style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
+                      />
+                    ) : null}
+                  </div>
+                  <div className={styles.rateBarSlot}>
+                    <div
+                      className={styles.volumeBar}
+                      style={{ width: `${Math.max(0, Math.min(100, volPct))}%` }}
+                      aria-label={`volume ${row.total}`}
+                    />
+                  </div>
+                </div>
               ) : (
                 <div className={styles.rateTrack}>
                   <div
@@ -335,6 +412,100 @@ function RateCard({ heading, rows, capitalizeLabels }: RateCardProps) {
             </div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+interface TypeSourceMatrixProps {
+  matrix: RejectionByTypeAndSource | undefined;
+}
+
+// Cross-cut of rejection rate × volume across (type, source_kind). Sparse
+// cells come from the backend; we filter rows/columns where every cell is
+// empty so the operator scans a dense surface. Empty cells render `—` so
+// the table doesn't look noisy with zeros. PRODUCT.md success scenario:
+// "concepts × conversations 60% reject rate" jumps out at a glance.
+function TypeSourceMatrix({ matrix }: TypeSourceMatrixProps) {
+  // Backend may not have shipped yet — render section heading + loading
+  // shape so layout is stable on first render before the field exists.
+  if (!matrix) {
+    return (
+      <section className={styles.card}>
+        <h2 className={styles.cardHeading}>REJECTION RATE BY TYPE × SOURCE</h2>
+        <p className={styles.empty}>Loading…</p>
+      </section>
+    );
+  }
+
+  const cellLookup = new Map<string, MatrixCell>();
+  for (const cell of matrix.cells) {
+    if (cell.total > 0) cellLookup.set(`${cell.type}::${cell.source_kind}`, cell);
+  }
+
+  const visibleTypes = matrix.types.filter((t) =>
+    matrix.source_kinds.some((s) => cellLookup.has(`${t}::${s}`)),
+  );
+  const visibleSources = matrix.source_kinds.filter((s) =>
+    matrix.types.some((t) => cellLookup.has(`${t}::${s}`)),
+  );
+
+  if (visibleTypes.length === 0 || visibleSources.length === 0) {
+    return (
+      <section className={styles.card}>
+        <h2 className={styles.cardHeading}>REJECTION RATE BY TYPE × SOURCE</h2>
+        <p className={styles.empty}>
+          Not enough data for a type × source breakdown yet.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className={styles.card}>
+      <h2 className={styles.cardHeading}>REJECTION RATE BY TYPE × SOURCE</h2>
+      <div className={styles.matrixScroll}>
+        <table className={styles.matrixTable}>
+          <thead>
+            <tr>
+              <th className={styles.matrixCorner} aria-hidden="true" />
+              {visibleSources.map((s) => (
+                <th key={s} className={styles.matrixColHeader} scope="col">
+                  {capitalize(s)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visibleTypes.map((t) => (
+              <tr key={t}>
+                <th className={styles.matrixRowHeader} scope="row">
+                  {capitalize(t)}
+                </th>
+                {visibleSources.map((s) => {
+                  const cell = cellLookup.get(`${t}::${s}`);
+                  if (!cell) {
+                    return (
+                      <td
+                        key={s}
+                        className={`${styles.matrixCell} ${styles.matrixEmpty}`}
+                      >
+                        —
+                      </td>
+                    );
+                  }
+                  const pct = Math.round(cell.rate * 100);
+                  return (
+                    <td key={s} className={styles.matrixCell}>
+                      <div className={styles.matrixRate}>{pct}%</div>
+                      <div className={styles.matrixCount}>n={cell.total}</div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>
   );

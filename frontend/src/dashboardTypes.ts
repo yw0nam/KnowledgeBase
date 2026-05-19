@@ -65,12 +65,28 @@ export interface RecentRejection {
   feedback_excerpt: string;
 }
 
+export interface MatrixCell {
+  type: string;
+  source_kind: string;
+  approved: number;
+  rejected: number;
+  total: number;
+  rate: number;
+}
+
+export interface RejectionByTypeAndSource {
+  types: string[];
+  source_kinds: string[];
+  cells: MatrixCell[];
+}
+
 export interface DashboardResponse {
   window: DashboardWindowInfo;
   meta: DashboardMeta;
   activity: ActivityWeek[];
   rejection_by_type: RejectionByType[];
   rejection_by_source_kind: RejectionBySourceKind[];
+  rejection_by_type_and_source?: RejectionByTypeAndSource;
   auto_reject_soon: AutoRejectSoonEntry[];
   recent_rejections: RecentRejection[];
 }

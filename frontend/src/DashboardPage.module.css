@@ -67,10 +67,6 @@
   color: var(--color-ink-muted);
 }
 
-.ttlMetaDanger {
-  color: var(--color-danger);
-}
-
 /* ── Middle band ─────────────────────────────────────────────── */
 
 .middleBand {
@@ -242,7 +238,7 @@
 
 .rateRow {
   display: grid;
-  grid-template-columns: 6rem minmax(0, 1fr) auto;
+  grid-template-columns: 7.5rem minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-3);
 }
@@ -262,9 +258,33 @@
   overflow: hidden;
 }
 
+/* When showing dual-encoding (rate + volume), the track becomes a flex
+ * column holding two 6px bars separated by a 2px gap. Total = 14px. */
+.rateTrackDual {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  height: 14px;
+  background: transparent;
+  overflow: visible;
+}
+
 .rateBar {
   height: 100%;
   background: color-mix(in oklch, var(--color-ink) 30%, transparent);
+  border-radius: var(--radius-xs);
+}
+
+.rateBarSlot {
+  height: 6px;
+  background: var(--color-hairline);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+.volumeBar {
+  height: 100%;
+  background: var(--color-hairline-strong);
   border-radius: var(--radius-xs);
 }
 
@@ -400,4 +420,146 @@
 .retry:hover {
   border-color: var(--color-ink-muted);
   color: var(--color-ink);
+}
+
+/* ── Type × Source matrix ────────────────────────────────────── */
+
+.matrixScroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.matrixTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.matrixTable th,
+.matrixTable td {
+  border-right: 1px solid var(--color-hairline);
+  border-bottom: 1px solid var(--color-hairline);
+  padding: var(--space-2) var(--space-3);
+  min-width: 7rem;
+  vertical-align: middle;
+  text-align: left;
+}
+
+.matrixTable th:last-child,
+.matrixTable td:last-child {
+  border-right: none;
+}
+
+.matrixTable tr:last-child th,
+.matrixTable tr:last-child td {
+  border-bottom: none;
+}
+
+.matrixCorner {
+  background: transparent;
+}
+
+.matrixColHeader {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+  font-weight: 400;
+}
+
+.matrixRowHeader {
+  font: var(--type-body);
+  color: var(--color-ink);
+  font-weight: 500;
+  min-width: 8rem;
+}
+
+.matrixCell {
+  font: var(--type-body);
+  color: var(--color-ink);
+  text-align: left;
+}
+
+.matrixCell:hover {
+  background: var(--color-rail);
+}
+
+.matrixRate {
+  font: var(--type-body);
+  font-weight: 500;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.matrixCount {
+  font: var(--type-body-mono);
+  color: var(--color-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.matrixEmpty {
+  color: var(--color-ink-dim);
+  text-align: center;
+}
+
+/* ── Activity table (under chart) ────────────────────────────── */
+
+.activityTableWrap {
+  max-height: 360px;
+  overflow-y: auto;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.activityTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.activityTable th,
+.activityTable td {
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-hairline);
+  font: var(--type-body-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.activityTable tr:last-child td {
+  border-bottom: none;
+}
+
+.activityTable thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-panel);
+  color: var(--color-ink-muted);
+  font-weight: 400;
+  text-align: right;
+}
+
+.activityTable thead th:first-child {
+  text-align: left;
+}
+
+.activityWeekCell {
+  text-align: left;
+  color: var(--color-ink);
+}
+
+.activityNumApproved {
+  text-align: right;
+  color: var(--color-ink);
+}
+
+.activityNumRejectedUser {
+  text-align: right;
+  color: var(--color-ink);
+}
+
+.activityNumRejectedAuto {
+  text-align: right;
+  color: var(--color-ink-muted);
+}
+
+.activityNumTotal {
+  text-align: right;
+  color: var(--color-ink);
+  font-weight: 500;
 }
