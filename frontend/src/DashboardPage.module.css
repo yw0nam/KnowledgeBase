@@ -251,6 +251,48 @@
   text-overflow: ellipsis;
 }
 
+/* Used when the rate row's label is a clickable drilldown target. The
+   button strips browser chrome and inherits typography; the active
+   visual cue lives on the parent .rateRow via .rateRowActive so the
+   whole row reads as the selected unit. */
+.rateLabelButton {
+  display: block;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.rateLabelButton:hover {
+  color: var(--color-ink);
+}
+
+.rateLabelButton:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* Active drilldown row: bold the label and add a thin Signal left
+   border via inset box-shadow (1.5px max per design language — no
+   side-stripe widths above that). Padding-left compensates so text
+   doesn't shift when the active state toggles. */
+.rateRowActive {
+  box-shadow: inset 1.5px 0 0 var(--color-signal);
+  padding-left: var(--space-2);
+  margin-left: calc(-1 * var(--space-2));
+}
+
+.rateRowActive .rateLabel,
+.rateRowActive .rateLabelButton {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
 .rateTrack {
   height: 6px;
   background: var(--color-hairline);
@@ -333,6 +375,30 @@
 }
 
 /* ── Recent rejections ───────────────────────────────────────── */
+
+/* Stacks the two chip rows (type + source) with a small gutter so the
+   operator can distinguish axes at a glance. The .recentChipGroupLabel
+   on each row uses the same letter-tracked muted treatment as
+   .windowLabel so the dashboard's UPPERCASE label vocabulary stays
+   consistent across the page. */
+.recentChipGroups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.recentChipGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.recentChipGroupLabel {
+  font: var(--type-label);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-ink-dim);
+}
 
 .recentChips {
   display: flex;

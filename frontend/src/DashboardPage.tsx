@@ -37,12 +37,39 @@ const CANONICAL_REVIEW_TYPES = [
 ] as const;
 
 const ALL_TYPES_FILTER = '__all__';
+// Distinct constant for the source-axis filter on Recent Rejections. The
+// underlying string value matches ALL_TYPES_FILTER on purpose (both are
+// sentinel "any" values), but the second declaration makes axis intent
+// obvious at every call site so callers don't accidentally cross axes.
+const ALL_SOURCES_FILTER = '__all__';
+
+// Mirrors backend KNOWN_SOURCE_KINDS. Chip render order follows this list
+// so the source row stays stable across reloads.
+const CANONICAL_SOURCE_KINDS = [
+  'github',
+  'conversations',
+  'calendar',
+  'web',
+  'manual',
+  'unknown',
+] as const;
 
 function prefersReducedMotion(): boolean {
   return (
     typeof window !== 'undefined' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
+}
+
+// Shared scroll behavior for drilldown callers (matrix + rate cards). The
+// matrix sets both filters at once; rate cards set one axis. Both want
+// the rejections card brought into view, with reduced-motion honored.
+function scrollSectionIntoView(el: HTMLElement | null): void {
+  if (!el) return;
+  el.scrollIntoView({
+    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    block: 'start',
+  });
 }
 
 type LoadState =
@@ -66,20 +93,29 @@ export function DashboardPage({ onMetaChange }: Props) {
   const [reloadKey, setReloadKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [recentFilter, setRecentFilter] = useState<string>(ALL_TYPES_FILTER);
+  const [recentSourceFilter, setRecentSourceFilter] =
+    useState<string>(ALL_SOURCES_FILTER);
   const rejectionsRef = useRef<HTMLElement | null>(null);
 
-  // Drilldown from the type×source matrix: change chip selection on the
-  // rejections card and scroll the card into view. Honors the operator's
+  // Drilldown from the type×source matrix: set BOTH axes at once and
+  // scroll the rejections card into view. Honors the operator's
   // reduced-motion preference — the smooth scroll falls back to instant.
-  const handleMatrixTypeSelect = useCallback((type: string) => {
+  const handleMatrixCellSelect = useCallback((type: string, sourceKind: string) => {
     setRecentFilter(type);
-    const el = rejectionsRef.current;
-    if (el) {
-      el.scrollIntoView({
-        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
-        block: 'start',
-      });
-    }
+    setRecentSourceFilter(sourceKind);
+    scrollSectionIntoView(rejectionsRef.current);
+  }, []);
+
+  // 1D drilldown wires: BY TYPE / BY SOURCE rate cards each pin one axis
+  // and leave the orthogonal axis untouched. Both scroll the rejections
+  // card into view via the same helper as the 2D matrix.
+  const handleRateTypeSelect = useCallback((type: string) => {
+    setRecentFilter(type);
+    scrollSectionIntoView(rejectionsRef.current);
+  }, []);
+  const handleRateSourceSelect = useCallback((sourceKind: string) => {
+    setRecentSourceFilter(sourceKind);
+    scrollSectionIntoView(rejectionsRef.current);
   }, []);
 
   useEffect(() => {
@@ -166,6 +202,11 @@ export function DashboardPage({ onMetaChange }: Props) {
                     total: r.total,
                   }))}
                   capitalizeLabels
+                  onRowSelect={handleRateTypeSelect}
+                  selectedRow={
+                    recentFilter !== ALL_TYPES_FILTER ? recentFilter : undefined
+                  }
+                  selectionAxisLabel="rejections"
                 />
                 <RateCard
                   heading="REJECTION RATE BY SOURCE"
@@ -178,18 +219,28 @@ export function DashboardPage({ onMetaChange }: Props) {
                   )}
                   capitalizeLabels
                   showVolume
+                  onRowSelect={handleRateSourceSelect}
+                  selectedRow={
+                    recentSourceFilter !== ALL_SOURCES_FILTER
+                      ? recentSourceFilter
+                      : undefined
+                  }
+                  selectionAxisLabel="rejections by source"
                 />
               </div>
             </div>
             <TypeSourceMatrix
               matrix={state.data.rejection_by_type_and_source}
               selectedType={recentFilter}
-              onTypeSelect={handleMatrixTypeSelect}
+              selectedSource={recentSourceFilter}
+              onCellSelect={handleMatrixCellSelect}
             />
             <RecentRejectionsCard
               items={state.data.recent_rejections}
-              filter={recentFilter}
-              onFilterChange={setRecentFilter}
+              typeFilter={recentFilter}
+              onTypeFilterChange={setRecentFilter}
+              sourceFilter={recentSourceFilter}
+              onSourceFilterChange={setRecentSourceFilter}
               sectionRef={rejectionsRef}
             />
           </>
@@ -407,9 +458,26 @@ interface RateCardProps {
   rows: Array<{ label: string; rate: number; total: number }>;
   capitalizeLabels: boolean;
   showVolume?: boolean;
+  // When provided, each row's label becomes a full-row click target that
+  // drills the rejections card down to this label on the relevant axis.
+  onRowSelect?: (label: string) => void;
+  // The label of the currently-pinned row on this axis (raw, lowercase).
+  selectedRow?: string;
+  // Suffix used in aria-labels: "Filter <selectionAxisLabel> to <Label>".
+  // Lets the BY TYPE card say "rejections" and the BY SOURCE card say
+  // "rejections by source", with no extra plumbing.
+  selectionAxisLabel?: string;
 }
 
-function RateCard({ heading, rows, capitalizeLabels, showVolume }: RateCardProps) {
+function RateCard({
+  heading,
+  rows,
+  capitalizeLabels,
+  showVolume,
+  onRowSelect,
+  selectedRow,
+  selectionAxisLabel,
+}: RateCardProps) {
   const maxTotal = showVolume ? rows.reduce((m, r) => Math.max(m, r.total), 0) : 0;
   return (
     <section className={styles.card}>
@@ -420,9 +488,30 @@ function RateCard({ heading, rows, capitalizeLabels, showVolume }: RateCardProps
           const display = capitalizeLabels ? capitalize(row.label) : row.label;
           const pct = Math.round(row.rate * 100);
           const volPct = showVolume && maxTotal > 0 ? (row.total / maxTotal) * 100 : 0;
+          const active = !!selectedRow && selectedRow === row.label;
+          const rowCls = active
+            ? `${styles.rateRow} ${styles.rateRowActive}`
+            : styles.rateRow;
+          // Label cell is either a static span or a button-shaped span
+          // depending on whether the parent wired drilldown. The button
+          // intentionally fills the leftmost grid column only — the bars
+          // stay non-interactive so meaning stays read-only.
+          const labelNode = onRowSelect ? (
+            <button
+              type="button"
+              className={`${styles.rateLabel} ${styles.rateLabelButton}`}
+              aria-label={`Filter ${selectionAxisLabel ?? 'rejections'} to ${display} (${isEmpty ? '0%' : `${pct}%`} over ${row.total} pages)`}
+              aria-pressed={active}
+              onClick={() => onRowSelect(row.label)}
+            >
+              {display}
+            </button>
+          ) : (
+            <span className={styles.rateLabel}>{display}</span>
+          );
           return (
-            <div key={row.label} className={styles.rateRow}>
-              <span className={styles.rateLabel}>{display}</span>
+            <div key={row.label} className={rowCls}>
+              {labelNode}
               {isEmpty && !showVolume ? (
                 <span />
               ) : showVolume ? (
@@ -467,7 +556,8 @@ function RateCard({ heading, rows, capitalizeLabels, showVolume }: RateCardProps
 interface TypeSourceMatrixProps {
   matrix: RejectionByTypeAndSource | undefined;
   selectedType?: string;
-  onTypeSelect?: (type: string) => void;
+  selectedSource?: string;
+  onCellSelect?: (type: string, sourceKind: string) => void;
 }
 
 // Cross-cut of rejection rate × volume across (type, source_kind). Sparse
@@ -476,14 +566,16 @@ interface TypeSourceMatrixProps {
 // the table doesn't look noisy with zeros. PRODUCT.md success scenario:
 // "concepts × conversations 60% reject rate" jumps out at a glance.
 //
-// When `onTypeSelect` is provided, non-empty cells become buttons that
-// drill down into the Recent Rejections card. `selectedType` highlights
-// the row matching the current Recent Rejections chip so the matrix and
-// the rejections list stay visually coupled.
+// When `onCellSelect` is provided, non-empty cells become buttons that
+// drill BOTH axes (type + source) on the Recent Rejections card. The row
+// header active state still tracks `selectedType` alone, while the cell
+// active state requires both `selectedType` and `selectedSource` to match
+// (with the `__all__` sentinels treated as wildcards).
 function TypeSourceMatrix({
   matrix,
   selectedType,
-  onTypeSelect,
+  selectedSource,
+  onCellSelect,
 }: TypeSourceMatrixProps) {
   // Backend may not have shipped yet — render section heading + loading
   // shape so layout is stable on first render before the field exists.
@@ -536,7 +628,10 @@ function TypeSourceMatrix({
           </thead>
           <tbody>
             {visibleTypes.map((t) => {
-              const rowSelected = !!selectedType && selectedType === t;
+              const rowSelected =
+                !!selectedType &&
+                selectedType !== ALL_TYPES_FILTER &&
+                selectedType === t;
               const rowHeaderCls = rowSelected
                 ? `${styles.matrixRowHeader} ${styles.matrixRowHeaderActive}`
                 : styles.matrixRowHeader;
@@ -564,17 +659,38 @@ function TypeSourceMatrix({
                         <div className={styles.matrixCount}>n={cell.total}</div>
                       </>
                     );
-                    const cellCls = rowSelected
+                    // A cell is "active" only when BOTH selected axes
+                    // match this cell. `__all__` is a wildcard so e.g.
+                    // a row-only drilldown lights the whole row but no
+                    // individual cell within it claims to be the chosen
+                    // intersection.
+                    const typeMatches =
+                      !selectedType ||
+                      selectedType === ALL_TYPES_FILTER ||
+                      selectedType === t;
+                    const sourceMatches =
+                      !selectedSource ||
+                      selectedSource === ALL_SOURCES_FILTER ||
+                      selectedSource === s;
+                    const cellActive =
+                      typeMatches &&
+                      sourceMatches &&
+                      // Require at least one axis to be pinned so the
+                      // matrix doesn't tint every cell when no filter
+                      // is set.
+                      ((!!selectedType && selectedType !== ALL_TYPES_FILTER) ||
+                        (!!selectedSource && selectedSource !== ALL_SOURCES_FILTER));
+                    const cellCls = cellActive
                       ? `${styles.matrixCell} ${styles.matrixCellActive}`
                       : styles.matrixCell;
                     return (
                       <td key={s} className={cellCls}>
-                        {onTypeSelect ? (
+                        {onCellSelect ? (
                           <button
                             type="button"
                             className={styles.matrixCellButton}
-                            onClick={() => onTypeSelect(t)}
-                            aria-label={`Filter rejections to ${capitalize(t)} (${pct}% over ${cell.total} pages with source ${capitalize(s)})`}
+                            onClick={() => onCellSelect(t, s)}
+                            aria-label={`Filter rejections to ${capitalize(t)} with source ${capitalize(s)} (${pct}% over ${cell.total} pages)`}
                           >
                             {cellContent}
                           </button>
@@ -629,30 +745,78 @@ function AutoRejectSoonCard({ items }: AutoRejectSoonCardProps) {
 
 interface RecentRejectionsCardProps {
   items: RecentRejection[];
-  filter: string;
-  onFilterChange: (filter: string) => void;
+  typeFilter: string;
+  onTypeFilterChange: (filter: string) => void;
+  sourceFilter: string;
+  onSourceFilterChange: (filter: string) => void;
   sectionRef?: Ref<HTMLElement>;
+}
+
+// Predicate helpers — `__all__` is the wildcard sentinel on each axis.
+// `source_kinds` is a list, so source matching uses `.includes()` (a page
+// touching multiple kinds appears under every kind's chip). Mirrors the
+// backend's by_source_kind aggregator.
+function matchesType(item: RecentRejection, typeFilter: string): boolean {
+  return typeFilter === ALL_TYPES_FILTER || item.type === typeFilter;
+}
+function matchesSource(item: RecentRejection, sourceFilter: string): boolean {
+  return (
+    sourceFilter === ALL_SOURCES_FILTER || item.source_kinds.includes(sourceFilter)
+  );
 }
 
 function RecentRejectionsCard({
   items,
-  filter,
-  onFilterChange,
+  typeFilter,
+  onTypeFilterChange,
+  sourceFilter,
+  onSourceFilterChange,
   sectionRef,
 }: RecentRejectionsCardProps) {
   const count = items.length;
 
-  const countsByType = items.reduce<Record<string, number>>((acc, it) => {
+  // Cross-filter-aware chip counts: each chip's count shows how many
+  // pages would remain visible after clicking it now (orthogonal axis
+  // still applied). "All" on each axis = total matching the orthogonal
+  // filter only.
+  const typeAxisItems = items.filter((it) => matchesSource(it, sourceFilter));
+  const countsByType = typeAxisItems.reduce<Record<string, number>>((acc, it) => {
     const key = it.type || '(untyped)';
     acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
-  // Type chips render in canonical order so the row stays stable across reloads.
-  const typesPresent = CANONICAL_REVIEW_TYPES.filter((t) => (countsByType[t] ?? 0) > 0);
-  const showChips = typesPresent.length >= 2;
+  const typeAllCount = typeAxisItems.length;
 
-  const filteredItems =
-    filter === ALL_TYPES_FILTER ? items : items.filter((it) => it.type === filter);
+  const sourceAxisItems = items.filter((it) => matchesType(it, typeFilter));
+  // "some" semantics: a page contributes to each of its source_kinds.
+  const countsBySource = sourceAxisItems.reduce<Record<string, number>>((acc, it) => {
+    for (const kind of it.source_kinds) {
+      acc[kind] = (acc[kind] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
+  const sourceAllCount = sourceAxisItems.length;
+
+  // Chip-row visibility is computed against the unfiltered list so a
+  // chip row doesn't collapse when the orthogonal filter narrows things
+  // to a single type/source. We still want the operator to see the row
+  // and the zero counts.
+  const allTypesPresent = CANONICAL_REVIEW_TYPES.filter((t) =>
+    items.some((it) => it.type === t),
+  );
+  const showTypeChips = allTypesPresent.length >= 2;
+
+  const allSourcesPresent = CANONICAL_SOURCE_KINDS.filter((s) =>
+    items.some((it) => it.source_kinds.includes(s)),
+  );
+  const showSourceChips = allSourcesPresent.length >= 2;
+
+  const filteredItems = items.filter(
+    (it) => matchesType(it, typeFilter) && matchesSource(it, sourceFilter),
+  );
+
+  const filterActive =
+    typeFilter !== ALL_TYPES_FILTER || sourceFilter !== ALL_SOURCES_FILTER;
 
   return (
     <section className={styles.card} ref={sectionRef}>
@@ -661,33 +825,72 @@ function RecentRejectionsCard({
         <p className={styles.empty}>No rejections in the last 5 cycles.</p>
       ) : (
         <>
-          {showChips ? (
-            <div
-              className={styles.recentChips}
-              role="tablist"
-              aria-label="Filter recent rejections by type"
-            >
-              <RecentChip
-                label="All"
-                value={ALL_TYPES_FILTER}
-                count={count}
-                active={filter === ALL_TYPES_FILTER}
-                onSelect={onFilterChange}
-              />
-              {typesPresent.map((t) => (
-                <RecentChip
-                  key={t}
-                  label={capitalize(t)}
-                  value={t}
-                  count={countsByType[t] ?? 0}
-                  active={filter === t}
-                  onSelect={onFilterChange}
-                />
-              ))}
+          {showTypeChips || showSourceChips ? (
+            <div className={styles.recentChipGroups}>
+              {showTypeChips ? (
+                <div className={styles.recentChipGroup}>
+                  <span className={styles.recentChipGroupLabel}>by type</span>
+                  <div
+                    className={styles.recentChips}
+                    role="tablist"
+                    aria-label="Filter recent rejections by type"
+                  >
+                    <RecentChip
+                      label="All"
+                      value={ALL_TYPES_FILTER}
+                      count={typeAllCount}
+                      active={typeFilter === ALL_TYPES_FILTER}
+                      onSelect={onTypeFilterChange}
+                    />
+                    {allTypesPresent.map((t) => (
+                      <RecentChip
+                        key={t}
+                        label={capitalize(t)}
+                        value={t}
+                        count={countsByType[t] ?? 0}
+                        active={typeFilter === t}
+                        onSelect={onTypeFilterChange}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {showSourceChips ? (
+                <div className={styles.recentChipGroup}>
+                  <span className={styles.recentChipGroupLabel}>by source</span>
+                  <div
+                    className={styles.recentChips}
+                    role="tablist"
+                    aria-label="Filter recent rejections by source"
+                  >
+                    <RecentChip
+                      label="All"
+                      value={ALL_SOURCES_FILTER}
+                      count={sourceAllCount}
+                      active={sourceFilter === ALL_SOURCES_FILTER}
+                      onSelect={onSourceFilterChange}
+                    />
+                    {allSourcesPresent.map((s) => (
+                      <RecentChip
+                        key={s}
+                        label={capitalize(s)}
+                        value={s}
+                        count={countsBySource[s] ?? 0}
+                        active={sourceFilter === s}
+                        onSelect={onSourceFilterChange}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
           {filteredItems.length === 0 ? (
-            <p className={styles.empty}>No rejections of this type in view.</p>
+            <p className={styles.empty}>
+              {filterActive
+                ? 'No rejections matching this filter.'
+                : 'No rejections in the last 5 cycles.'}
+            </p>
           ) : (
             <div className={styles.recentList}>
               {filteredItems.map((it) => (
