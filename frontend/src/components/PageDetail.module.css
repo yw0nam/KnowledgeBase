@@ -1,7 +1,9 @@
 .detail {
   padding: var(--space-6) var(--space-8);
   overflow-y: auto;
-  max-width: 100%;
+  width: 100%;
+  max-width: 88ch;
+  margin-inline: auto;
 }
 
 .header {
