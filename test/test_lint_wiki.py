@@ -1183,3 +1183,67 @@ tags: []
         w for w in result.warnings if "Foo.md" in w and "orphan" in w
     ]
     assert orphan_warns == []
+
+
+def test_subject_index_sync_skips_non_approved(lint_mod, tmp_path):
+    """A pending page on disk that's not listed in _index.md should NOT warn."""
+    wiki = make_wiki_root(tmp_path)
+    fm_pending = """\
+---
+type: entity
+review_status: pending_for_approve
+created: "2026-04-27"
+updated: "2026-04-27"
+sources: []
+aliases: []
+tags: []
+---
+"""
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n",
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Foo.md",
+        body="Body content. " * 10,
+        fm=fm_pending,
+    )
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+    listing_warns = [
+        w for w in result.warnings
+        if "Foo.md" in w and "not listed in" in w
+    ]
+    assert listing_warns == []
+
+
+def test_subject_index_sync_still_warns_for_approved(lint_mod, tmp_path):
+    """An approved page on disk that's not listed in _index.md SHOULD warn."""
+    wiki = make_wiki_root(tmp_path)
+    fm_approved = """\
+---
+type: entity
+review_status: approved
+created: "2026-04-27"
+updated: "2026-04-27"
+sources: []
+aliases: []
+tags: []
+---
+"""
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n",
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Foo.md",
+        body="Body content. " * 10,
+        fm=fm_approved,
+    )
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+    listing_warns = [
+        w for w in result.warnings
+        if "Foo.md" in w and "not listed in" in w
+    ]
+    assert len(listing_warns) == 1

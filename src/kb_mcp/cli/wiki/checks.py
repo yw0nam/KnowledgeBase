@@ -76,9 +76,15 @@ def check_index_sync(result, wiki_dir: Path = None) -> None:
 
         listed_stems = set(extract_links(pages_section))
 
-        on_disk_stems = {
-            f.stem for f in subject_dir.rglob("*.md") if f.stem != "_index"
-        }
+        on_disk_stems = set()
+        for f in subject_dir.rglob("*.md"):
+            if f.stem == "_index":
+                continue
+            # Only approved (or non-review-status) pages count toward sync.
+            page_fm = _parse_yaml_frontmatter(f.read_text())
+            if page_fm and page_fm.get("review_status") not in (None, "approved"):
+                continue
+            on_disk_stems.add(f.stem)
 
         # Filter wikilinks to only those that look like they target a subject
         # page (no "/" in the link → simple stem reference).
