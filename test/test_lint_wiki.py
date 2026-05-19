@@ -23,6 +23,7 @@ def lint_mod():
 FM = """\
 ---
 type: entity
+review_status: approved
 created: "2026-04-27"
 updated: "2026-04-27"
 sources: []
@@ -1119,3 +1120,66 @@ def test_review_status_values_enum(lint_mod):
     assert validators.REVIEW_STATUS_VALUES == frozenset(
         {"not_processed", "pending_for_approve", "approved"}
     )
+
+
+def test_review_status_required_for_in_scope_types(lint_mod, tmp_path):
+    """Pages of in-scope types must declare review_status."""
+    wiki = make_wiki_root(tmp_path)
+    fm_no_review_status = """\
+---
+type: entity
+created: "2026-04-27"
+updated: "2026-04-27"
+sources: []
+aliases: []
+tags: []
+---
+"""
+    body = "Body content. " * 10
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n- [[Foo]]\n",
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Foo.md",
+        body=body,
+        fm=fm_no_review_status,
+    )
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+    field_errors = [
+        e for e in result.errors
+        if "Foo.md" in e and "review_status" in e
+    ]
+    assert len(field_errors) == 1, result.errors
+
+
+def test_orphan_warning_skipped_for_non_approved(lint_mod, tmp_path):
+    """non-approved pages do not trigger orphan warnings."""
+    wiki = make_wiki_root(tmp_path)
+    fm_pending = """\
+---
+type: entity
+review_status: pending_for_approve
+created: "2026-04-27"
+updated: "2026-04-27"
+sources: []
+aliases: []
+tags: []
+---
+"""
+    write_page(
+        wiki / "entities" / "Subj" / "_index.md",
+        "# Subj\n\n## Pages\n\n",  # empty pages list — Foo is not listed
+    )
+    write_page(
+        wiki / "entities" / "Subj" / "2026-04" / "Foo.md",
+        body="Body content. " * 10,
+        fm=fm_pending,
+    )
+    result = lint_mod.LintResult()
+    lint_mod.lint(result, wiki_dir=wiki)
+    orphan_warns = [
+        w for w in result.warnings if "Foo.md" in w and "orphan" in w
+    ]
+    assert orphan_warns == []
