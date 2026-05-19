@@ -1,10 +1,13 @@
 // Center column — the focused page. Frontmatter strip + rendered
 // markdown body. Companion tabs (Raw / Lint) defer to Phase B.
 
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { pageTitle } from '../api';
 import type { ReviewPage } from '../types';
+import { CompanionTabs } from './CompanionTabs';
+import { FeedbackTab } from './FeedbackTab';
 import { Frontmatter } from './Frontmatter';
 import styles from './PageDetail.module.css';
 
@@ -27,6 +30,7 @@ function stripDuplicateH1(body: string, title: string): string {
 export function PageDetail({ page }: Props) {
   const title = pageTitle(page);
   const body = stripDuplicateH1(page.body, title);
+  const [activeTab, setActiveTab] = useState<string>('feedback');
   return (
     <article className={styles.detail} aria-labelledby="page-title">
       <header className={styles.header}>
@@ -39,9 +43,17 @@ export function PageDetail({ page }: Props) {
       <div className={styles.body}>
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
       </div>
-      <footer className={styles.footer}>
-        Raw sources and lint output land in the next phase.
-      </footer>
+      <CompanionTabs
+        active={activeTab}
+        onActiveChange={setActiveTab}
+        tabs={[
+          {
+            id: 'feedback',
+            label: 'Feedback',
+            content: <FeedbackTab stem={page.stem} />,
+          },
+        ]}
+      />
     </article>
   );
 }
