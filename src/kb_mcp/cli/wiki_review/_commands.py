@@ -45,8 +45,13 @@ def cmd_promote(wiki_dir: Path, stem: str) -> int:
     return 0
 
 
-def cmd_approve(wiki_dir: Path, stem: str, feedback: str, today: str) -> int:
-    """pending_for_approve → approved."""
+def cmd_approve(
+    wiki_dir: Path, stem: str, feedback: str, today: str, now_iso: str
+) -> int:
+    """pending_for_approve → approved.
+
+    ``now_iso`` is ISO timestamp with timezone offset, used for ``approved_at``.
+    """
     path = _resolve_or_print(wiki_dir, stem)
     if path is None:
         return 1
@@ -60,6 +65,7 @@ def cmd_approve(wiki_dir: Path, stem: str, feedback: str, today: str) -> int:
         )
         return 1
     _store.set_frontmatter_field(path, "review_status", "approved")
+    _store.add_frontmatter_lines(path, [f'approved_at: "{now_iso}"'])
     _feedback.append_feedback_line(path, today, "Approved", feedback)
     print(f"✓ Approved: {path.relative_to(wiki_dir)}")
     return 0

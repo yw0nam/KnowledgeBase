@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pageTitle } from '../api';
 import type { ReviewPage } from '../types';
-import type { ActionMode } from '../App';
+import type { ActionMode } from '../QueuePage';
 import styles from './CommandPalette.module.css';
 
 interface Props {
@@ -14,6 +14,12 @@ interface Props {
   selectedStem: string | null;
   mode: ActionMode;
   canDecide: boolean;
+  // When false, queue-specific commands (Approve/Reject) and the
+  // Pages group are hidden — palette only shows the page-agnostic
+  // Reload command. Used on /dashboard where those actions have no
+  // focused target.
+  showQueueCommands: boolean;
+  reloadLabel: string;
   onClose: () => void;
   onApprove: () => void;
   onRejectStart: () => void;
@@ -38,6 +44,8 @@ export function CommandPalette({
   selectedStem,
   mode,
   canDecide,
+  showQueueCommands,
+  reloadLabel,
   onClose,
   onApprove,
   onRejectStart,
@@ -53,47 +61,52 @@ export function CommandPalette({
   const pagesEnabled = mode === 'idle';
 
   const allCommands = useMemo<Command[]>(() => {
-    const list: Command[] = [
-      {
+    const list: Command[] = [];
+    if (showQueueCommands) {
+      list.push({
         id: 'cmd:approve',
         kind: 'static',
         label: 'Approve current page',
         subtitle: '',
         disabled: !idleDecidable,
         run: onApprove,
-      },
-      {
+      });
+      list.push({
         id: 'cmd:reject',
         kind: 'static',
         label: 'Reject current page',
         subtitle: '',
         disabled: !idleDecidable,
         run: onRejectStart,
-      },
-      {
-        id: 'cmd:reload',
-        kind: 'static',
-        label: 'Reload queue',
-        subtitle: '',
-        disabled: false,
-        run: onReload,
-      },
-    ];
-    for (const p of pages) {
-      list.push({
-        id: `page:${p.stem}`,
-        kind: 'page',
-        label: pageTitle(p),
-        subtitle: p.stem,
-        disabled: !pagesEnabled,
-        run: () => onSelect(p.stem),
       });
+    }
+    list.push({
+      id: 'cmd:reload',
+      kind: 'static',
+      label: reloadLabel,
+      subtitle: '',
+      disabled: false,
+      run: onReload,
+    });
+    if (showQueueCommands) {
+      for (const p of pages) {
+        list.push({
+          id: `page:${p.stem}`,
+          kind: 'page',
+          label: pageTitle(p),
+          subtitle: p.stem,
+          disabled: !pagesEnabled,
+          run: () => onSelect(p.stem),
+        });
+      }
     }
     return list;
   }, [
     pages,
     idleDecidable,
     pagesEnabled,
+    showQueueCommands,
+    reloadLabel,
     onApprove,
     onRejectStart,
     onReload,

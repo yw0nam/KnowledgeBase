@@ -1,11 +1,11 @@
 .app {
   display: grid;
   grid-template-columns: var(--rail-width) 1fr var(--dock-width);
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
   background: var(--color-bench);
   color: var(--color-ink);
-  min-width: 0;
-  min-height: 0;
 }
 
 .center {

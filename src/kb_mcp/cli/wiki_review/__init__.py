@@ -97,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
             stem=args.stem,
             feedback=feedback,
             today=today,
+            now_iso=now,
         )
 
     if args.cmd == "reject":

@@ -1,7 +1,7 @@
 // Right utility column — decision dock. Renders different UI per
 // action mode: idle / approving / reject-confirm / rejecting.
 
-import type { ActionMode } from '../App';
+import type { ActionMode } from '../QueuePage';
 import styles from './DecisionDock.module.css';
 
 interface Props {

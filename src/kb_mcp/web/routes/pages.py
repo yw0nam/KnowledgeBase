@@ -69,6 +69,7 @@ def approve_page(stem: str, body: DecisionBody, request: Request) -> DecisionRes
         stem=stem,
         feedback=body.feedback,
         today=_today_kst(),
+        now_iso=_now_iso_kst(),
     )
     if rc != 0:
         raise HTTPException(status_code=400, detail=err or "approve failed")
