@@ -6,8 +6,10 @@ an int exit code. Errors are printed to stderr via _err().
 
 from __future__ import annotations
 
+import datetime
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 from kb_mcp.cli.wiki_review import _feedback, _store
@@ -137,4 +139,86 @@ def cmd_reject(
         return 1
 
     print(f"✓ Rejected: {rel} → {dest.relative_to(data_dir)}")
+    return 0
+
+
+def _age_days(created: str | None, today: str) -> int | None:
+    if not created:
+        return None
+    try:
+        c = datetime.date.fromisoformat(str(created).strip().strip('"'))
+        t = datetime.date.fromisoformat(today)
+    except ValueError:
+        return None
+    return (t - c).days
+
+
+def cmd_list(wiki_dir: Path, status: str, counts: bool, today: str) -> int:
+    """Print pages filtered by review_status (or 'all'). With --counts,
+    print a one-line summary instead.
+    """
+    pages = _store.iter_pages(wiki_dir)
+
+    if counts:
+        bucket = Counter(p.fm.get("review_status", "?") for p in pages)
+        parts = [
+            f"{bucket.get(s, 0)} {s}"
+            for s in ("not_processed", "pending_for_approve", "approved")
+        ]
+        print(", ".join(parts))
+        return 0
+
+    if status != "all":
+        pages = [p for p in pages if p.fm.get("review_status") == status]
+
+    if not pages:
+        print(f"(no pages with status={status})")
+        return 0
+
+    # Format: STATUS  AGE  STEM  PATH
+    rows = []
+    for p in pages:
+        st = str(p.fm.get("review_status") or "?")
+        age = _age_days(p.fm.get("created"), today)
+        age_str = f"{age}d" if age is not None else "?"
+        rows.append((st, age_str, p.stem, str(p.rel)))
+    width_status = max(len(r[0]) for r in rows)
+    width_stem = max(len(r[2]) for r in rows)
+    for st, age, stem, rel in sorted(rows, key=lambda r: (r[0], -int(r[1].rstrip("d") or 0))):
+        print(f"{st.ljust(width_status)}  {age.rjust(4)}  {stem.ljust(width_stem)}  {rel}")
+    return 0
+
+
+def cmd_ttl_sweep(
+    wiki_dir: Path,
+    rejected_dir: Path,
+    data_dir: Path,
+    days: int,
+    today: str,
+    now_iso: str,
+) -> int:
+    """Auto-reject not_processed pages whose `created` is older than `days`."""
+    swept = 0
+    skipped = 0
+    for page in _store.iter_pages(wiki_dir):
+        if page.fm.get("review_status") != "not_processed":
+            continue
+        age = _age_days(page.fm.get("created"), today)
+        if age is None or age < days:
+            continue
+        rc = cmd_reject(
+            wiki_dir=wiki_dir,
+            rejected_dir=rejected_dir,
+            data_dir=data_dir,
+            stem=page.stem,
+            feedback=f"No promotion within {days}d window.",
+            today=today,
+            now_iso=now_iso,
+            rejected_by="auto_ttl",
+        )
+        if rc == 0:
+            swept += 1
+        else:
+            skipped += 1
+    print(f"ttl-sweep: {swept} rejected, {skipped} skipped (errors)")
     return 0

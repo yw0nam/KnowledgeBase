@@ -370,3 +370,85 @@ def test_reject_collision_errors(tmp_path, capsys):
     assert "already exists" in capsys.readouterr().err
     # Original wiki file untouched on collision.
     assert page.exists()
+
+
+def test_list_filters_by_status(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    _make_page(wiki, "entity", "A", status="not_processed", created="2026-05-15")
+    _make_page(wiki, "entity", "B", status="pending_for_approve", created="2026-05-16")
+    _make_page(wiki, "concept", "C", status="approved", created="2026-05-17")
+
+    rc = _commands.cmd_list(wiki, status="pending_for_approve", counts=False, today="2026-05-19")
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "B" in out
+    assert "A" not in out
+    assert "C" not in out
+
+
+def test_list_all_status(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    _make_page(wiki, "entity", "A", status="not_processed")
+    _make_page(wiki, "entity", "B", status="pending_for_approve")
+    _make_page(wiki, "concept", "C", status="approved")
+
+    rc = _commands.cmd_list(wiki, status="all", counts=False, today="2026-05-19")
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert all(s in out for s in ("A", "B", "C"))
+
+
+def test_list_counts(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    _make_page(wiki, "entity", "A", status="not_processed")
+    _make_page(wiki, "entity", "B", status="not_processed")
+    _make_page(wiki, "entity", "C", status="pending_for_approve")
+    _make_page(wiki, "concept", "D", status="approved")
+
+    rc = _commands.cmd_list(wiki, status="all", counts=True, today="2026-05-19")
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "2 not_processed" in out
+    assert "1 pending_for_approve" in out
+    assert "1 approved" in out
+
+
+def test_ttl_sweep_rejects_old_not_processed(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    data = tmp_path / "data"
+    _init_data_repo(data)
+    wiki = data / "wiki"
+    rejected = data / "rejected"
+    # 8 days old → should be swept.
+    old = _make_page(wiki, "entity", "Stale", status="not_processed", created="2026-05-11")
+    # 6 days old → not swept.
+    young = _make_page(wiki, "entity", "Fresh", status="not_processed", created="2026-05-13")
+    # pending — not swept regardless of age.
+    pending = _make_page(wiki, "concept", "Pending", status="pending_for_approve", created="2026-05-01")
+    subprocess.run(["git", "add", "."], cwd=data, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "-q", "-m", "seed"],
+        cwd=data, check=True,
+    )
+
+    rc = _commands.cmd_ttl_sweep(
+        wiki_dir=wiki, rejected_dir=rejected, data_dir=data,
+        days=7, today="2026-05-19",
+        now_iso="2026-05-19T00:30:00+09:00",
+    )
+    assert rc == 0
+    assert not old.exists()
+    moved = rejected / "entities" / "subj" / "2026-05" / "Stale.md"
+    assert moved.exists()
+    assert "auto_ttl" in moved.read_text()
+    assert "Auto-rejected" in moved.read_text()
+    assert young.exists()
+    assert pending.exists()
