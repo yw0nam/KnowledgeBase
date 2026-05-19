@@ -31,6 +31,7 @@ Always use YAML block style for lists. Never quote scalar values except dates.
 ```yaml
 ---
 type: entity | concept | decision | question | improvement | checklist | summary
+review_status: not_processed | pending_for_approve | approved   # 6 in-scope types only; summary exempt
 created: "2026-04-15"
 updated: "2026-04-15"
 sources:
@@ -41,6 +42,41 @@ tags: []
 ```
 
 Note: `sources:` paths are relative to `data/` (the parent of `data/wiki/`). Use `raw/...`, not `data/raw/...`.
+
+### Improvement-specific fields
+
+Improvement pages add a tracking-issue schema on top of the common wiki schema:
+
+```yaml
+---
+type: improvement
+review_status: not_processed
+kind: improvement | issue | proposal
+observed_at: "2026-05-19"
+domain: cost | correctness | perf | dx | security
+severity: low | med | high
+issue_status: open | acknowledged | resolved | wontfix
+related: []
+created: "2026-05-19"
+updated: "2026-05-19"
+sources: []
+tags: []
+---
+```
+
+Two distinct `_status` fields coexist on improvement pages:
+- `review_status` — page approval lifecycle (CLI-managed via `kb-wiki-review`)
+- `issue_status` — tracked-issue lifecycle (human-edited)
+
+### Rejected page fields
+
+Pages moved into `data/rejected/` by `kb-wiki-review reject` carry three extra fields appended at rejection time:
+
+```yaml
+review_status: rejected
+rejected_at: "2026-05-19T14:30:00+09:00"
+rejected_by: user | auto_ttl
+```
 
 ### Handoff documents
 
@@ -124,6 +160,8 @@ promotion: null
 **Missing required fields:**
 - Raw files must have: `source_url`, `type`, `captured_at`, `contributor`
 - Wiki pages must have: `type`, `created`, `updated`, `sources`
+- 6 in-scope wiki types additionally require: `review_status`
+- Improvement additionally requires: `kind`, `observed_at`, `domain`, `severity`, `issue_status`, `related`
 - Handoff documents must have: `handoff_id`, `task_slug`, `role`, `status`
 
 **Flow style instead of block style for lists:**
@@ -132,4 +170,5 @@ promotion: null
 
 ### B. PatchNote
 
+- 2026-05-19: Added `review_status` field (6 in-scope types); improvement renames `status` → `issue_status`; documented `rejected_at`/`rejected_by` for rejected pages.
 - 2026-05-08: Initial split from CLAUDE.md and restructured to follow docs/CLAUDE.md Standard Document Structure.
