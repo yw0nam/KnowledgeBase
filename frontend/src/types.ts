@@ -18,6 +18,7 @@ export interface QueueMeta {
   wiki_dir: string;
   wiki_exists: boolean;
   count: number;
+  git_indexed: boolean;
 }
 
 export interface QueueResponse {

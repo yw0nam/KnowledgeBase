@@ -10,6 +10,7 @@ never faked with placeholder data.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -39,6 +40,26 @@ def _serialize_page(wiki_dir: Path, page) -> dict:
     }
 
 
+def _tracked_wiki_files(data_dir: Path) -> set[str] | None:
+    """git-tracked paths under wiki/, relative to data_dir.
+
+    Returns ``None`` when ``data_dir`` is not a git repo — the queue then
+    falls back to unfiltered listing so the surface stays honest about
+    what's on disk rather than hiding it.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z", "--", "wiki/"],
+            cwd=data_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+    return {p for p in result.stdout.split("\x00") if p}
+
+
 @router.get("/queue")
 def get_queue(request: Request) -> dict:
     cfg = request.app.state.config
@@ -52,13 +73,20 @@ def get_queue(request: Request) -> dict:
                 "wiki_dir": str(wiki_dir),
                 "wiki_exists": False,
                 "count": 0,
+                "git_indexed": False,
             },
         }
+
+    # Reject uses `git mv`, so untracked files can never leave wiki/ via
+    # the API. Filter them out here so the queue and reject stay in sync;
+    # otherwise an untracked copy shows up only to fail on submit.
+    tracked = _tracked_wiki_files(cfg.data_dir)
 
     pending = [
         _serialize_page(wiki_dir, p)
         for p in iter_pages(wiki_dir)
         if p.fm.get("review_status") == PENDING
+        and (tracked is None or str(p.path.relative_to(cfg.data_dir)) in tracked)
     ]
     return {
         "pages": pending,
@@ -67,5 +95,6 @@ def get_queue(request: Request) -> dict:
             "wiki_dir": str(wiki_dir),
             "wiki_exists": True,
             "count": len(pending),
+            "git_indexed": tracked is not None,
         },
     }
