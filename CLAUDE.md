@@ -85,6 +85,18 @@ See [Pipeline details](docs/workflows/pipeline.md) for stage-by-stage actions an
 - Handoff documents are stored in `data/handoffs/` and tracked via git.
 - Use uv for package management
 
+## Wiki Approval Workflow
+
+6 wiki 페이지 타입(`entity`, `concept`, `decision`, `improvement`, `checklist`, `question`)은 `review_status` 필드를 통한 사람 승인 사이클을 거친다.
+
+- **새 페이지 작성 (AI)**: 템플릿이 `review_status: not_processed` 를 자동 포함. AI가 직접 추가/수정할 필요 없음.
+- **Approved 페이지 수정 (AI)**: semantic 변화면 `review_status` 를 `not_processed` 로 self-reset, typo/포매팅이면 유지. Deterministic 감지는 없음 — agent 판단.
+- **`## User Feedback` 헤딩 예약**: CLI 전용 섹션. 일반 콘텐츠에서 이 정확한 헤딩 사용 금지. 다른 의미는 `## Feedback`, `## Reviewer Notes` 등 다른 이름 사용.
+- **INDEX.md / subject `_index.md`**: 자동 동기화 없음. Approve 후 subject hub 라인 추가는 user 또는 동반 작업 agent의 책임.
+- **CLI**: `uv run kb-wiki-review list / promote / approve / reject / ttl-sweep`. 상세는 `docs/workflows/wiki-approval-workflow.md`.
+
+`improvement` 타입은 두 `_status` 필드를 보유: `review_status`(이 페이지가 승인됐는가)와 `issue_status`(추적 이슈가 open/resolved 등). 같은 prefix가 도메인을 분리.
+
 ## Privacy
 
 `data/` is a local-only nested git repository. It is never pushed to remote.
@@ -111,6 +123,7 @@ Never commit `data/` contents to the outer repository.
 - [Frontmatter Conventions](docs/reference/frontmatter.md) — Raw, Wiki, Handoff frontmatter schemas
 - [Wiki Categories](docs/reference/wiki-categories.md) — 7 categories, naming, wikilinks, tags
 - [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion, frontmatter
+- [Wiki Approval Workflow](docs/workflows/wiki-approval-workflow.md) — review_status lifecycle, CLI, TTL cron
 - [Commands](docs/reference/commands.md) — kb-lint-wiki, kb-lint-handoff, kb-wiki-index
 
 ## Reference
