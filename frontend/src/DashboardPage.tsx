@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type Ref } from 'react';
 import { ApiError } from './api';
 import { fetchDashboard } from './dashboardApi';
 import {
@@ -36,6 +36,15 @@ const CANONICAL_REVIEW_TYPES = [
   'question',
 ] as const;
 
+const ALL_TYPES_FILTER = '__all__';
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; data: DashboardResponse }
@@ -56,6 +65,22 @@ export function DashboardPage({ onMetaChange }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reloadKey, setReloadKey] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [recentFilter, setRecentFilter] = useState<string>(ALL_TYPES_FILTER);
+  const rejectionsRef = useRef<HTMLElement | null>(null);
+
+  // Drilldown from the type×source matrix: change chip selection on the
+  // rejections card and scroll the card into view. Honors the operator's
+  // reduced-motion preference — the smooth scroll falls back to instant.
+  const handleMatrixTypeSelect = useCallback((type: string) => {
+    setRecentFilter(type);
+    const el = rejectionsRef.current;
+    if (el) {
+      el.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'start',
+      });
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -156,8 +181,17 @@ export function DashboardPage({ onMetaChange }: Props) {
                 />
               </div>
             </div>
-            <TypeSourceMatrix matrix={state.data.rejection_by_type_and_source} />
-            <RecentRejectionsCard items={state.data.recent_rejections} />
+            <TypeSourceMatrix
+              matrix={state.data.rejection_by_type_and_source}
+              selectedType={recentFilter}
+              onTypeSelect={handleMatrixTypeSelect}
+            />
+            <RecentRejectionsCard
+              items={state.data.recent_rejections}
+              filter={recentFilter}
+              onFilterChange={setRecentFilter}
+              sectionRef={rejectionsRef}
+            />
           </>
         )}
       </div>
@@ -432,6 +466,8 @@ function RateCard({ heading, rows, capitalizeLabels, showVolume }: RateCardProps
 
 interface TypeSourceMatrixProps {
   matrix: RejectionByTypeAndSource | undefined;
+  selectedType?: string;
+  onTypeSelect?: (type: string) => void;
 }
 
 // Cross-cut of rejection rate × volume across (type, source_kind). Sparse
@@ -439,7 +475,16 @@ interface TypeSourceMatrixProps {
 // empty so the operator scans a dense surface. Empty cells render `—` so
 // the table doesn't look noisy with zeros. PRODUCT.md success scenario:
 // "concepts × conversations 60% reject rate" jumps out at a glance.
-function TypeSourceMatrix({ matrix }: TypeSourceMatrixProps) {
+//
+// When `onTypeSelect` is provided, non-empty cells become buttons that
+// drill down into the Recent Rejections card. `selectedType` highlights
+// the row matching the current Recent Rejections chip so the matrix and
+// the rejections list stay visually coupled.
+function TypeSourceMatrix({
+  matrix,
+  selectedType,
+  onTypeSelect,
+}: TypeSourceMatrixProps) {
   // Backend may not have shipped yet — render section heading + loading
   // shape so layout is stable on first render before the field exists.
   if (!matrix) {
@@ -490,33 +535,58 @@ function TypeSourceMatrix({ matrix }: TypeSourceMatrixProps) {
             </tr>
           </thead>
           <tbody>
-            {visibleTypes.map((t) => (
-              <tr key={t}>
-                <th className={styles.matrixRowHeader} scope="row">
-                  {capitalize(t)}
-                </th>
-                {visibleSources.map((s) => {
-                  const cell = cellLookup.get(`${t}::${s}`);
-                  if (!cell) {
+            {visibleTypes.map((t) => {
+              const rowSelected = !!selectedType && selectedType === t;
+              const rowHeaderCls = rowSelected
+                ? `${styles.matrixRowHeader} ${styles.matrixRowHeaderActive}`
+                : styles.matrixRowHeader;
+              return (
+                <tr key={t}>
+                  <th className={rowHeaderCls} scope="row">
+                    {capitalize(t)}
+                  </th>
+                  {visibleSources.map((s) => {
+                    const cell = cellLookup.get(`${t}::${s}`);
+                    if (!cell) {
+                      return (
+                        <td
+                          key={s}
+                          className={`${styles.matrixCell} ${styles.matrixEmpty}`}
+                        >
+                          —
+                        </td>
+                      );
+                    }
+                    const pct = Math.round(cell.rate * 100);
+                    const cellContent = (
+                      <>
+                        <div className={styles.matrixRate}>{pct}%</div>
+                        <div className={styles.matrixCount}>n={cell.total}</div>
+                      </>
+                    );
+                    const cellCls = rowSelected
+                      ? `${styles.matrixCell} ${styles.matrixCellActive}`
+                      : styles.matrixCell;
                     return (
-                      <td
-                        key={s}
-                        className={`${styles.matrixCell} ${styles.matrixEmpty}`}
-                      >
-                        —
+                      <td key={s} className={cellCls}>
+                        {onTypeSelect ? (
+                          <button
+                            type="button"
+                            className={styles.matrixCellButton}
+                            onClick={() => onTypeSelect(t)}
+                            aria-label={`Filter rejections to ${capitalize(t)} (${pct}% over ${cell.total} pages with source ${capitalize(s)})`}
+                          >
+                            {cellContent}
+                          </button>
+                        ) : (
+                          cellContent
+                        )}
                       </td>
                     );
-                  }
-                  const pct = Math.round(cell.rate * 100);
-                  return (
-                    <td key={s} className={styles.matrixCell}>
-                      <div className={styles.matrixRate}>{pct}%</div>
-                      <div className={styles.matrixCount}>n={cell.total}</div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -559,12 +629,17 @@ function AutoRejectSoonCard({ items }: AutoRejectSoonCardProps) {
 
 interface RecentRejectionsCardProps {
   items: RecentRejection[];
+  filter: string;
+  onFilterChange: (filter: string) => void;
+  sectionRef?: Ref<HTMLElement>;
 }
 
-const ALL_TYPES_FILTER = '__all__';
-
-function RecentRejectionsCard({ items }: RecentRejectionsCardProps) {
-  const [filter, setFilter] = useState<string>(ALL_TYPES_FILTER);
+function RecentRejectionsCard({
+  items,
+  filter,
+  onFilterChange,
+  sectionRef,
+}: RecentRejectionsCardProps) {
   const count = items.length;
 
   const countsByType = items.reduce<Record<string, number>>((acc, it) => {
@@ -580,7 +655,7 @@ function RecentRejectionsCard({ items }: RecentRejectionsCardProps) {
     filter === ALL_TYPES_FILTER ? items : items.filter((it) => it.type === filter);
 
   return (
-    <section className={styles.card}>
+    <section className={styles.card} ref={sectionRef}>
       <h2 className={styles.cardHeading}>Recent Rejections (last {count})</h2>
       {items.length === 0 ? (
         <p className={styles.empty}>No rejections in the last 5 cycles.</p>
@@ -597,7 +672,7 @@ function RecentRejectionsCard({ items }: RecentRejectionsCardProps) {
                 value={ALL_TYPES_FILTER}
                 count={count}
                 active={filter === ALL_TYPES_FILTER}
-                onSelect={setFilter}
+                onSelect={onFilterChange}
               />
               {typesPresent.map((t) => (
                 <RecentChip
@@ -606,7 +681,7 @@ function RecentRejectionsCard({ items }: RecentRejectionsCardProps) {
                   value={t}
                   count={countsByType[t] ?? 0}
                   active={filter === t}
-                  onSelect={setFilter}
+                  onSelect={onFilterChange}
                 />
               ))}
             </div>
