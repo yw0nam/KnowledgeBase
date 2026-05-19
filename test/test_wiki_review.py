@@ -285,3 +285,88 @@ def test_approve_errors_on_already_approved(tmp_path, capsys):
     rc = _commands.cmd_approve(wiki, "Foo", feedback="x", today="2026-05-19")
     assert rc == 1
     assert "already approved" in capsys.readouterr().err
+
+
+import subprocess
+
+
+def _init_data_repo(data_dir: Path) -> None:
+    """Init a real git repo at data_dir for git mv tests."""
+    data_dir.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q"], cwd=data_dir, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "--allow-empty", "-q", "-m", "init"],
+        cwd=data_dir, check=True,
+    )
+
+
+def test_reject_moves_file_to_rejected_tree(tmp_path):
+    from kb_mcp.cli.wiki_review import _commands, _store
+
+    data = tmp_path / "data"
+    _init_data_repo(data)
+    wiki = data / "wiki"
+    rejected = data / "rejected"
+    page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
+    subprocess.run(["git", "add", "."], cwd=data, check=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+         "commit", "-q", "-m", "add Foo"],
+        cwd=data, check=True,
+    )
+
+    rc = _commands.cmd_reject(
+        wiki_dir=wiki, rejected_dir=rejected, data_dir=data,
+        stem="Foo", feedback="Bad sources.", today="2026-05-19",
+        now_iso="2026-05-19T14:30:00+09:00", rejected_by="user",
+    )
+    assert rc == 0
+    assert not page.exists()
+    moved = rejected / "entities" / "subj" / "2026-05" / "Foo.md"
+    assert moved.exists()
+    text = moved.read_text()
+    assert "review_status: rejected" in text
+    assert 'rejected_at: "2026-05-19T14:30:00+09:00"' in text
+    assert "rejected_by: user" in text
+    assert "2026-05-19-Rejected: Bad sources." in text
+
+
+def test_reject_errors_on_not_pending(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    data = tmp_path / "data"
+    _init_data_repo(data)
+    wiki = data / "wiki"
+    _make_page(wiki, "entity", "Foo", status="not_processed")
+    rc = _commands.cmd_reject(
+        wiki_dir=wiki, rejected_dir=data / "rejected", data_dir=data,
+        stem="Foo", feedback="x", today="2026-05-19",
+        now_iso="2026-05-19T14:30:00+09:00", rejected_by="user",
+    )
+    assert rc == 1
+    assert "must be pending_for_approve" in capsys.readouterr().err
+
+
+def test_reject_collision_errors(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    data = tmp_path / "data"
+    _init_data_repo(data)
+    wiki = data / "wiki"
+    rejected = data / "rejected"
+    page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
+    # Pre-existing collision at the rejected destination.
+    dest = rejected / "entities" / "subj" / "2026-05" / "Foo.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("already here")
+
+    rc = _commands.cmd_reject(
+        wiki_dir=wiki, rejected_dir=rejected, data_dir=data,
+        stem="Foo", feedback="x", today="2026-05-19",
+        now_iso="2026-05-19T14:30:00+09:00", rejected_by="user",
+    )
+    assert rc == 1
+    assert "already exists" in capsys.readouterr().err
+    # Original wiki file untouched on collision.
+    assert page.exists()
