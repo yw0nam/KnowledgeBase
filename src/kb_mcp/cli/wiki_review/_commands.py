@@ -9,7 +9,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from kb_mcp.cli.wiki_review import _store
+from kb_mcp.cli.wiki_review import _feedback, _store
 
 
 def _err(msg: str) -> None:
@@ -39,4 +39,25 @@ def cmd_promote(wiki_dir: Path, stem: str) -> int:
         return 1
     _store.set_frontmatter_field(path, "review_status", "pending_for_approve")
     print(f"✓ Promoted: {path.relative_to(wiki_dir)}")
+    return 0
+
+
+def cmd_approve(wiki_dir: Path, stem: str, feedback: str, today: str) -> int:
+    """pending_for_approve → approved."""
+    path = _resolve_or_print(wiki_dir, stem)
+    if path is None:
+        return 1
+    current = _store.get_frontmatter_field(path, "review_status")
+    if current == "approved":
+        _err(f"already approved: {stem}")
+        return 1
+    if current != "pending_for_approve":
+        _err(
+            f"must be pending_for_approve (current: {current!r}); "
+            "run promote first"
+        )
+        return 1
+    _store.set_frontmatter_field(path, "review_status", "approved")
+    _feedback.append_feedback_line(path, today, "Approved", feedback)
+    print(f"✓ Approved: {path.relative_to(wiki_dir)}")
     return 0

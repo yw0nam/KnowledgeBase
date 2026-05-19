@@ -241,3 +241,47 @@ def test_promote_errors_when_page_not_found(tmp_path, capsys):
     rc = _commands.cmd_promote(wiki, "Nope")
     assert rc == 1
     assert "page not found in wiki/" in capsys.readouterr().err
+
+
+def test_approve_with_feedback_arg(tmp_path):
+    from kb_mcp.cli.wiki_review import _commands, _store
+
+    wiki = tmp_path / "wiki"
+    page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
+    rc = _commands.cmd_approve(wiki, "Foo", feedback="Looks solid.", today="2026-05-19")
+    assert rc == 0
+    assert _store.get_frontmatter_field(page, "review_status") == "approved"
+    text = page.read_text()
+    assert "## User Feedback" in text
+    assert "2026-05-19-Approved: Looks solid." in text
+
+
+def test_approve_empty_feedback_skips_section(tmp_path):
+    from kb_mcp.cli.wiki_review import _commands, _store
+
+    wiki = tmp_path / "wiki"
+    page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
+    rc = _commands.cmd_approve(wiki, "Foo", feedback="", today="2026-05-19")
+    assert rc == 0
+    assert _store.get_frontmatter_field(page, "review_status") == "approved"
+    assert "## User Feedback" not in page.read_text()
+
+
+def test_approve_errors_on_not_processed(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    _make_page(wiki, "entity", "Foo", status="not_processed")
+    rc = _commands.cmd_approve(wiki, "Foo", feedback="x", today="2026-05-19")
+    assert rc == 1
+    assert "must be pending_for_approve" in capsys.readouterr().err
+
+
+def test_approve_errors_on_already_approved(tmp_path, capsys):
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    _make_page(wiki, "entity", "Foo", status="approved")
+    rc = _commands.cmd_approve(wiki, "Foo", feedback="x", today="2026-05-19")
+    assert rc == 1
+    assert "already approved" in capsys.readouterr().err
