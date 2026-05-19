@@ -8,7 +8,6 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-
 DEFAULT_OPENCODE_DB = Path.home() / ".local/share/opencode/opencode.db"
 DEFAULT_HERMES_DB = Path.home() / ".hermes/state.db"
 DEFERRED_METRICS = ["Task Completion Rate", "pass@k", "pass^k"]
