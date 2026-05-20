@@ -553,6 +553,115 @@ def test_ttl_sweep_rejects_old_not_processed(tmp_path, capsys):
     assert pending.exists()
 
 
+def test_list_with_unknown_age_does_not_crash(tmp_path, capsys):
+    """A page missing `created` must not break `cmd_list` sort."""
+    from kb_mcp.cli.wiki_review import _commands
+
+    wiki = tmp_path / "wiki"
+    # Normal page with valid created.
+    _make_page(wiki, "entity", "Ok", status="not_processed", created="2026-05-15")
+    # Hand-craft a page whose `created` is malformed → _age_days returns None.
+    bad = wiki / "entities" / "subj" / "2026-05" / "Bad.md"
+    bad.parent.mkdir(parents=True, exist_ok=True)
+    bad.write_text(
+        "---\n"
+        "type: entity\n"
+        "review_status: not_processed\n"
+        "created: not-a-date\n"
+        'updated: "2026-05-15"\n'
+        "sources: []\n"
+        "aliases: []\n"
+        "tags: []\n"
+        "---\n\nBody.\n"
+    )
+
+    rc = _commands.cmd_list(wiki, status="all", counts=False, today="2026-05-19")
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Ok" in out
+    assert "Bad" in out
+
+
+def test_approve_twice_does_not_duplicate_approved_at(tmp_path):
+    """Re-approve (after self-reset → re-promote) must not duplicate approved_at."""
+    from kb_mcp.cli.wiki_review import _commands, _store
+
+    wiki = tmp_path / "wiki"
+    page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
+
+    # First approve.
+    rc = _commands.cmd_approve(
+        wiki,
+        tmp_path,
+        "Foo",
+        feedback="",
+        today="2026-05-19",
+        now_iso="2026-05-19T14:30:00+09:00",
+    )
+    assert rc == 0
+
+    # Simulate self-reset + re-promote cycle.
+    _store.set_frontmatter_field(page, "review_status", "pending_for_approve")
+
+    # Second approve.
+    rc = _commands.cmd_approve(
+        wiki,
+        tmp_path,
+        "Foo",
+        feedback="",
+        today="2026-05-20",
+        now_iso="2026-05-20T10:00:00+09:00",
+    )
+    assert rc == 0
+
+    text = page.read_text()
+    # Exactly one approved_at line (the latest), no duplicate accumulation.
+    assert text.count("approved_at:") == 1
+    assert "2026-05-20T10:00:00+09:00" in text
+    assert "2026-05-19T14:30:00+09:00" not in text
+
+
+def test_reject_leaves_source_unchanged_when_git_mv_fails(tmp_path, capsys):
+    """If git mv fails (no git repo), source frontmatter must stay intact."""
+    from kb_mcp.cli.wiki_review import _commands, _store
+
+    # No `_init_data_repo` → data_dir is not a git repo, git mv will fail.
+    data = tmp_path / "data"
+    wiki = data / "wiki"
+    rejected = data / "rejected"
+    page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
+    before = page.read_text()
+
+    rc = _commands.cmd_reject(
+        wiki_dir=wiki,
+        rejected_dir=rejected,
+        data_dir=data,
+        stem="Foo",
+        feedback="should not reach this",
+        today="2026-05-19",
+        now_iso="2026-05-19T14:30:00+09:00",
+        rejected_by="user",
+    )
+    assert rc == 1
+    assert "git mv failed" in capsys.readouterr().err
+    # Source untouched: no frontmatter mutation, no feedback section appended.
+    assert page.exists()
+    assert page.read_text() == before
+    assert _store.get_frontmatter_field(page, "review_status") == "pending_for_approve"
+
+
+def test_log_write_failure_surfaces_to_stderr(tmp_path, capsys):
+    """OSError during log write must produce a stderr warning, not silent pass."""
+    from kb_mcp.cli.wiki_review import _log
+
+    # Point the log at a path whose parent doesn't exist → OSError on open().
+    bogus = tmp_path / "no-such-dir" / "log.md"
+    _log.append_action(bogus, "2026-05-19", "promote", "Foo", "entity")
+    err = capsys.readouterr().err
+    assert "log write failed" in err
+    assert str(bogus) in err
+
+
 def test_main_dispatch_list(tmp_path, capsys, monkeypatch):
     from kb_mcp.cli import wiki_review
 

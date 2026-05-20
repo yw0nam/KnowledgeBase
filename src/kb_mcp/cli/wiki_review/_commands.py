@@ -72,7 +72,7 @@ def cmd_approve(
         )
         return 1
     _store.set_frontmatter_field(path, "review_status", "approved")
-    _store.add_frontmatter_lines(path, [f'approved_at: "{now_iso}"'])
+    _store.set_frontmatter_field(path, "approved_at", f'"{now_iso}"')
     _feedback.append_feedback_line(path, today, "Approved", feedback)
     page_type = _store.get_frontmatter_field(path, "type") or ""
     _log.append_action(data_dir / "log.md", today, "approve", stem, page_type)
@@ -128,17 +128,8 @@ def cmd_reject(
     dest.parent.mkdir(parents=True, exist_ok=True)
     page_type = _store.get_frontmatter_field(path, "type") or ""
 
-    # Step 1: update frontmatter + body BEFORE the move so git tracks the
-    # rename + modification as a single change.
-    _store.set_frontmatter_field(path, "review_status", "rejected")
-    _store.add_frontmatter_lines(
-        path,
-        [f'rejected_at: "{now_iso}"', f"rejected_by: {rejected_by}"],
-    )
-    label = "Auto-rejected" if rejected_by == "auto_ttl" else "Rejected"
-    _feedback.append_feedback_line(path, today, label, feedback)
-
-    # Step 2: git mv. cwd = data_dir so paths are relative to repo root.
+    # Step 1: git mv first. If this fails, source stays in wiki/ with its
+    # original frontmatter — no stuck state.
     src_rel = path.relative_to(data_dir)
     dest_rel = dest.relative_to(data_dir)
     try:
@@ -152,6 +143,13 @@ def cmd_reject(
     except subprocess.CalledProcessError as exc:
         _err(f"git mv failed: {exc.stderr.strip()}")
         return 1
+
+    # Step 2: stamp rejection state on the moved file.
+    _store.set_frontmatter_field(dest, "review_status", "rejected")
+    _store.set_frontmatter_field(dest, "rejected_at", f'"{now_iso}"')
+    _store.set_frontmatter_field(dest, "rejected_by", rejected_by)
+    label = "Auto-rejected" if rejected_by == "auto_ttl" else "Rejected"
+    _feedback.append_feedback_line(dest, today, label, feedback)
 
     _log.append_action(
         data_dir / "log.md", today, "reject", stem, page_type, rejected_by
@@ -202,9 +200,14 @@ def cmd_list(wiki_dir: Path, status: str, counts: bool, today: str) -> int:
         rows.append((st, age_str, p.stem, str(p.rel)))
     width_status = max(len(r[0]) for r in rows)
     width_stem = max(len(r[2]) for r in rows)
-    for st, age, stem, rel in sorted(
-        rows, key=lambda r: (r[0], -int(r[1].rstrip("d") or 0))
-    ):
+
+    def _age_sort_key(age_str: str) -> tuple[int, int]:
+        # Unknown age (created missing/malformed) sorts after all known ages.
+        if age_str == "?":
+            return (1, 0)
+        return (0, -int(age_str.rstrip("d")))
+
+    for st, age, stem, rel in sorted(rows, key=lambda r: (r[0], _age_sort_key(r[1]))):
         print(
             f"{st.ljust(width_status)}  {age.rjust(4)}  {stem.ljust(width_stem)}  {rel}"
         )

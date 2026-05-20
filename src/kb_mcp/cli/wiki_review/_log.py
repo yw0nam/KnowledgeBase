@@ -20,6 +20,7 @@ audit log is best-effort and must never block the user's action.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 _TAIL_PROBE_BYTES = 2048
@@ -57,5 +58,5 @@ def append_action(
                     fh.write("\n")
                 fh.write(f"## {today}\n")
             fh.write(f"- {action}: {stem}{meta}\n")
-    except OSError:
-        pass
+    except OSError as exc:
+        print(f"warning: log write failed ({log_path}): {exc}", file=sys.stderr)
