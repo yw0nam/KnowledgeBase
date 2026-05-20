@@ -93,7 +93,7 @@ Steps:
 6. Write a new daily handoff with processed, skipped, promoted, and open items.
 7. Append `data/log.md` with target date, sources, wiki pages, handoff path, and lint result.
 8. Run `kb-lint-wiki --check-immutability` and `kb-lint-handoff`.
-9. If lint passes, commit changes in the nested `data/` repo.
+9. Leave validated changes uncommitted for manual review. Do not run `git commit` or `git push`.
 
 Daily promotion standard:
 
@@ -140,7 +140,7 @@ Steps:
 7. Write a weekly handoff with unresolved items and monthly candidates.
 8. Append `data/log.md`.
 9. Run `kb-lint-wiki --check-immutability` and `kb-lint-handoff`.
-10. If lint passes, commit changes in the nested `data/` repo.
+10. Leave validated changes uncommitted for manual review. Do not run `git commit` or `git push`.
 
 Weekly promotion standard:
 
@@ -168,7 +168,7 @@ Steps:
 8. Write a monthly handoff with remaining structural issues and skill candidates.
 9. Append `data/log.md`.
 10. Run `kb-lint-wiki --strict` and `kb-lint-handoff`.
-11. If lint passes, commit changes in the nested `data/` repo.
+11. Leave validated changes uncommitted for manual review. Do not run `git commit` or `git push`.
 
 Monthly promotion standard:
 
@@ -185,17 +185,7 @@ If a run cannot finish:
 2. Keep completed wiki edits only if they are source-backed and lintable.
 3. Write or update a handoff with the failure, blocker, and safe next command.
 4. Append `data/log.md` with `status: failed` or clear prose equivalent.
-5. Do not commit a broken wiki state.
-
-### Commit Message Convention
-
-Use short nested `data/` repo commit messages:
-
-```text
-daily: build memory summary for YYYY-MM-DD
-weekly: synthesize memory for YYYY-WNN
-monthly: maintain memory wiki for YYYY-MM
-```
+5. Do not leave the wiki in a broken state — revert source-backed edits that cannot pass lint.
 
 ---
 
@@ -213,9 +203,10 @@ Only create wiki pages with source-backed frontmatter.
 Use data/handoffs as the operational state board.
 Append data/log.md.
 Run the required lint commands.
-Commit the nested data repo only if lint passes.
+Do not run git commit, git push, or any other VCS write operation; leave validated changes uncommitted for manual review.
 ```
 
 ### B. PatchNote
 
+- 2026-05-20: Memory cron jobs no longer auto-commit — lint only, leave changes uncommitted for manual review. Removed Commit Message Convention section.
 - 2026-05-18: Initial periodic memory workflow for fresh-session cron agents.

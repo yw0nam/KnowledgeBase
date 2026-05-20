@@ -15,5 +15,5 @@ flock -n "$LOCK_DIR/weekly.lock" bash -lc "
     --model anthropic/claude-sonnet-4-6 \
     --dangerously-skip-permissions \
     --dir '$KB_ROOT' \
-    'Run the KnowledgeBase weekly memory workflow for $TARGET_WEEK. Read docs/workflows/periodic-memory-workflow.md first. Read docs/workflows/cron-jobs.md before executing shell commands. Use data/handoffs as the operational state board. Never edit existing data/raw files. Run required lint commands. Commit the nested data repo only if lint passes. If blocked, write a handoff and append data/log.md before exiting.'
+    'Run the KnowledgeBase weekly memory workflow for $TARGET_WEEK. Read docs/workflows/periodic-memory-workflow.md first. Read docs/workflows/cron-jobs.md before executing shell commands. Use data/handoffs as the operational state board. Never edit existing data/raw files. Run required lint commands. Do not run git commit, git push, or any other VCS write operation; leave validated changes uncommitted for manual review. If blocked, write a handoff and append data/log.md before exiting.'
 " >> "$LOG_DIR/weekly.log" 2>&1

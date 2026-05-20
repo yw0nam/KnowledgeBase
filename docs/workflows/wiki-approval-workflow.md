@@ -30,13 +30,15 @@ Empty `--feedback` (또는 interactive prompt에서 enter만) → User Feedback 
 
 ## Daily-update agent contract
 
-MVP에서 별도 cron 없음. 사용자가 Claude Code 세션에서 수동 invoke.
+`scripts/cron/kb-wiki-promote.sh` 가 매일 04:00 KST 실행 (`kb-memory-daily` 30분 후).
+수동으로 invoke할 수도 있음.
 
-1. Input:
+1. Input — uncommitted 변경분 우선 확인:
    ```bash
+   git -C data status --short          # 오늘 daily build가 만든 신규 파일 파악
    uv run kb-wiki-review list --status not_processed
    ```
-2. 각 페이지에 대해 LLM 판단:
+2. 각 페이지에 대해 LLM 판단 (신규 uncommitted 페이지 우선):
    - 소스가 명확하고 검증 가능한가?
    - 다른 wiki/handoff에서 참조될 가능성이 있는가?
    - 이벤트 dump가 아닌 *지식*인가 (시간이 지나도 가치 유지)?
@@ -45,6 +47,12 @@ MVP에서 별도 cron 없음. 사용자가 Claude Code 세션에서 수동 invok
    uv run kb-wiki-review promote <stem>
    ```
 4. Leave: 아무것도 안 함. 다음 날 재고려. 7일째 자동 TTL.
+5. Handoff + log: `data/handoffs/YYYY/MM/wiki-promote/` 에 결과 기록.
+6. Promoted 페이지가 있으면 nested `data/` repo commit:
+   ```
+   promote: YYYY-MM-DD wiki promotion
+   ```
+   Push는 하지 않음.
 
 **금지**: agent는 직접 reject 안 함. 사람만 reject. TTL이 deterministic 안전망.
 

@@ -10,14 +10,23 @@ KnowledgeBase is a memory-workflow system (v0) that captures knowledge from mult
 
 ```
 KnowledgeBase/                    # Outer repo: code, lint, templates, docs
-├── src/kb_mcp/                   # CLI tools (lint, daily reports)
-│   └── cli/
-│       ├── lint_wiki.py          # kb-lint-wiki command
-│       ├── lint_handoff.py       # kb-lint-handoff command
-│       └── wiki_index.py         # kb-wiki-index command (regen wiki/INDEX.md)
+├── src/kb_mcp/                   # CLI tools + FastAPI web server
+│   ├── cli/
+│   │   ├── lint_wiki.py          # kb-lint-wiki command
+│   │   ├── lint_handoff.py       # kb-lint-handoff command
+│   │   └── wiki_index.py         # kb-wiki-index command (regen wiki/INDEX.md)
+│   └── web/                      # FastAPI review console backend (kb-web)
+│       ├── app.py                #   FastAPI app factory
+│       ├── config.py             #   KB_DATA_DIR, port config
+│       ├── main.py               #   kb-web entrypoint
+│       └── routes/               #   /api/queue, /api/pages, /api/dashboard
 ├── src/CLAUDE.md                 # CLAUDE.md file for src/
+├── frontend/                     # Vite + React + TypeScript review console SPA
+│   ├── src/                      #   Pages (QueuePage, DashboardPage), components, API clients
+│   └── ...
 ├── scripts/
-│   └── ingest-github.sh          # GitHub source collection
+│   ├── ingest-github.sh          # GitHub source collection
+│   └── dev-web.sh                # Start FastAPI + Vite together
 ├── templates/                    # Frontmatter + handoff templates
 │   ├── wiki/                     #   Wiki page templates (entity, concept, decision, …)
 │   │   └── summaries/            #     Summary subtypes (daily, weekly, …)

@@ -56,6 +56,25 @@ Empty `--feedback` (or empty interactive input) skips the `## User Feedback` lin
 
 See `docs/workflows/wiki-approval-workflow.md` for the full lifecycle.
 
+### kb-web
+
+Start the local FastAPI review console server.
+
+```bash
+./scripts/dev-web.sh        # API :8765 + Vite :5173 — use this during development
+kb-web --reload --port 8765 # API only, with auto-reload
+```
+
+Environment variables:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `KB_DATA_DIR` | `<repo>/data` | Path to the local data tree |
+| `KB_WEB_PORT` | `8765` | FastAPI port |
+| `VITE_PORT` | `5173` | Vite dev server port |
+
+API endpoints: `GET /api/queue`, `GET /api/pages/{stem}`, `GET /api/dashboard?window={4,8,12,24}`, `POST /api/pages/{stem}/approve`, `POST /api/pages/{stem}/reject`. Swagger UI at `/api/docs`.
+
 ## 3. Usage
 
 Run the typical workflow in order:
@@ -105,6 +124,7 @@ Add the missing field to the handoff document frontmatter.
 
 ### B. PatchNote
 
+- 2026-05-20: Added `kb-web` command and `dev-web.sh` for the local FastAPI + Vite review console.
 - 2026-05-19: Added `kb-wiki-review` CLI (5 subcommands) for `review_status` lifecycle.
 - 2026-05-18: Added kb-wiki-index — generates `data/wiki/INDEX.md`. Enforced by `kb-lint-wiki`.
 - 2026-05-18: Removed kb-mcp (MCP server retired in favor of direct CLI usage by Claude Code agents).

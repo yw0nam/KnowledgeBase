@@ -16,6 +16,7 @@ Use this skill when a user wants to start using this KnowledgeBase on a fresh cl
 - New wiki pages of types `entity`, `concept`, `decision`, `improvement`, `checklist`, `question` start as `review_status: not_processed` (template default) and graduate to `pending_for_approve` → `approved` via `kb-wiki-review`. Non-approved pages are intentionally excluded from `INDEX.md` and orphan/sync warnings.
 - The `## User Feedback` heading inside a wiki page body is reserved exclusively for the `kb-wiki-review` CLI. Never use that exact heading as a regular content section.
 - Do not create, modify, or install cron jobs until the user approves the exact job list.
+- Memory cron jobs (daily/weekly/monthly) run lint but do **not** commit. Changes are left uncommitted for manual review. Do not add `git commit` or `git push` to memory cron wrappers.
 - Prefer relative paths and repo-root-derived paths. Do not hard-code machine-specific absolute paths.
 - If `data/` already exists, preserve it and only create missing directories/files.
 
@@ -131,14 +132,15 @@ Default proposal:
 
 ```text
 KnowledgeBase memory jobs:
-- daily memory build: 03:30 every day
-- weekly memory build: 04:15 every Monday
-- monthly memory maintenance: 04:45 on day 1 of each month
-- wiki TTL sweep: 00:30 every day (auto-reject not_processed pages older than 7d)
+- daily memory build:   03:30 every day
+- wiki promote:         04:00 every day (promote not_processed → pending_for_approve, then commit)
+- weekly memory build:  04:15 every Monday
+- monthly memory maint: 04:45 on day 1 of each month
+- wiki TTL sweep:       00:30 every day (auto-reject not_processed pages older than 7d)
 
 Optional usage report jobs:
-- OpenCode daily usage report: 03:10 every day
-- Hermes daily usage report: 03:15 every day
+- OpenCode daily usage report:    03:10 every day
+- Hermes daily usage report:      03:15 every day
 - Claude Code daily usage report: 03:20 every day
 ```
 

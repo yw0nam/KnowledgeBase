@@ -35,7 +35,7 @@ Every cron job must guarantee:
 | State handoff | Write/update `data/handoffs/` every run |
 | Audit trail | Append `data/log.md` every run |
 | Validation | Run required lint commands before commit |
-| Commit boundary | Commit only nested `data/` repo, never outer repo |
+| Commit boundary | Never commit automatically — leave validated changes uncommitted for manual review |
 | Failure record | Write failure handoff and log entry before exit |
 
 ### Recommended Schedule
@@ -45,6 +45,7 @@ Use KST-oriented windows and avoid running jobs at the exact same minute.
 | Job | Schedule | Target Period | Purpose |
 |---|---|---|---|
 | Daily memory build | `30 3 * * *` | yesterday | Capture and triage new raw data |
+| Wiki promote | `0 4 * * *` | uncommitted `not_processed` pages | Promote worthy pages to `pending_for_approve` |
 | Weekly memory build | `15 4 * * 1` | previous ISO week | Synthesize patterns and promotions |
 | Monthly memory maintenance | `45 4 1 * *` | previous month | Consolidate, cleanup, and close loops |
 | Wiki TTL sweep | `30 0 * * *` | `not_processed` > 7d | Auto-reject stale draft pages |
@@ -59,6 +60,7 @@ Use separate lock files:
 
 ```text
 .cron/locks/daily.lock
+.cron/locks/wiki-promote.lock
 .cron/locks/weekly.lock
 .cron/locks/monthly.lock
 .cron/locks/wiki-ttl-sweep.lock
@@ -72,6 +74,7 @@ Wrapper logs should stay outside `data/` because they are process logs, not cura
 
 ```text
 .cron/logs/daily.log
+.cron/logs/wiki-promote.log
 .cron/logs/weekly.log
 .cron/logs/monthly.log
 ```
@@ -104,6 +107,7 @@ SHELL=/bin/bash
 PATH=/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin
 
 30 3 * * * <repo-root>/scripts/cron/kb-memory-daily.sh
+ 0 4 * * * <repo-root>/scripts/cron/kb-wiki-promote.sh
 15 4 * * 1 <repo-root>/scripts/cron/kb-memory-weekly.sh
 45 4 1 * * <repo-root>/scripts/cron/kb-memory-monthly.sh
 30 0 * * * <repo-root>/scripts/cron/kb-wiki-ttl-sweep.sh
@@ -190,7 +194,7 @@ Read docs/workflows/cron-jobs.md before executing shell commands.
 Use data/handoffs as the operational state board.
 Never edit existing data/raw files.
 Run required lint commands.
-Commit the nested data repo only if lint passes.
+Do not run git commit, git push, or any other VCS write operation; leave validated changes uncommitted for manual review.
 If blocked, write a handoff and append data/log.md before exiting.
 ```
 
@@ -232,5 +236,6 @@ cd data && git status --short
 
 ### B. PatchNote
 
+- 2026-05-20: Added wiki-promote job (04:00 daily) — promotes not_processed → pending_for_approve and commits. Memory cron jobs (daily/weekly/monthly) no longer auto-commit — lint only, leave changes uncommitted for manual review.
 - 2026-05-19: Added wiki TTL sweep job (00:30 daily) for auto-rejecting stale `not_processed` pages.
 - 2026-05-18: Initial cron job design for periodic memory workflows.

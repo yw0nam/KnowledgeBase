@@ -58,6 +58,7 @@ Use `workflows/` for ordered execution steps. Use `reference/` for facts that ag
 | Choose wiki category/path | `docs/reference/wiki-categories.md` |
 | Approve/reject wiki pages | `docs/workflows/wiki-approval-workflow.md` |
 | Run CLI commands | `docs/reference/commands.md` |
+| Start review console (web UI) | `README.md` → "Review console" section; `scripts/dev-web.sh` |
 
 ---
 
@@ -65,6 +66,7 @@ Use `workflows/` for ordered execution steps. Use `reference/` for facts that ag
 
 ### A. PatchNote
 
+- 2026-05-20: Added review console (web UI) to usage table.
 - 2026-05-19: Added wiki approval workflow to cron read order and usage table.
 - 2026-05-18: Added cron job workflow to memory build read order.
 - 2026-05-18: Added usage report workflow for source-specific OpenCode/Hermes reports.
