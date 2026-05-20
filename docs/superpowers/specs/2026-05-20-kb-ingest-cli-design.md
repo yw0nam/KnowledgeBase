@@ -1,7 +1,7 @@
 # KB Ingest CLI — Design Spec
 
 **Date**: 2026-05-20
-**Status**: Draft (brainstorming complete, awaiting user review)
+**Status**: Superseded by `2026-05-20-cron-scope-artifact-design.md` (사람용 CLI 보다 agent 입력 artifact 가 진짜 페인 포인트에 맞음 — citation map 로직은 후속 spec 의 regen 스크립트로 흡수됨)
 
 ## 1. Problem
 
