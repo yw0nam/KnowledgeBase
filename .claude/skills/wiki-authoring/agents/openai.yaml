@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wiki Authoring"
+  short_description: "Write lintable KnowledgeBase wiki pages."
+  default_prompt: "Create or update KnowledgeBase wiki pages from source-backed evidence."

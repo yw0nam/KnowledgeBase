@@ -15,5 +15,5 @@ flock -n "$LOCK_DIR/daily.lock" bash -lc "
     --model anthropic/claude-sonnet-4-6 \
     --dangerously-skip-permissions \
     --dir '$KB_ROOT' \
-    'Run the KnowledgeBase daily memory workflow for $TARGET_DATE. Read docs/workflows/periodic-memory-workflow.md first. Read docs/workflows/cron-jobs.md before executing shell commands. Use data/handoffs as the operational state board. Never edit existing data/raw files. Run required lint commands. Do not run git commit, git push, or any other VCS write operation; leave validated changes uncommitted for manual review. If blocked, write a handoff and append data/log.md before exiting.'
+    'Run the daily memory workflow for $TARGET_DATE. Import and follow .claude/skills/memory-report/SKILL.md §Daily as the runtime contract. Import .claude/skills/wiki-authoring/SKILL.md for any wiki page edits and .claude/skills/handoff-document/SKILL.md for the handoff. Do not read docs as runtime instructions. Never run git commit. If blocked, write a handoff with status: ready and append data/log.md before exiting.'
 " >> "$LOG_DIR/daily.log" 2>&1

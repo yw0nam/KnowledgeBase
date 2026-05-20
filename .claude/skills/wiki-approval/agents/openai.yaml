@@ -1,0 +1,4 @@
+interface:
+  display_name: "Wiki Approval"
+  short_description: "Manage KnowledgeBase wiki review lifecycle."
+  default_prompt: "Run the KnowledgeBase wiki approval workflow for the target date."
