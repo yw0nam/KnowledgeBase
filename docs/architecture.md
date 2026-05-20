@@ -29,8 +29,9 @@ Never commit `data/` contents to the outer repository. The outer `.gitignore` ex
 | Wiki | `data/wiki/` | Durable long-term knowledge | Update only with source-backed frontmatter |
 | Rejected | `data/rejected/` | Wiki pages rejected during review (audit trail) | Populated only by `kb-wiki-review reject`; mirrors `wiki/` tree |
 | Log | `data/log.md` | Append-only operation history | Append every operation |
-| Templates | `templates/` | File skeletons | Update in outer repo |
-| Docs | `docs/` | Operating instructions and references | Update in outer repo |
+| Skill templates | `.claude/skills/*/assets` or `reference/templates` | Runtime file skeletons bundled with skills | Update in outer repo |
+| Raw templates | `templates/raw/` | Raw source frontmatter skeletons | Update in outer repo |
+| Docs | `docs/` | Design references and human-readable lookup material | Update in outer repo |
 
 ### Wiki Shape
 
@@ -47,7 +48,7 @@ data/wiki/
   summaries/      # daily, weekly, monthly, migration rollups
 ```
 
-Six of the seven types (`entity`, `concept`, `decision`, `improvement`, `checklist`, `question`) carry a `review_status` field (`not_processed` → `pending_for_approve` → `approved`) managed via `kb-wiki-review`. Summaries are exempt. Only `approved` pages appear in `INDEX.md`. See `docs/workflows/wiki-approval-workflow.md`.
+Six of the seven types (`entity`, `concept`, `decision`, `improvement`, `checklist`, `question`) carry a `review_status` field (`not_processed` → `pending_for_approve` → `approved`) managed via `kb-wiki-review`. Summaries are exempt. Only `approved` pages appear in `INDEX.md`. Runtime approval work uses `.claude/skills/wiki-approval/SKILL.md`.
 
 ### Operating Flow
 
@@ -81,9 +82,9 @@ When deciding where information belongs:
 | Current task state or next action | `data/handoffs/` |
 | Durable concept or entity | `data/wiki/` |
 | Execution record | `data/log.md` |
-| Reusable file skeleton | `templates/` |
-| Agent operating instruction | `docs/workflows/` |
-| Schema or command reference | `docs/reference/` |
+| Reusable runtime skeleton | `.claude/skills/<skill>/assets` or `.claude/skills/<skill>/reference/templates` |
+| Agent operating instruction | `.claude/skills/` |
+| Human schema or command reference | `docs/reference/` |
 
 ---
 
@@ -91,6 +92,8 @@ When deciding where information belongs:
 
 ### A. PatchNote
 
+- 2026-05-20: Removed workflow docs from the active documentation map; project skills are the runtime workflow layer.
+- 2026-05-20: Reframed workflow docs as design references and `.claude/skills/` as runtime operating instructions.
 - 2026-05-20: Added Web Review Console section (FastAPI + React SPA, `src/kb_mcp/web/`, `frontend/`, `scripts/dev-web.sh`).
 - 2026-05-19: Added `data/rejected/` memory layer; noted `review_status` on six in-scope wiki types.
 - 2026-05-18: Initial architecture overview after docs restructuring.

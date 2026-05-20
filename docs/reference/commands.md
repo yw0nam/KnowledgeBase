@@ -6,6 +6,7 @@ Updated: 2026-05-18
 
 - **Purpose**: KnowledgeBase CLI commands for validating wiki/handoff content and generating reports.
 - **I/O**: Shell command → lint report (exit 0 = pass, non-zero = fail).
+- **Runtime**: Workflow ordering lives in `.claude/skills/`; this document is command reference.
 
 ## 2. Core Logic
 
@@ -54,7 +55,7 @@ kb-wiki-review ttl-sweep [--days 7]                 # cron only — auto-reject 
 `<stem>` is the filename without `.md`. STATUS ∈ `not_processed | pending_for_approve | approved | all`.
 Empty `--feedback` (or empty interactive input) skips the `## User Feedback` line append.
 
-See `docs/workflows/wiki-approval-workflow.md` for the full lifecycle.
+Use `.claude/skills/wiki-approval/SKILL.md` for the full lifecycle.
 
 ### kb-web
 
@@ -77,35 +78,14 @@ API endpoints: `GET /api/queue`, `GET /api/pages/{stem}`, `GET /api/dashboard?wi
 
 ## 3. Usage
 
-Run the typical workflow in order:
+Use this file to look up command names and flags. Use `.claude/skills/` for command ordering:
 
-```bash
-# Step 1: Ingest sources
-./scripts/ingest-github.sh owner/repo
-
-# Step 2: Write wiki pages (LLM step, no command)
-
-# Step 3a: Refresh global TOC (after any wiki page change)
-kb-wiki-index
-
-# Step 3b: Validate wiki
-kb-lint-wiki
-
-# Step 4: Validate handoffs
-kb-lint-handoff
-
-# Step 4b (Optional): Promote AI-written pages to review queue
-kb-wiki-review list --status not_processed
-kb-wiki-review promote <stem>
-
-# Step 5: Commit when both lints exit 0
-cd data
-git add raw/ wiki/ log.md
-git commit -m "ingest: [source] description"
-```
-
-For cron-based daily, weekly, and monthly memory workflows, read
-`docs/workflows/periodic-memory-workflow.md` before running the pipeline.
+| Task | Skill |
+|---|---|
+| Write wiki pages | `.claude/skills/wiki-authoring/SKILL.md` |
+| Review/promote pages | `.claude/skills/wiki-approval/SKILL.md` |
+| Write handoffs | `.claude/skills/handoff-document/SKILL.md` |
+| Run periodic memory | `.claude/skills/memory-report/SKILL.md` |
 
 ---
 
@@ -125,6 +105,8 @@ Add the missing field to the handoff document frontmatter.
 ### B. PatchNote
 
 - 2026-05-20: Added `kb-web` command and `dev-web.sh` for the local FastAPI + Vite review console.
+- 2026-05-20: Routed workflow ordering to project skills; this doc remains command reference.
+- 2026-05-20: Removed links to deleted workflow docs.
 - 2026-05-19: Added `kb-wiki-review` CLI (5 subcommands) for `review_status` lifecycle.
 - 2026-05-18: Added kb-wiki-index — generates `data/wiki/INDEX.md`. Enforced by `kb-lint-wiki`.
 - 2026-05-18: Removed kb-mcp (MCP server retired in favor of direct CLI usage by Claude Code agents).

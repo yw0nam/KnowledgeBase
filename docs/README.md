@@ -1,62 +1,59 @@
 # Documentation Index
 
-Updated: 2026-05-18
+Updated: 2026-05-20
 
 ## 1. Synopsis
 
-- **Purpose**: Route humans and fresh-session agents to the right KnowledgeBase document.
-- **I/O**: Question or task type -> document path to read first.
+- **Purpose**: Route humans and agents to project skills for workflows and compact docs for reference.
+- **I/O**: Question or task type -> skill for execution or document for design context.
 
 ## 2. Core Logic
 
-### Read Order
+### Runtime Skills First
 
-For a new human or agent, read in this order:
+Agents should execute core workflows from `.claude/skills/`, not by loading workflow docs:
+
+| Task | Runtime contract |
+|---|---|
+| Initialize a clone/profile | `.claude/skills/knowledgebase-initialize/SKILL.md` |
+| Write or fix wiki pages | `.claude/skills/wiki-authoring/SKILL.md` |
+| Promote/approve/reject wiki pages | `.claude/skills/wiki-approval/SKILL.md` |
+| Configure usage reports | `.claude/skills/usage-report-setup/SKILL.md` |
+| Daily/weekly/monthly memory build | `.claude/skills/memory-report/SKILL.md` |
+| Write handoff documents | `.claude/skills/handoff-document/SKILL.md` |
+
+For human onboarding, read:
 
 1. `CLAUDE.md`
 2. `docs/architecture.md`
-3. `docs/workflows/pipeline.md`
-4. Task-specific workflow or reference document
-
-For cron-based memory builds, read:
-
-1. `CLAUDE.md`
-2. `docs/workflows/cron-jobs.md`
-3. `docs/workflows/usage-reports.md` if usage report jobs are enabled
-4. `docs/workflows/periodic-memory-workflow.md`
-5. `docs/workflows/pipeline.md`
-6. `docs/reference/frontmatter.md`
-7. `docs/reference/wiki-categories.md`
-8. `docs/workflows/handoff-system.md`
-9. `docs/workflows/wiki-approval-workflow.md`
+3. The relevant skill or reference document if needed
 
 ### Directory Map
 
 | Path | Role |
 |---|---|
 | `docs/architecture.md` | System layout and data boundaries |
-| `docs/workflows/` | Step-by-step operating procedures |
-| `docs/reference/` | Schemas, categories, commands, and lookup tables |
+| `docs/reference/` | Human-readable schemas, categories, commands, and lookup tables |
 | `docs/db_informations/` | Database and reporting references |
 | `docs/CLAUDE.md` | Document authoring rules |
 
 ### Document Types
 
-Use `workflows/` for ordered execution steps. Use `reference/` for facts that agents look up while executing. Keep root `docs/` limited to index, architecture, and authoring guidance.
+Use project skills for ordered execution steps. Use `docs/reference/` for human-readable lookup material. Keep root `docs/` limited to index, architecture, and authoring guidance.
 
 ## 3. Usage
 
 | Need | Read |
 |---|---|
 | Understand the repo | `docs/architecture.md` |
-| Run raw-to-wiki pipeline | `docs/workflows/pipeline.md` |
-| Configure cron jobs | `docs/workflows/cron-jobs.md` |
-| Configure usage reports | `docs/workflows/usage-reports.md` |
-| Run daily/weekly/monthly memory build | `docs/workflows/periodic-memory-workflow.md` |
-| Handle handoff lifecycle | `docs/workflows/handoff-system.md` |
-| Write valid frontmatter | `docs/reference/frontmatter.md` |
-| Choose wiki category/path | `docs/reference/wiki-categories.md` |
-| Approve/reject wiki pages | `docs/workflows/wiki-approval-workflow.md` |
+| Run raw-to-wiki pipeline | `.claude/skills/wiki-authoring/SKILL.md` |
+| Configure cron jobs | `.claude/skills/knowledgebase-initialize/SKILL.md` |
+| Configure usage reports | `.claude/skills/usage-report-setup/SKILL.md` |
+| Run daily/weekly/monthly memory build | `.claude/skills/memory-report/SKILL.md` |
+| Handle handoff lifecycle | `.claude/skills/handoff-document/SKILL.md` |
+| Write valid frontmatter | `.claude/skills/wiki-authoring/SKILL.md`; reference: `docs/reference/frontmatter.md` |
+| Choose wiki category/path | `.claude/skills/wiki-authoring/SKILL.md`; reference: `docs/reference/wiki-categories.md` |
+| Approve/reject wiki pages | `.claude/skills/wiki-approval/SKILL.md` |
 | Run CLI commands | `docs/reference/commands.md` |
 | Start review console (web UI) | `README.md` → "Review console" section; `scripts/dev-web.sh` |
 
@@ -66,8 +63,10 @@ Use `workflows/` for ordered execution steps. Use `reference/` for facts that ag
 
 ### A. PatchNote
 
+- 2026-05-20: Removed `docs/workflows/`; project skills are now the sole workflow surface.
+- 2026-05-20: Reframed docs as design/reference material and routed runtime workflows to `.claude/skills/`.
 - 2026-05-20: Added review console (web UI) to usage table.
-- 2026-05-19: Added wiki approval workflow to cron read order and usage table.
-- 2026-05-18: Added cron job workflow to memory build read order.
+- 2026-05-19: Added wiki approval workflow to runtime routing and usage table.
+- 2026-05-18: Added cron job workflow to memory build routing.
 - 2026-05-18: Added usage report workflow for source-specific OpenCode/Hermes reports.
 - 2026-05-18: Initial documentation index after workflow/reference split.

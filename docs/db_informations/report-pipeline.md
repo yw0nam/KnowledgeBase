@@ -64,7 +64,7 @@ data/wiki/summaries/YYYY/MM/YYYY-MM-DD-memory.md
 ## 4. Templates
 
 - Source-specific daily reports are rendered by CLI commands.
-- Memory synthesis summaries follow `docs/workflows/periodic-memory-workflow.md`.
+- Memory synthesis summaries follow `.claude/skills/memory-report/SKILL.md`.
 
 **Empty-day handling**: If a configured source has no activity, write `no activity`. If the source itself is missing, do not create that report.
 

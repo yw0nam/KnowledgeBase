@@ -27,11 +27,8 @@ KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 ├── scripts/
 │   ├── ingest-github.sh          # GitHub source collection
 │   └── dev-web.sh                # Start FastAPI + Vite together
-├── templates/                    # Frontmatter + handoff templates
-│   ├── wiki/                     #   Wiki page templates (entity, concept, decision, …)
-│   │   └── summaries/            #     Summary subtypes (daily, weekly, …)
-│   ├── handoff/                  #   Handoff templates (task, final, readme)
-│   └── raw/                      #   Raw source frontmatter
+├── templates/raw/                # Raw source frontmatter templates
+├── .claude/skills/               # Runtime workflow contracts + bundled templates
 ├── pyproject.toml
 ├── CLAUDE.md                     # This file
 ├── README.md
@@ -39,12 +36,6 @@ KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 │   ├── CLAUDE.md                 # CLAUDE.md file for docs/
 │   ├── README.md                 # Documentation index
 │   ├── architecture.md           # Repository and memory layer map
-│   ├── workflows/                # Operating procedures
-│   │   ├── cron-jobs.md          # Cron schedule, wrappers, and failure policy
-│   │   ├── handoff-system.md     # Handoff system spec
-│   │   ├── periodic-memory-workflow.md # Daily/weekly/monthly memory workflow
-│   │   ├── usage-reports.md      # OpenCode/Hermes report modes
-│   │   └── pipeline.md           # 4-stage pipeline details
 │   ├── db_informations/          # DB schemas and monitoring guides
 │   └── reference/                # Schemas, categories, commands
 │       ├── commands.md           # Command reference
@@ -74,17 +65,6 @@ data/                             # Nested git repo: raw sources + wiki (local-o
 └── log.md                        # Append-only operation record
 ```
 
-## Pipeline
-
-4-stage pipeline: Ingest → Fill → Log → Lint.
-
-```
-1. INGEST → 2. FILL → 3. LOG → 4. LINT
-(script)    (LLM)    (LLM)   (script)
-```
-
-See [Pipeline details](docs/workflows/pipeline.md) for stage-by-stage actions and lint check categories.
-
 ## Important Rules
 
 - Never modify files in `data/raw/`. They are immutable after creation. Use `kb-lint-wiki --check-immutability` to enforce: git-status must not show modifications, `captured_at` must be ≤ file mtime (60s tolerance), and required raw frontmatter fields (`source_url`, `type`, `captured_at`, `contributor`) are always validated.
@@ -93,18 +73,6 @@ See [Pipeline details](docs/workflows/pipeline.md) for stage-by-stage actions an
 - Lint must pass (0 errors) before committing wiki changes.
 - Handoff documents are stored in `data/handoffs/` and tracked via git.
 - Use uv for package management
-
-## Wiki Approval Workflow
-
-6 wiki 페이지 타입(`entity`, `concept`, `decision`, `improvement`, `checklist`, `question`)은 `review_status` 필드를 통한 사람 승인 사이클을 거친다.
-
-- **새 페이지 작성 (AI)**: 템플릿이 `review_status: not_processed` 를 자동 포함. AI가 직접 추가/수정할 필요 없음.
-- **Approved 페이지 수정 (AI)**: semantic 변화면 `review_status` 를 `not_processed` 로 self-reset, typo/포매팅이면 유지. Deterministic 감지는 없음 — agent 판단.
-- **`## User Feedback` 헤딩 예약**: CLI 전용 섹션. 일반 콘텐츠에서 이 정확한 헤딩 사용 금지. 다른 의미는 `## Feedback`, `## Reviewer Notes` 등 다른 이름 사용.
-- **INDEX.md / subject `_index.md`**: 자동 동기화 없음. Approve 후 subject hub 라인 추가는 user 또는 동반 작업 agent의 책임.
-- **CLI**: `uv run kb-wiki-review list / promote / approve / reject / ttl-sweep`. 상세는 `docs/workflows/wiki-approval-workflow.md`.
-
-`improvement` 타입은 두 `_status` 필드를 보유: `review_status`(이 페이지가 승인됐는가)와 `issue_status`(추적 이슈가 open/resolved 등). 같은 prefix가 도메인을 분리.
 
 ## Privacy
 
@@ -119,20 +87,21 @@ Never commit `data/` contents to the outer repository.
 
 ## Skills
 
+Project skills live under `.claude/skills/`, auto-load by description match, and are the source of truth for workflow behavior.
+
 - `knowledgebase-initialize` — initialize `data/`, verify tooling, and propose cron jobs for approval.
+- `wiki-approval` — promote, approve, reject, or TTL-sweep wiki pages through the `review_status` lifecycle; runtime contract for wiki-promote cron.
+- `wiki-authoring` — create or update source-backed `data/wiki/` pages with valid schemas, paths, wikilinks, templates, and lint order.
+- `usage-report-setup` — select and wire source-specific OpenCode/Hermes/Claude Code usage report jobs.
+- `handoff-document` — write or update handoff documents under `data/handoffs/` with lintable frontmatter, filename grammar, and canonical body sections.
+- `memory-report` — daily, weekly, or monthly memory workflow (period dispatch inside the skill). Imports `wiki-authoring` for page edits and `handoff-document` for run handoffs.
 
 ## Documentation
 
-- [Documentation Index](docs/README.md) — read order and document map
+- [Documentation Index](docs/README.md) — design/reference document map
 - [Architecture](docs/architecture.md) — repository layout and memory layers
-- [Pipeline](docs/workflows/pipeline.md) — 4-stage pipeline (Ingest → Fill → Log → Lint), commands, lint categories
-- [Cron Jobs](docs/workflows/cron-jobs.md) — scheduling, locking, wrappers, failure policy
-- [Usage Reports](docs/workflows/usage-reports.md) — OpenCode, Hermes, combined report modes
-- [Periodic Memory Workflow](docs/workflows/periodic-memory-workflow.md) — daily, weekly, monthly memory workflow for cron agents
-- [Frontmatter Conventions](docs/reference/frontmatter.md) — Raw, Wiki, Handoff frontmatter schemas
-- [Wiki Categories](docs/reference/wiki-categories.md) — 7 categories, naming, wikilinks, tags
-- [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion, frontmatter
-- [Wiki Approval Workflow](docs/workflows/wiki-approval-workflow.md) — review_status lifecycle, CLI, TTL cron
+- [Frontmatter Conventions](docs/reference/frontmatter.md) — schema reference; `wiki-authoring` and `handoff-document` carry runtime rules
+- [Wiki Categories](docs/reference/wiki-categories.md) — category reference; use `wiki-authoring` at runtime
 - [Commands](docs/reference/commands.md) — kb-lint-wiki, kb-lint-handoff, kb-wiki-index
 
 ## Linting
