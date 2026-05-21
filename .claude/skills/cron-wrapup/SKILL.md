@@ -265,7 +265,7 @@ This skill specifies only:
 
 ## Data Commit Policy
 
-`kb-cron-wrapup` is the only memory/cron workflow that should commit its own nested `data/` outputs by default. This creates a durable daily checkpoint for the morning digest and later review.
+`kb-cron-wrapup` is the only memory/cron workflow that should commit its own nested `data/` outputs by default. It creates the durable daily checkpoint. The separate global morning digest only reads that checkpoint and reports it; it must not create, edit, lint, or commit KB data.
 
 Rules:
 

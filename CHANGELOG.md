@@ -27,4 +27,4 @@ Keep entries concise and user/operator-facing. Avoid tool traces, lint output, h
 - Updated `knowledgebase-initialize` to include `cron wrap-up` as a required KB cron proposal and the morning digest as optional but recommended.
 - Expanded the `cron-wrapup` summary contract with `Insights` and `Action Items` sections so daily wrap-ups surface user-facing KB signals, not only job status.
 - Updated the cron-wrapup template and optional digest prompt to consume the expanded summary contract.
-- Clarified that `kb-cron-wrapup` commits only nested `data/` repo outputs after successful lint while never committing the outer repo or pushing.
+- Clarified that `kb-cron-wrapup` commits only nested `data/` repo outputs after successful lint, while the optional global digest remains read-only and report-only.

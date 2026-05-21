@@ -85,7 +85,7 @@ Use two separate records because this repository has two git histories:
 - If one task changes both layers, update both records with layer-appropriate details. `CHANGELOG.md` says what changed in the product/workflow; `data/log.md` says what data artefacts were created or updated.
 - Do not duplicate full changelog entries into `data/log.md`.
 - Do not commit the nested `data/` repo unless the user explicitly asks for a data commit. Cron jobs and memory/approval workflows normally create and manage data changes for later user review.
-- Exception: the `kb-cron-wrapup` workflow is expected to commit its own nested `data/` repo outputs after successful lint, so the morning digest has a durable reviewed checkpoint. It must never push and must never commit the outer repo.
+- Exception: the `kb-cron-wrapup` workflow is expected to commit its own nested `data/` repo outputs after successful lint. The separate global morning digest is read-only: it reads the committed cron-wrapup artefact and sends a report, but does not create, edit, or commit KB data. `kb-cron-wrapup` must never push and must never commit the outer repo.
 - If outer-repo work produces or adjusts `data/` artefacts for verification, leave those `data/` changes uncommitted unless the user specifically asks to handle them.
 
 ## Privacy

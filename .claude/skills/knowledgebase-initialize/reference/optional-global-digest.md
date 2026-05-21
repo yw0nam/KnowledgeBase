@@ -1,10 +1,10 @@
 # Optional Global Digest
 
-The morning global digest is optional but recommended once `kb-cron-wrapup` is producing stable daily summaries.
+The morning global digest is optional but recommended once `kb-cron-wrapup` is producing stable, committed daily summaries.
 
 ## Purpose
 
-Create one morning notification that reports the previous night's KnowledgeBase pipeline state without re-reading KnowledgeBase internals.
+Create one morning notification that reports the previous night's KnowledgeBase pipeline state without re-reading KnowledgeBase internals. This job is read-only: it reports from the `kb-cron-wrapup` artefact and does not create, edit, lint, or commit KB data.
 
 The digest should consume only:
 
@@ -24,16 +24,16 @@ It should not read:
 morning-slack-digest: 09:00 every day
 ```
 
-Run it after the `05:00` `kb-cron-wrapup` job so the digest has a single stable artifact to parse.
+Run it after the `05:00` `kb-cron-wrapup` job so the digest has a single stable, committed artifact to parse.
 
 ## Setup Guidance
 
-Use whatever scheduler or agent runtime the user already uses for notifications. Keep the job global rather than KnowledgeBase-owned, because it is a delivery concern, not a KB data-generation step.
+Use whatever scheduler or agent runtime the user already uses for notifications. Keep the job global rather than KnowledgeBase-owned, because it is a delivery concern, not a KB data-generation or data-commit step.
 
 Recommended prompt shape:
 
 ```text
-Read the latest KnowledgeBase cron wrap-up summary for yesterday. Summarize only the fixed H2 contract sections: Status, Insights, Action Items, Anomalies, Counters, and Links. Do not inspect memory pages, raw data, usage pages, or cron logs directly. Send a concise morning status digest.
+Read the latest committed KnowledgeBase cron wrap-up summary for yesterday. Summarize only the fixed H2 contract sections: Status, Insights, Action Items, Anomalies, Counters, and Links. Do not inspect memory pages, raw data, usage pages, or cron logs directly. Do not create, edit, lint, commit, or push KB files. Send a concise morning status digest.
 ```
 
 ## Dependency
