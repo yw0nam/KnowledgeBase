@@ -69,10 +69,21 @@ data/                             # Nested git repo: raw sources + wiki (local-o
 
 - Never modify files in `data/raw/`. They are immutable after creation. Use `kb-lint-wiki --check-immutability` to enforce: git-status must not show modifications, `captured_at` must be ≤ file mtime (60s tolerance), and required raw frontmatter fields (`source_url`, `type`, `captured_at`, `contributor`) are always validated.
 - `data/wiki/` pages must always list their `sources:` in frontmatter.
-- Keep `data/log.md` updated on every operation.
+- Keep `data/log.md` updated for `data/` repo operations only: raw ingest, wiki page creation/update, handoff creation/update, promotion/rejection, cron/report outputs, and data lint results.
+- Keep outer repo changes in `CHANGELOG.md`: source code, scripts, docs, skills, templates, config, schemas, and workflow contract changes.
+- Do not write outer repo implementation details to `data/log.md`; reference the data artefact or handoff only if the operation created one.
 - Lint must pass (0 errors) before committing wiki changes.
 - Handoff documents are stored in `data/handoffs/` and tracked via git.
 - Use uv for package management
+
+## Change Records
+
+Use two separate records because this repository has two git histories:
+
+- `CHANGELOG.md` is for the outer repo. Update it when a change affects maintainers/operators or changes runtime behavior, CLI behavior, cron wrappers, skills, docs contracts, schemas, templates, or setup instructions.
+- `data/log.md` is for the nested local data repo. Update it when a run creates or changes `data/wiki/`, `data/handoffs/`, `data/ops/`, `data/rejected/`, or records lint/cron/report outcomes.
+- If one task changes both layers, update both records with layer-appropriate details. `CHANGELOG.md` says what changed in the product/workflow; `data/log.md` says what data artefacts were created or updated.
+- Do not duplicate full changelog entries into `data/log.md`.
 
 ## Privacy
 
@@ -95,6 +106,7 @@ Project skills live under `.claude/skills/`, auto-load by description match, and
 - `usage-report-setup` — select and wire source-specific OpenCode/Hermes/Claude Code usage report jobs.
 - `handoff-document` — write or update handoff documents under `data/handoffs/` with lintable frontmatter, filename grammar, and canonical body sections.
 - `memory-report` — daily, weekly, or monthly memory workflow (period dispatch inside the skill). Imports `wiki-authoring` for page edits and `handoff-document` for run handoffs.
+- `cron-wrapup` — nightly KB cron wrap-up. Aggregates the previous day's usage reports, memory page, wiki-promote/TTL outcomes, and `.cron/logs/` exit states into a single Slack-digest-stable `wiki/summaries/.../{date}-cron-wrapup.md` plus run handoff. Runtime contract for the 05:00 cron job.
 
 ## Documentation
 

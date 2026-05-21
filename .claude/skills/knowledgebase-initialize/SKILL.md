@@ -135,17 +135,24 @@ KnowledgeBase jobs:
 - weekly memory build:       04:15 every Monday
 - monthly memory maintenance:04:45 on day 1 of each month
 - wiki TTL sweep:            00:30 every day
+- cron wrap-up:              05:00 every day
 
 Optional usage report jobs:
 - OpenCode daily usage:      03:10 every day
 - Hermes daily usage:        03:15 every day
 - Claude Code daily usage:   03:20 every day
+
+Optional global digest job:
+- morning Slack digest:      09:00 every day (optional, recommended)
 ```
+
+If the user wants the optional global digest, read `reference/optional-global-digest.md` and show the setup separately from the required KB cron jobs.
 
 Wrapper prompt policy:
 
 - Memory wrappers import `.claude/skills/memory-report/SKILL.md`.
 - Wiki promotion wrapper imports `.claude/skills/wiki-approval/SKILL.md`.
+- Cron wrap-up wrapper imports `.claude/skills/cron-wrapup/SKILL.md` and writes a Slack-digest-stable `wiki/summaries/.../{date}-cron-wrapup.md` plus run handoff.
 - Usage setup/import prompts use `.claude/skills/usage-report-setup/SKILL.md`.
 - TTL sweep may run `uv run kb-wiki-review ttl-sweep --days 7` directly.
 
