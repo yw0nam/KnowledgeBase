@@ -126,6 +126,14 @@ Default recommendation: enable only sources the user actually runs. Do not creat
 
 ## Phase 5: Propose Cron Jobs
 
+KnowledgeBase owns the expected job contract and portable wrapper scripts under `scripts/cron/`; it does not require a specific scheduler backend.
+
+Scheduler backend guidance:
+
+- **Tested scheduler**: Hermes cron, using scheduler-local dispatcher scripts that call the repo wrappers.
+- **Compatible but not yet tested here**: OpenClaw cron, native Unix crontab, systemd timers, or any equivalent scheduler that can run the wrapper scripts on the documented schedule.
+- Actual job registration state belongs to the chosen scheduler backend. Run evidence belongs in `.cron/logs/`, `data/handoffs/`, `data/log.md`, and cron wrap-up summaries.
+
 Show the exact list before making cron changes:
 
 ```text
@@ -162,7 +170,7 @@ Only after approval:
 2. Make wrappers executable.
 3. Keep logs in `.cron/logs/`.
 4. Keep locks in `.cron/locks/`.
-5. Show crontab entries, or install them only if the user explicitly asks.
+5. Show scheduler entries for the selected backend, or install/register them only if the user explicitly asks.
 
 ## Phase 6: Initialization Handoff
 
