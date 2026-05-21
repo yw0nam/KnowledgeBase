@@ -95,6 +95,8 @@ Local-only web app for reviewing `pending_for_approve` wiki pages.
 See [PRODUCT.md](PRODUCT.md) and [DESIGN.md](DESIGN.md) for the
 strategic and visual specs.
 
+![KnowledgeBase review console](docs/assets/review-console.png)
+
 ```bash
 # First run only — install JS deps. The script also does this for you
 # if frontend/node_modules is missing.

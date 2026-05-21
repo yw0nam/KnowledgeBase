@@ -19,6 +19,7 @@ Keep entries concise and user/operator-facing. Avoid tool traces, lint output, h
 
 ### Added
 
+- Added a README screenshot for the local review console.
 - Added the `cron-wrapup` skill and `kb-cron-wrapup.sh` wrapper for nightly KB operational summaries.
 - Added optional global digest guidance under `knowledgebase-initialize/reference/optional-global-digest.md`.
 
