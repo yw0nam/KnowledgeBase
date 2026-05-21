@@ -84,6 +84,8 @@ Use two separate records because this repository has two git histories:
 - `data/log.md` is for the nested local data repo. Update it when a run creates or changes `data/wiki/`, `data/handoffs/`, `data/ops/`, `data/rejected/`, or records lint/cron/report outcomes.
 - If one task changes both layers, update both records with layer-appropriate details. `CHANGELOG.md` says what changed in the product/workflow; `data/log.md` says what data artefacts were created or updated.
 - Do not duplicate full changelog entries into `data/log.md`.
+- Do not commit the nested `data/` repo unless the user explicitly asks for a data commit. Cron jobs and memory/approval workflows normally create and manage data changes for later user review.
+- If outer-repo work produces or adjusts `data/` artefacts for verification, leave those `data/` changes uncommitted unless the user specifically asks to handle them.
 
 ## Privacy
 
