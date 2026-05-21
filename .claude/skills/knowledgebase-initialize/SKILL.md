@@ -1,60 +1,24 @@
 ---
 name: knowledgebase-initialize
-description: Initialize this KnowledgeBase for a new user or machine. Sets up the local data repository, creates the required raw/wiki/handoff folders, verifies lint tooling, and proposes cron jobs for user approval before enabling them.
-license: MIT
+description: Use on a fresh clone, new machine, or new profile to create or repair the local data repository — verifying CLI tooling, choosing usage report mode, proposing cron jobs, and writing initialization handoff/log output.
 ---
 
 # KnowledgeBase Initialize
 
-Use this skill when a user wants to start using this KnowledgeBase on a fresh clone, new machine, or new profile.
+Use this skill as the runtime contract for repository setup. Do not load `docs/` during execution; docs are design reference only.
 
 ## Rules
 
-- Treat the current repository as the KnowledgeBase root.
-- Never write private operational data into the outer repo except `.cron/` wrappers if the user approves cron setup.
-- Never edit existing files under `data/raw/`.
-- New wiki pages of types `entity`, `concept`, `decision`, `improvement`, `checklist`, `question` start as `review_status: not_processed` (template default) and graduate to `pending_for_approve` → `approved` via `kb-wiki-review`. Non-approved pages are intentionally excluded from `INDEX.md` and orphan/sync warnings.
-- The `## User Feedback` heading inside a wiki page body is reserved exclusively for the `kb-wiki-review` CLI. Never use that exact heading as a regular content section.
-- Do not create, modify, or install cron jobs until the user approves the exact job list.
-- Memory cron jobs (daily/weekly/monthly) run lint but do **not** commit. Changes are left uncommitted for manual review. Do not add `git commit` or `git push` to memory cron wrappers.
-- Prefer relative paths and repo-root-derived paths. Do not hard-code machine-specific absolute paths.
-- If `data/` already exists, preserve it and only create missing directories/files.
+- Treat the current directory as the KnowledgeBase root.
+- `data/` is a nested local-only git repository. Never add it to the outer repo.
+- Never modify existing files under `data/raw/`.
+- Preserve existing `data/` contents; create only missing directories/files.
+- Do not install or edit crontab until the user approves the exact entries.
+- Memory cron jobs run lint and leave changes uncommitted for manual review.
+- Wiki promotion may commit inside the nested `data/` repo after promoting pages. It never pushes.
+- Prefer relative paths from repo root. Do not hard-code machine-specific absolute paths except when showing final crontab examples.
 
-## Read First
-
-Read these documents before changing files:
-
-1. `CLAUDE.md`
-2. `docs/README.md`
-3. `docs/architecture.md`
-4. `docs/workflows/pipeline.md`
-5. `docs/workflows/periodic-memory-workflow.md`
-6. `docs/workflows/cron-jobs.md`
-7. `docs/workflows/usage-reports.md`
-8. `docs/reference/frontmatter.md`
-9. `docs/reference/wiki-categories.md`
-10. `docs/workflows/handoff-system.md`
-11. `docs/workflows/wiki-approval-workflow.md`
-
-## Phase 1: Inspect
-
-Check:
-
-- whether `data/` exists
-- whether `data/.git/` exists
-- whether `data/rejected/` exists (created on first reject; absence is normal on a fresh init)
-- whether `uv sync` has been run
-- whether `kb-lint-wiki`, `kb-lint-handoff`, and `kb-wiki-review` work through `uv run`
-- whether `.cron/` or `scripts/cron/` already exists
-- whether the user wants usage reports for OpenCode, Hermes, both, or neither
-
-Do not assume the user has Hermes or OpenCode installed.
-
-## Phase 2: Initialize Data Repository
-
-If `data/` is missing, create it as a nested local-only git repository.
-
-Required directory structure:
+## Required Data Layout
 
 ```text
 data/
@@ -66,26 +30,62 @@ data/
     calendar/
     web/
     manual/
-  handoffs/
+    ops/
+      cron/YYYY/MM/
+      runs/YYYY/MM/
+      decisions/YYYY/MM/
+      traces/YYYY/MM/
+      ingest_state/
+  handoffs/YYYY/MM/
   wiki/
-    entities/
+    entities/<subject>/YYYY-MM/
     concepts/
     decisions/
     questions/
-    improvements/
+    improvements/YYYY-MM/
     checklists/
-    summaries/
-      YYYY/
-        MM/
-  rejected/                  # populated lazily by `kb-wiki-review reject`; mirrors wiki/ paths
+    summaries/YYYY/MM/
+  rejected/
   ops/
-    reports/
-      YYYY/
-        MM/
+    reports/YYYY/MM/
   log.md
 ```
 
-Create placeholder `.gitkeep` files only when needed to keep empty directories tracked in the nested `data/` repo. Do not add `data/` to the outer repo.
+`data/rejected/` may be empty on a fresh install. It is populated by wiki rejection.
+
+## Phase 1: Inspect
+
+Check:
+
+```bash
+test -d data
+test -d data/.git
+test -f data/log.md
+uv --version
+uv run kb-lint-wiki --help
+uv run kb-lint-handoff --help
+uv run kb-wiki-review list --counts
+find scripts/cron -maxdepth 1 -type f -name 'kb-*.sh' | sort
+```
+
+If a command fails because dependencies are missing, run:
+
+```bash
+uv sync
+```
+
+If `uv sync` needs network and fails due sandbox/network restrictions, ask for approval to rerun with network access.
+
+## Phase 2: Initialize Data Repo
+
+If `data/` is missing, create it and initialize a nested repo:
+
+```bash
+mkdir -p data
+git -C data init
+```
+
+Create missing required directories with `.gitkeep` only when an empty directory must be tracked by the nested repo.
 
 Initialize `data/log.md` if missing:
 
@@ -95,109 +95,162 @@ Initialize `data/log.md` if missing:
 Append-only operation record.
 ```
 
-If `data/.git/` is missing, run `git init` inside `data/`. Do not push `data/` anywhere.
+Do not create raw source files during initialization.
 
 ## Phase 3: Verify Tooling
 
-Run from the KnowledgeBase root:
+Run from repo root:
 
 ```bash
-uv sync
-uv run kb-lint-wiki
+uv run kb-wiki-index
+uv run kb-lint-wiki --check-immutability
 uv run kb-lint-handoff
-uv run kb-wiki-review list --counts   # smoke test review CLI (0/0/0 on a fresh init)
+uv run kb-wiki-review list --counts
 ```
 
-If lint fails because the wiki is empty, record the result and continue only if there are no structural errors that block initialization. If lint fails due to existing user data, do not rewrite data automatically; report the errors and create a handoff if appropriate.
+Fresh empty data may produce no queue items. Structural errors are blockers; existing user-data lint errors must be reported rather than auto-rewritten.
 
 ## Phase 4: Usage Report Mode
 
-Ask the user which usage report modes they want before creating cron wrappers:
+Use the `usage-report-setup` skill if the user asks for detailed setup. For initialization, ask which source-specific reports to enable:
 
-| Mode | Output | Use When |
-|---|---|---|
-| OpenCode only | `data/wiki/summaries/YYYY/MM/YYYY-MM-DD-opencode-usage.md` | User only runs OpenCode |
-| Hermes only | `data/wiki/summaries/YYYY/MM/YYYY-MM-DD-hermes-usage.md` | User only runs Hermes |
-| Claude Code only | `data/wiki/summaries/YYYY/MM/YYYY-MM-DD-claude-code-usage.md` | User only runs Claude Code |
-| Multiple separate reports | one markdown per selected source | User wants independent reports per agent system |
-| None | no usage report cron | User only wants wiki memory workflows |
+| Mode | Cron wrapper |
+|---|---|
+| none | no usage report job |
+| OpenCode | `scripts/cron/kb-opencode-daily-report.sh` |
+| Hermes | `scripts/cron/kb-hermes-daily-report.sh` |
+| Claude Code | `scripts/cron/kb-claude-code-daily-report.sh` |
+| multiple separate | selected wrappers only |
 
-Recommendation: prefer separate source-specific reports by default. Combined daily interpretation belongs to the daily memory workflow, not the usage report cron layer.
+Default recommendation: enable only sources the user actually runs. Do not create combined usage reports.
 
 ## Phase 5: Propose Cron Jobs
 
-Present a concise approval list before making cron changes.
+KnowledgeBase owns the expected job contract and portable wrapper scripts under `scripts/cron/`; it does not require a specific scheduler backend.
 
-Default proposal:
+Scheduler backend guidance:
+
+- **Tested scheduler**: Hermes cron, using scheduler-local dispatcher scripts that call the repo wrappers.
+- **Compatible but not yet tested here**: OpenClaw cron, native Unix crontab, systemd timers, or any equivalent scheduler that can run the wrapper scripts on the documented schedule.
+- Actual job registration state belongs to the chosen scheduler backend. Run evidence belongs in `.cron/logs/`, `data/handoffs/`, `data/log.md`, and cron wrap-up summaries.
+
+Show the exact list before making cron changes:
 
 ```text
-KnowledgeBase memory jobs:
-- daily memory build:   03:30 every day
-- wiki promote:         04:00 every day (promote not_processed → pending_for_approve, then commit)
-- weekly memory build:  04:15 every Monday
-- monthly memory maint: 04:45 on day 1 of each month
-- wiki TTL sweep:       00:30 every day (auto-reject not_processed pages older than 7d)
+KnowledgeBase jobs:
+- daily memory build:        03:30 every day
+- wiki promote:              04:00 every day
+- weekly memory build:       04:15 every Monday
+- monthly memory maintenance:04:45 on day 1 of each month
+- wiki TTL sweep:            00:30 every day
+- cron wrap-up:              05:00 every day
 
 Optional usage report jobs:
-- OpenCode daily usage report:    03:10 every day
-- Hermes daily usage report:      03:15 every day
-- Claude Code daily usage report: 03:20 every day
+- OpenCode daily usage:      03:10 every day
+- Hermes daily usage:        03:15 every day
+- Claude Code daily usage:   03:20 every day
+
+Optional global digest job:
+- morning Slack digest:      09:00 every day (optional, recommended)
 ```
 
-Bind usage report jobs to these commands:
+If the user wants the optional global digest, read `reference/optional-global-digest.md` and show the setup separately from the required KB cron jobs.
 
-```text
-OpenCode: uv run kb-opencode-daily-report --date <YYYY-MM-DD> --lint
-Hermes: uv run kb-hermes-daily-report --date <YYYY-MM-DD> --lint
-Claude Code: uv run kb-claude-code-daily-report --date <YYYY-MM-DD> --lint
-Wiki TTL sweep: uv run kb-wiki-review ttl-sweep --days 7   (wrapper: scripts/cron/kb-wiki-ttl-sweep.sh)
-```
+Wrapper prompt policy:
 
-Ask one short question:
-
-```text
-Which cron jobs should I create? I will not modify crontab until you approve the list.
-```
+- Memory wrappers import `.claude/skills/memory-report/SKILL.md`.
+- Wiki promotion wrapper imports `.claude/skills/wiki-approval/SKILL.md`.
+- Cron wrap-up wrapper imports `.claude/skills/cron-wrapup/SKILL.md` and writes a Slack-digest-stable `wiki/summaries/.../{date}-cron-wrapup.md` plus run handoff.
+- Usage setup/import prompts use `.claude/skills/usage-report-setup/SKILL.md`.
+- TTL sweep may run `uv run kb-wiki-review ttl-sweep --days 7` directly.
 
 Only after approval:
 
-1. Create wrapper scripts under `scripts/cron/`.
+1. Create or update wrapper scripts under `scripts/cron/`.
 2. Make wrappers executable.
-3. Keep wrapper logs under `.cron/logs/`.
-4. Keep wrapper locks under `.cron/locks/`.
-5. Show the exact crontab entries for the user to install, or install them only if the user explicitly asks.
+3. Keep logs in `.cron/logs/`.
+4. Keep locks in `.cron/locks/`.
+5. Show scheduler entries for the selected backend, or install/register them only if the user explicitly asks.
 
-## Phase 6: Handoff and Log
+## Phase 6: Initialization Handoff
 
-After initialization, write a handoff:
+Write:
 
 ```text
-data/handoffs/YYYY/MM/kb-initialize/system_opencode_handoff_01.md
+data/handoffs/YYYY/MM/kb-initialize/kb-initialize_<role>_handoff_01.md
 ```
 
-Record:
+Use role `opencode`, `claude_code`, `hermes`, or `user`. If the role contains an underscore, keep the `kb-initialize_` subject prefix.
 
-- data repo status
-- directories created
-- lint results
-- cron jobs proposed
-- cron jobs approved or skipped
-- remaining setup tasks
+Frontmatter:
 
-Append `data/log.md` with the same operation summary.
+```yaml
+---
+handoff_id: "kb-initialize:kb-initialize:<role>:01"
+task_slug: "kb-initialize"
+subject: "kb-initialize"
+role: <role>
+handoff_seq: 1
+created: "YYYY-MM-DD"
+updated: "YYYY-MM-DD"
+status: ready
+security:
+  contains_secrets: false
+  redaction_status: unchecked
+promotion: null
+---
+```
+
+Include:
+
+```markdown
+## 1. Assignment
+## 2. Context received
+## 3. Work performed
+## 4. Tool trace
+## 5. Findings / decisions
+## 6. Outputs
+## 7. Verification
+## 8. Risks / uncertainties
+## 9. Next handoff instructions
+## 10. Promotion candidates
+```
+
+Run:
+
+```bash
+uv run kb-lint-handoff
+```
+
+## Phase 7: Log
+
+Append to `data/log.md`:
+
+```markdown
+
+## YYYY-MM-DD (knowledgebase initialize)
+
+- **data repo**: exists / created
+- **directories**: created <list> / already present
+- **tooling**: <lint command results>
+- **usage reports**: <selected modes>
+- **cron**: proposed / approved / skipped
+- **handoff**: handoffs/YYYY/MM/kb-initialize/<file>.md
+```
 
 ## Done Criteria
 
-Initialization is complete when:
+- `data/` exists and has `.git/`.
+- Required directories and `data/log.md` exist.
+- CLI smoke tests ran or blockers are documented.
+- Usage report mode is selected or explicitly skipped.
+- Cron entries are proposed or explicitly skipped.
+- Initialization handoff exists and passes lint.
+- No existing `data/raw/` file was modified.
 
-- `data/` exists and is a nested git repo
-- required directories exist
-- `data/log.md` exists
-- lint commands have been run or blockers are documented
-- cron jobs were either explicitly skipped or approved/proposed
-- initialization handoff exists
-- no existing `data/raw/` file was modified
+## Red Flags
 
-## Notes For Implementers
-
-Use `apply_patch` for repository file edits. Use shell commands only for directory creation, git init, chmod, lint, and crontab inspection/installation. Do not commit unless the user explicitly asks.
+- About to write private data into the outer repo.
+- About to install crontab without explicit approval.
+- About to add auto-commit to daily/weekly/monthly memory wrappers.
+- About to rewrite existing user data to satisfy lint without instruction.

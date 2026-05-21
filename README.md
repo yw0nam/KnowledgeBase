@@ -14,12 +14,13 @@ KnowledgeBase/
 ├── src/kb_mcp/                   CLI tools (lint, daily reports)
 ├── scripts/
 │   └── ingest-github.sh          GitHub source collection
-├── templates/                    Frontmatter + handoff templates
-│   ├── wiki/                       Wiki page templates (entity, concept, decision, …)
-│   │   └── summaries/              Summary subtypes (daily, weekly, …)
-│   ├── handoff/                    Handoff templates (task, final, readme)
-│   └── raw/                        Raw source frontmatter
-├── CLAUDE.md                     Full schema + pipeline definition
+├── .claude/skills/               Runtime workflow contracts + bundled templates
+│   ├── wiki-authoring/             Wiki page templates and authoring rules
+│   ├── wiki-approval/              review_status lifecycle workflow
+│   ├── knowledgebase-initialize/   Setup workflow
+│   └── usage-report-setup/         Usage report mode workflow
+├── templates/raw/                Raw source frontmatter templates
+├── CLAUDE.md                     LLM entry point and project skill map
 ├── README.md                     This file
 └── .gitignore                    Excludes data/
 
@@ -43,16 +44,9 @@ data/                             Nested git repo (local-only)
 └── log.md                        Operation record
 ```
 
-## Pipeline
+## Workflows
 
-4-stage pipeline:
-
-```
-1. INGEST → 2. FILL → 3. LOG → 4. LINT
-(script)    (LLM)    (LLM)   (script)
-```
-
-See [docs/workflows/pipeline.md](docs/workflows/pipeline.md) for stage-by-stage details, bash commands, and lint check categories.
+Project workflows live in `.claude/skills/`. Use `wiki-authoring` for source-backed wiki edits, `wiki-approval` for review lifecycle work, `memory-report` for daily/weekly/monthly synthesis, and `handoff-document` for handoffs.
 
 ## Privacy
 
@@ -78,7 +72,7 @@ uv sync
 
 ### Write wiki
 
-Read `data/raw/` and write pages to `data/wiki/`.
+Use `.claude/skills/wiki-authoring/SKILL.md`; read `data/raw/` and write source-backed pages to `data/wiki/`.
 
 ### Validate
 
@@ -101,6 +95,8 @@ Local-only web app for reviewing `pending_for_approve` wiki pages.
 See [PRODUCT.md](PRODUCT.md) and [DESIGN.md](DESIGN.md) for the
 strategic and visual specs.
 
+![KnowledgeBase review console](docs/assets/review-console.png)
+
 ```bash
 # First run only — install JS deps. The script also does this for you
 # if frontend/node_modules is missing.
@@ -121,7 +117,7 @@ the UI does not fabricate placeholder content.
 
 | File | Role |
 |---|---|
-| `CLAUDE.md` | Full schema + pipeline definition |
+| `CLAUDE.md` | LLM entry point and project skill map |
 | `scripts/ingest-github.sh` | GitHub source collection |
 | `src/kb_mcp/cli/lint_wiki.py` | Wiki validation |
 | `src/kb_mcp/cli/lint_handoff.py` | Handoff validation |
@@ -133,16 +129,10 @@ the UI does not fabricate placeholder content.
 
 ## Documentation
 
-- [Documentation Index](docs/README.md) — Read order and document map
+- [Documentation Index](docs/README.md) — Skill routing and design document map
 - [Architecture](docs/architecture.md) — Repository layout and memory layers
-- [Pipeline details](docs/workflows/pipeline.md) — Full pipeline stages and lint check categories
-- [Cron Jobs](docs/workflows/cron-jobs.md) — Scheduling, locking, wrapper, and failure policy for periodic jobs
-- [Usage Reports](docs/workflows/usage-reports.md) — OpenCode, Hermes, and combined report mode policy
-- [Periodic Memory Workflow](docs/workflows/periodic-memory-workflow.md) — Daily, weekly, and monthly long-term memory workflow for fresh-session cron agents
-- [Frontmatter](docs/reference/frontmatter.md) — Raw, Wiki, and Handoff frontmatter schemas
-- [Wiki Categories](docs/reference/wiki-categories.md) — 7 categories, naming, wikilinks, tags
-- [Handoff System](docs/workflows/handoff-system.md) — Roles, status, promotion
-- [Wiki Approval Workflow](docs/workflows/wiki-approval-workflow.md) — `review_status` lifecycle, `kb-wiki-review` CLI, TTL cron
+- [Frontmatter](docs/reference/frontmatter.md) — Human schema reference; runtime rules live in skills
+- [Wiki Categories](docs/reference/wiki-categories.md) — Human category reference; runtime uses `wiki-authoring`
 - [Commands](docs/reference/commands.md) — Full CLI command reference
 
 See [CLAUDE.md](CLAUDE.md) for the LLM entry point.

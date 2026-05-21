@@ -11,6 +11,8 @@
 
 - [ ] `scripts/` (ingest-github.sh / kb_update.sh / lint.sh)
 - [ ] `src/kb_mcp/` (CLI tools)
+- [ ] `.claude/skills/` (skill files)
+- [ ] `frontend/` (Vite + React SPA)
 - [ ] `test/`
 - [ ] `.github/` (CI / templates)
 - [ ] `CLAUDE.md` / docs

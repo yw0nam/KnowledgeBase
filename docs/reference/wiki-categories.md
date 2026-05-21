@@ -1,101 +1,34 @@
-# Wiki Categories & Conventions
+# Wiki Categories Reference
 
-Updated: 2026-05-08
+Updated: 2026-05-20
 
 ## 1. Synopsis
 
-- **Purpose**: Classify wiki pages, name them consistently, and link them safely.
-- **I/O**: Subject + content type → category folder + filename + valid wikilinks + tags.
+- **Purpose**: Human taxonomy reference for `data/wiki/`.
+- **Runtime**: Use `.claude/skills/wiki-authoring/SKILL.md`.
 
-## 2. Core Logic
+## 2. Categories
 
-### Categories
+| Type | Path shape | Meaning |
+|---|---|---|
+| `entity` | `entities/{subject}/{YYYY-MM}/{stem}.md` | named project, repo, PR, issue, person, tool, event |
+| `concept` | `concepts/{stem}.md` | reusable idea, pattern, protocol |
+| `decision` | `decisions/YYYY-MM-DD-{slug}.md` | closed choice with rationale |
+| `question` | `questions/{stem}.md` | preserved Q&A |
+| `improvement` | `improvements/{YYYY-MM}/{stem}.md` | open issue, proposal, improvement |
+| `checklist` | `checklists/{stem}.md` | repeatable procedure |
+| `summary` | `summaries/YYYY/MM/{period}-{kind}.md` | time-bounded rollup |
 
-#### Entities
-Named objects grouped by subject and month. Path: `entities/{subject}/{YYYY-MM}/PascalCase.md`.
+## 3. Wikilinks
 
-#### Concepts
-Abstract ideas, patterns, protocols. Flat directory. Path: `concepts/Snake_Case.md`.
-
-#### Decisions
-Architecture Decision Records. Closed/finalized. Path: `decisions/ADR_{number}.md`.
-
-#### Questions
-Saved Q&A. Path: `questions/{YYYY-MM}/Question_Title.md`.
-
-#### Improvements
-Open-ended improvement ideas. Status: draft, in_progress, proposed, deferred. Path: `improvements/{YYYY-MM}/Improvement_Title.md`.
-
-#### Checklists
-Operational checklists. Path: `checklists/Checklist_Name.md`.
-
-#### Summaries
-Time/subject rollups grouped by year and month. Path: `summaries/{YYYY}/{MM}/{period-or-date}-{summary-kind}.md`.
-
-### Naming
-
-**Raw files:**
-- GitHub: `{repo}_{issue_number}.md`
-- Conversations: `chat_{ISO_timestamp}.md`
-- Calendar: `event_{date}_{slug}.md`
-- Handoffs: `{subject}_{role}_handoff_{seq}.md` or `{role}_handoff_{seq}.md`
-
-**Wiki entities:** `{subject}/{YYYY-MM}/PascalCase.md` (e.g., `DesktopMatePlus/2026-04/PR36_HumanInTheLoopApprovalGate.md`)
-
-**Wiki concepts:** `Snake_Case.md` (flat, e.g., `Agent_Middleware_Implementation_Stack.md`)
-
-**Wiki summaries:** ISO date/week/month plus kind (e.g., `2026-05-18-memory.md`, `2026-05-18-opencode-usage.md`, `2026-W21-weekly.md`, `2026-05-monthly.md`).
-
-### Wikilinks
-
-- Use `[[FileName]]` or `[[FileName|Display Text]]`. Never include `.md` extension.
-- Only link to pages that exist. If a concept has no wiki page, use plain text.
-- Raw sources are cited in frontmatter `sources:` array, never as inline links.
-- **`[[Name]]` must match the target file's stem exactly (filename without `.md`).** `kb-lint-wiki` does NOT resolve `aliases:` from frontmatter when validating links — alias entries help humans find the page but they do not satisfy wikilink resolution. If you want `[[short-name]]` to link to `long-descriptive-filename.md`, either rename the file or rewrite the link.
-
-### Tags
-
-Flat namespace. Common: project, tool, pattern, decision, person, event, migration.
-
-## 3. Usage
-
-**Creating a new entity page:**
-Pick a subject (e.g., DesktopMatePlus), add the current month folder (2026-05), and use PascalCase for the filename. Example: `entities/DesktopMatePlus/2026-05/NewFeature.md`.
-
-**Creating a new concept:**
-Use Snake_Case in the flat `concepts/` directory. Example: `concepts/Agent_Middleware_Implementation_Stack.md`. No subject folders.
-
-**Adding a wikilink:**
-Reference an existing page with `[[FileName]]` (no `.md`). If linking to a concept, use `[[Agent_Middleware_Implementation_Stack]]`. If the page doesn't exist, write plain text instead.
-
-**Choosing tags:**
-Pick from the flat namespace. Common choices: project (for project-specific pages), tool (for tooling), pattern (for design patterns), decision (for ADRs), person (for people), event (for events), migration (for migration-related content).
-
----
+- Use `[[FileStem]]` or `[[FileStem|Display Text]]`.
+- Do not include `.md`.
+- The target must match an existing filename stem.
+- `aliases:` help humans but do not satisfy lint.
+- If a page does not exist, use plain text.
 
 ## Appendix
 
-### A. Troubleshooting
+### PatchNote
 
-**Putting a concept inside a subject folder**
-Concepts are flat. Move the file from `concepts/SomeSubject/Concept.md` to `concepts/Concept.md`.
-
-**Forgetting the `{YYYY-MM}` segment in entity paths**
-Entity paths must include the month. Use `entities/Subject/2026-05/Page.md`, not `entities/Subject/Page.md`.
-
-**Including `.md` extension inside wikilinks**
-Wikilinks never include the extension. Use `[[FileName]]`, not `[[FileName.md]]`.
-
-**Linking to a page that doesn't exist**
-Check that the target page exists before creating the link. If it doesn't, use plain text instead of a wikilink.
-
-**Using non-flat tags**
-Tags are flat. Use `project`, not `projects/myproject`. Use `tool`, not `tools/python`.
-
-**Wikilink fails despite the target page existing under an alias**
-`kb-lint-wiki` matches link targets against the file stem only (the part before `.md`), not against `aliases:` in frontmatter. If your link reads `[[deltatocumulative-processor-decision]]` but the actual file is `2026-05-18-deltatocumulative-processor.md`, lint reports "dead link" even when `aliases:` lists `deltatocumulative-processor-decision`. Fix by either renaming the file so its stem equals the link text, or rewriting all links to use the existing stem.
-
-### B. PatchNote
-
-- 2026-05-08: Initial restructure from CLAUDE.md. Reorganized to follow Standard Document Structure (Synopsis, Core Logic, Usage, Appendix). All 7 categories, naming rules, wikilink rules, and tag conventions preserved verbatim.
-- 2026-05-18: Documented stem-only wikilink matching; aliases are not resolved by `kb-lint-wiki`.
+- 2026-05-20: Reduced to human taxonomy reference; runtime rules moved to `wiki-authoring`.
