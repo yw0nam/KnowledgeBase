@@ -1,4 +1,0 @@
-interface:
-  display_name: "Usage Report Setup"
-  short_description: "Configure source-specific usage report workflows."
-  default_prompt: "Configure KnowledgeBase usage report mode and cron wrappers."

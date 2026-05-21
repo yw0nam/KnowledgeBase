@@ -1,6 +1,6 @@
 ---
 name: knowledgebase-initialize
-description: Self-contained KnowledgeBase initialization workflow. Use on a fresh clone, new machine, or new profile to create or repair the local data repository, verify CLI tooling, choose usage report mode, propose cron jobs, and write initialization handoff/log output. Also covers the legacy workflow name knowledgebase_initialize.
+description: Use on a fresh clone, new machine, or new profile to create or repair the local data repository — verifying CLI tooling, choosing usage report mode, proposing cron jobs, and writing initialization handoff/log output.
 ---
 
 # KnowledgeBase Initialize

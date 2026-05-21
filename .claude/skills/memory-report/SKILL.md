@@ -1,6 +1,6 @@
 ---
 name: memory-report
-description: Use when running the daily, weekly, or monthly memory workflow — discovering period sources, writing summary + worthy wiki pages, writing the period handoff, and lint-clean uncommitted output. Covers raw discovery, period dispatch (daily/weekly/monthly), wiki page frontmatter, lint ordering, and canonical lint failures. Also covers the legacy workflow name memory_report.
+description: Use when running the daily, weekly, or monthly memory workflow — discovering period sources, writing summary + worthy wiki pages, writing the period handoff, and lint-clean uncommitted output. Covers raw discovery, period dispatch (daily/weekly/monthly), wiki page frontmatter, lint ordering, and canonical lint failures.
 ---
 
 # memory-report

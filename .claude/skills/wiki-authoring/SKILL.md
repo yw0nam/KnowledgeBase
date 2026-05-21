@@ -1,6 +1,6 @@
 ---
 name: wiki-authoring
-description: Self-contained KnowledgeBase wiki authoring workflow. Use when creating or updating source-backed pages under data/wiki, selecting entity/concept/decision/question/improvement/checklist/summary types, applying frontmatter schemas, copying wiki templates, validating wikilinks, regenerating INDEX.md, or fixing wiki lint failures. Also covers the legacy workflow name wiki_authoring.
+description: Use when creating or updating source-backed pages under data/wiki — selecting entity/concept/decision/question/improvement/checklist/summary types, applying frontmatter schemas, copying wiki templates, validating wikilinks, regenerating INDEX.md, or fixing wiki lint failures.
 ---
 
 # Wiki Authoring
@@ -19,7 +19,7 @@ Use this skill as the runtime contract for raw-to-wiki authoring. Do not look fo
 
 ## Bundled Templates
 
-Copy from `assets/templates/`:
+Copy from `reference/templates/`:
 
 ```text
 entity.md

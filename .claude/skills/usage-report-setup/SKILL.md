@@ -1,6 +1,6 @@
 ---
 name: usage-report-setup
-description: Self-contained KnowledgeBase usage report setup workflow. Use when choosing OpenCode, Hermes, or Claude Code usage report modes, creating or auditing source-specific daily report cron jobs, configuring report output paths, handling missing telemetry sources, or wiring usage reports before daily memory builds. Also covers the legacy workflow name usage_report_setup.
+description: Use when choosing OpenCode, Hermes, or Claude Code usage report modes — creating or auditing source-specific daily report cron jobs, configuring report output paths, handling missing telemetry sources, or wiring usage reports before daily memory builds.
 ---
 
 # Usage Report Setup

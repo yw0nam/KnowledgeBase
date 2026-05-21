@@ -1,6 +1,6 @@
 ---
 name: wiki-approval
-description: Self-contained KnowledgeBase wiki approval workflow. Use when promoting AI-authored wiki pages from not_processed to pending_for_approve, approving or rejecting pages, running TTL sweep, updating approved pages, writing wiki-promote handoffs/logs, or configuring the wiki approval cron. Also covers the legacy workflow name wiki_approval.
+description: Use when promoting AI-authored wiki pages from not_processed to pending_for_approve — approving or rejecting pages, running TTL sweep, updating approved pages, writing wiki-promote handoffs/logs, or configuring the wiki approval cron.
 ---
 
 # Wiki Approval

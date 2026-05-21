@@ -1,6 +1,6 @@
 ---
 name: handoff-document
-description: Use when writing or updating a handoff document under data/handoffs/ — covers file path, filename grammar, canonical body sections, README index update, and the lint command that gates committing. Also covers the legacy workflow name handoff_document.
+description: Use when writing or updating a handoff document under data/handoffs/ — covers file path, filename grammar, canonical body sections, README index update, and the lint command that gates committing.
 ---
 
 # handoff-document

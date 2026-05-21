@@ -29,7 +29,7 @@ Never commit `data/` contents to the outer repository. The outer `.gitignore` ex
 | Wiki | `data/wiki/` | Durable long-term knowledge | Update only with source-backed frontmatter |
 | Rejected | `data/rejected/` | Wiki pages rejected during review (audit trail) | Populated only by `kb-wiki-review reject`; mirrors `wiki/` tree |
 | Log | `data/log.md` | Append-only operation history | Append every operation |
-| Skill templates | `.claude/skills/*/assets` or `reference/templates` | Runtime file skeletons bundled with skills | Update in outer repo |
+| Skill templates | `.claude/skills/*/reference/templates` | Runtime file skeletons bundled with skills | Update in outer repo |
 | Raw templates | `templates/raw/` | Raw source frontmatter skeletons | Update in outer repo |
 | Docs | `docs/` | Design references and human-readable lookup material | Update in outer repo |
 
@@ -82,7 +82,7 @@ When deciding where information belongs:
 | Current task state or next action | `data/handoffs/` |
 | Durable concept or entity | `data/wiki/` |
 | Execution record | `data/log.md` |
-| Reusable runtime skeleton | `.claude/skills/<skill>/assets` or `.claude/skills/<skill>/reference/templates` |
+| Reusable runtime skeleton | `.claude/skills/<skill>/reference/templates` |
 | Agent operating instruction | `.claude/skills/` |
 | Human schema or command reference | `docs/reference/` |
 
