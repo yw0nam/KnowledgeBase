@@ -241,7 +241,7 @@ This skill specifies only:
 - **handoff**: handoffs/Y/M/cron-wrapup/{TARGET}_{role}_handoff_NN.md
 - **lint**: kb-wiki-index + kb-lint-wiki --check-immutability PASSED (errors 0, warnings N)
 - **lint**: kb-lint-handoff PASSED (errors 0, warnings N)
-- Note: commit은 사용자가 수동으로 review 후 진행
+- **commit**: nested data repo commit `<sha>` (`cron-wrapup: {TARGET}`)
 ```
 
 ## Workflow (8 steps)
@@ -259,8 +259,22 @@ This skill specifies only:
 7. Write run handoff via `handoff-document` under handoffs/{Y}/{M}/cron-wrapup/
    (subject = TARGET, role = invoker, status: ready).
 8. Append to data/log.md. Run Lint Order (kb-wiki-index → kb-lint-wiki --check-immutability → kb-lint-handoff).
-9. STOP. Do NOT git commit. Do NOT push.
+9. If lint exits 0, commit only the nested `data/` repo with message `cron-wrapup: {TARGET}`.
+10. STOP. Do NOT commit the outer repo. Do NOT push.
 ```
+
+## Data Commit Policy
+
+`kb-cron-wrapup` is the only memory/cron workflow that should commit its own nested `data/` outputs by default. This creates a durable daily checkpoint for the morning digest and later review.
+
+Rules:
+
+- Commit only inside `data/` with `git -C data ...`.
+- Include the wrap-up summary, run handoff, `data/log.md`, regenerated `wiki/INDEX.md`, and any same-run report/memory artefacts that are still uncommitted and are required by the wrap-up sources.
+- Commit only after `kb-wiki-index`, `kb-lint-wiki --check-immutability`, and `kb-lint-handoff` all exit 0.
+- Use commit message `cron-wrapup: {TARGET}`.
+- Never push.
+- Never stage or commit outer repo files.
 
 ## Idempotency
 
@@ -282,7 +296,7 @@ If a required input is missing (e.g. memory page never wrote):
 - **Never edit raw files.** The wrap-up does not touch `data/raw/` at all.
 - **Do not auto-promote** anything — wiki promotion is `wiki-approval`'s job.
 - **Do not use lint as analysis input** — run only the required final gate: `kb-wiki-index`, `kb-lint-wiki --check-immutability`, `kb-lint-handoff` once each.
-- **Do not git commit.** Wrapper contract is uncommitted artefacts for manual review.
+- **Commit only nested data outputs after lint passes.** Never commit outer repo files and never push.
 - **If blocked**, write the handoff with `status: ready` and the wrap-up with `Status: FAILED`, then exit non-zero.
 
 ## Red Flags — STOP and re-check
@@ -295,3 +309,4 @@ If a required input is missing (e.g. memory page never wrote):
 - About to mark Status: OK while Anomalies list is non-empty → re-read the Status table; non-empty anomaly = DEGRADED at minimum
 - About to overwrite a prior cron-wrapup handoff with the same NN → bump NN, never overwrite handoffs
 - About to invoke this skill twice in one cron firing → STOP. One run, one wrap-up, one handoff.
+- About to run plain `git commit` from the outer repo → STOP. Use `git -C data commit` only after data lint passes.
