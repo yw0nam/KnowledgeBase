@@ -67,6 +67,31 @@ def _query_loki(
     )
 
 
+def _query_loki_instant(
+    base: str,
+    expr: str,
+    ts_ns: int,
+    limit: int = 5000,
+) -> list[dict[str, Any]]:
+    """Run a Loki instant query at a single timestamp.
+
+    Use for aggregations like `count_over_time({...}[1d])` that must be
+    evaluated once at the window end — query_range with default step
+    creates overlapping sliding windows that inflate counts.
+    """
+    params = urllib.parse.urlencode(
+        {"query": expr, "time": str(ts_ns), "limit": str(limit)}
+    )
+    req = urllib.request.Request(f"{base}/loki/api/v1/query?{params}")
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        body = json.load(resp)
+    return (
+        body.get("data", {}).get("result", [])
+        if body.get("status") == "success"
+        else []
+    )
+
+
 def _vec_sum(
     vec: list[dict[str, Any]],
     key_fn: Callable[[dict[str, str]], Any] = lambda m: "_all",
@@ -214,10 +239,12 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
 
     # event_name / tool_name / success are structured metadata (not stream labels),
     # so they need pipe filters and structured-metadata-aware grouping.
-    tool_streams = _query_loki(
+    # Use an instant query at end_ns so the [24h] window is evaluated once;
+    # query_range would emit overlapping sliding windows and the sum across
+    # them multiplies each event by ~step_count, inflating counts ~10-100x.
+    tool_streams = _query_loki_instant(
         loki,
         'sum by (tool_name, success) (count_over_time({service_name="claude-code"} | event_name="tool_result" [24h]))',
-        start_ns,
         end_ns,
         limit=5000,
     )
@@ -228,7 +255,8 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
         labels = stream.get("metric") or stream.get("stream") or {}
         tool = labels.get("tool_name", "unknown")
         success = labels.get("success", "true")
-        count = sum(int(float(v[1])) for v in stream.get("values", []))
+        value = stream.get("value")
+        count = int(float(value[1])) if value else 0
         tool_breakdown[tool]["calls"] += count
         if success != "true":
             tool_breakdown[tool]["errors"] += count
@@ -308,16 +336,18 @@ def _collect_loki(target_date: str, loki: str) -> dict[str, Any]:
         )
     terminal = {k: len(v) for k, v in terminal_sessions.items()}
 
-    prompts = _query_loki(
+    # Instant query at end_ns — same rationale as tool_streams above.
+    prompts = _query_loki_instant(
         loki,
         'sum by (session_id) (count_over_time({service_name="claude-code"} | event_name="user_prompt" [24h]))',
-        start_ns,
         end_ns,
         limit=5000,
     )
     n_turns = 0
     for s in prompts:
-        n_turns += sum(int(float(v[1])) for v in s.get("values", []))
+        value = s.get("value")
+        if value:
+            n_turns += int(float(value[1]))
 
     return {
         "available": bool(tool_streams or hourly_streams),

@@ -30,3 +30,7 @@ Keep entries concise and user/operator-facing. Avoid tool traces, lint output, h
 - Expanded the `cron-wrapup` summary contract with `Insights` and `Action Items` sections so daily wrap-ups surface user-facing KB signals, not only job status.
 - Updated the cron-wrapup template and optional digest prompt to consume the expanded summary contract.
 - Clarified that `kb-cron-wrapup` commits only nested `data/` repo outputs after successful lint, while the optional global digest remains read-only and report-only.
+
+### Fixed
+
+- Fixed Claude Code daily report tool-call and user-prompt counts being inflated ~250x by overlapping `count_over_time([24h])` sliding windows. `_collect_loki` now uses a new `_query_loki_instant` helper to evaluate the 24h aggregation once at the day boundary instead of summing across query_range step points. Affects `tool_breakdown`, `n_toolcalls`, `error_rate`, and `n_turns`; per-tool error rates were already accurate because numerator and denominator inflated equally.
