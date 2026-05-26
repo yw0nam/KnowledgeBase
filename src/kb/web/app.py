@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from kb.db import make_engine, make_session_factory
 from kb.web import config
-from kb.web.routes import dashboard, dispatches, kanban, pages, queue
+from kb.web.routes import dashboard, decisions, dispatches, kanban, pages, queue
 
 
 def create_app() -> FastAPI:
@@ -30,7 +30,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=list(cfg.cors_origins),
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Content-Type"],
     )
     app.state.config = cfg
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router, prefix="/api")
     app.include_router(kanban.router, prefix="/api")
     app.include_router(dispatches.router, prefix="/api")
+    app.include_router(decisions.router, prefix="/api")
     return app
 
 
