@@ -6,6 +6,10 @@ KB_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOG_DIR="$KB_ROOT/.cron/logs"
 LOCK_DIR="$KB_ROOT/.cron/locks"
 TARGET_DATE="$(TZ=Asia/Seoul date -d 'yesterday' +%F)"
+# kb-cron-wrapup's own log stays under .cron/logs/ (not data/raw/) because the file
+# is still being written during the wrap-up's own git commit step, which would
+# otherwise risk staging an in-flight file or tripping raw immutability on next run.
+LOG_FILE="$LOG_DIR/cron-wrapup.log"
 
 mkdir -p "$LOG_DIR" "$LOCK_DIR"
 
@@ -18,4 +22,4 @@ flock -n "$LOCK_DIR/cron-wrapup.lock" bash -c '
     --dangerously-skip-permissions \
     --dir "$1" \
     "$2"
-' bash "$KB_ROOT" "$PROMPT" >> "$LOG_DIR/cron-wrapup.log" 2>&1
+' bash "$KB_ROOT" "$PROMPT" >> "$LOG_FILE" 2>&1
