@@ -2,8 +2,9 @@
 
 Exposes the engine factory, session factory, and FastAPI dependency for
 ``data/db/state.db``. Connection-time PRAGMAs (WAL, foreign_keys,
-busy_timeout, synchronous=NORMAL) are registered on the SQLAlchemy
-``Engine`` ``connect`` event so every checkout enforces them.
+busy_timeout, synchronous=NORMAL) are wired to each engine returned by
+``make_engine`` via a per-engine ``connect`` listener so other SQLAlchemy
+engines in-process (e.g. a future non-SQLite consumer) are not affected.
 """
 
 from __future__ import annotations
@@ -35,7 +36,6 @@ def db_path(data_dir: Path) -> Path:
     return db_dir / "state.db"
 
 
-@event.listens_for(Engine, "connect")
 def _set_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ARG001
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode = WAL")
@@ -48,7 +48,9 @@ def _set_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ARG001
 def make_engine(data_dir: Path) -> Engine:
     """Create a SQLAlchemy engine bound to ``data_dir/db/state.db``."""
     url = f"sqlite:///{db_path(data_dir)}"
-    return create_engine(url, future=True)
+    engine = create_engine(url, future=True)
+    event.listen(engine, "connect", _set_sqlite_pragmas)
+    return engine
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

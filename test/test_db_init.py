@@ -7,8 +7,6 @@ build on top of this foundation.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from alembic import command
 from alembic.config import Config
@@ -19,7 +17,7 @@ from kb import REPO_ROOT
 from kb.db import make_engine
 
 
-def _alembic_cfg(data_dir: Path) -> Config:
+def _alembic_cfg() -> Config:
     cfg = Config(str(REPO_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
     return cfg
@@ -30,7 +28,7 @@ def test_alembic_round_trip(tmp_path, monkeypatch):
     data_dir.mkdir()
     monkeypatch.setenv("KB_DATA_DIR", str(data_dir))
 
-    cfg = _alembic_cfg(data_dir)
+    cfg = _alembic_cfg()
 
     command.upgrade(cfg, "head")
 
@@ -63,7 +61,7 @@ def test_pragmas_applied_on_connect(tmp_path, monkeypatch):
     data_dir.mkdir()
     monkeypatch.setenv("KB_DATA_DIR", str(data_dir))
 
-    cfg = _alembic_cfg(data_dir)
+    cfg = _alembic_cfg()
     command.upgrade(cfg, "head")
 
     engine = make_engine(data_dir)
@@ -85,7 +83,7 @@ def test_wiki_edits_triggers_raise(tmp_path, monkeypatch):
     data_dir.mkdir()
     monkeypatch.setenv("KB_DATA_DIR", str(data_dir))
 
-    cfg = _alembic_cfg(data_dir)
+    cfg = _alembic_cfg()
     command.upgrade(cfg, "head")
 
     engine = make_engine(data_dir)
