@@ -33,6 +33,10 @@ const PRIMARY_ORDER = [
   'tags',
 ];
 
+// Frontmatter keys rendered by a dedicated surface elsewhere; skipped
+// here to avoid duplicate (and lossy) rendering of complex shapes.
+const SKIP_KEYS = new Set(['kanban_dispatches']);
+
 function formatValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value.join(', ');
@@ -44,8 +48,10 @@ function formatValue(value: unknown): string {
 export function Frontmatter({ fm }: Props) {
   const keys = Object.keys(fm);
   const ordered = [
-    ...PRIMARY_ORDER.filter((k) => k in fm),
-    ...keys.filter((k) => !PRIMARY_ORDER.includes(k) && k !== 'title').sort(),
+    ...PRIMARY_ORDER.filter((k) => k in fm && !SKIP_KEYS.has(k)),
+    ...keys
+      .filter((k) => !PRIMARY_ORDER.includes(k) && k !== 'title' && !SKIP_KEYS.has(k))
+      .sort(),
   ];
   if (ordered.length === 0) {
     return null;

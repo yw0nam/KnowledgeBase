@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from kb_mcp.web import config
-from kb_mcp.web.routes import dashboard, pages, queue
+from kb_mcp.web.routes import dashboard, kanban, pages, queue
 
 
 def create_app() -> FastAPI:
@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(queue.router, prefix="/api")
     app.include_router(pages.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
+    app.include_router(kanban.router, prefix="/api")
     return app
 
 
