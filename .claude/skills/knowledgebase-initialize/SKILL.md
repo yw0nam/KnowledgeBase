@@ -132,7 +132,7 @@ Scheduler backend guidance:
 
 - **Tested scheduler**: Hermes cron, using scheduler-local dispatcher scripts that call the repo wrappers.
 - **Compatible but not yet tested here**: OpenClaw cron, native Unix crontab, systemd timers, or any equivalent scheduler that can run the wrapper scripts on the documented schedule.
-- Actual job registration state belongs to the chosen scheduler backend. Run evidence belongs in `.cron/logs/`, `data/handoffs/`, `data/log.md`, and cron wrap-up summaries.
+- Actual job registration state belongs to the chosen scheduler backend. Run evidence belongs in `data/raw/ops/cron/{YYYY}/{MM}/` (per-run log files), `data/handoffs/`, `data/log.md`, and cron wrap-up summaries.
 
 Show the exact list before making cron changes:
 
@@ -168,7 +168,7 @@ Only after approval:
 
 1. Create or update wrapper scripts under `scripts/cron/`.
 2. Make wrappers executable.
-3. Keep logs in `.cron/logs/`.
+3. Each wrapper writes its run log to `data/raw/ops/cron/{YYYY}/{MM}/{TARGET}_kb-<job>.log` (where YYYY/MM derives from TARGET_DATE). The `kb-cron-wrapup` wrapper is the exception — it logs to `.cron/logs/cron-wrapup.log` because its log is still being written during the wrap-up's own commit step.
 4. Keep locks in `.cron/locks/`.
 5. Show scheduler entries for the selected backend, or install/register them only if the user explicitly asks.
 

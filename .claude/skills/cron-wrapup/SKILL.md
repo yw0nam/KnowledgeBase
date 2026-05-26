@@ -1,6 +1,6 @@
 ---
 name: cron-wrapup
-description: Use when running the nightly KB cron wrap-up — aggregating the previous day's usage reports, memory page, wiki-promote / TTL outcomes, and `.cron/logs/` exit states into a single durable Slack-digest-stable wiki summary plus run handoff.
+description: Use when running the nightly KB cron wrap-up — aggregating the previous day's usage reports, memory page, wiki-promote / TTL outcomes, and `data/raw/ops/cron/` per-run log exit states into a single durable Slack-digest-stable wiki summary plus run handoff.
 ---
 
 # cron-wrapup
@@ -58,20 +58,27 @@ data/
 ├── handoffs/{YYYY}/{MM}/
 │   ├── wiki-daily-build/{TARGET}_*_handoff_*.md   # run handoff for memory-daily
 │   └── wiki-promote/...                            # if wiki-promote ran (folder per wiki-approval)
+├── raw/ops/cron/{YYYY}/{MM}/              # per-run cron log files (one file per job per target)
+│   ├── {TARGET}_kb-opencode-daily-report.log
+│   ├── {TARGET}_kb-claude-code-daily-report.log
+│   ├── {TARGET}_kb-hermes-daily-report.log
+│   ├── {TARGET}_kb-memory-daily.log
+│   ├── {TARGET}_kb-wiki-ttl-sweep.log
+│   ├── {TARGET}_kb-wiki-promote.log
+│   ├── {TARGET}_kb-memory-weekly.log       # exists on Monday (after weekly run for prior ISO week)
+│   └── {TARGET}_kb-memory-monthly.log      # exists on day 1 (after monthly run for prior month)
 └── log.md
 
-.cron/logs/                                # run logs (append-only)
-├── opencode-report.log
-├── claude-code-report.log
-├── hermes-report.log
-├── daily.log                              # kb-memory-daily
-├── weekly.log / monthly.log               # exist on Mon / 1st only
-├── wiki-promote.log
-├── wiki-ttl-sweep.log
-└── cron-wrapup.log                        # this skill's own log (skip when reading)
+.cron/logs/cron-wrapup.log                  # wrap-up's OWN log stays here (not data/raw/),
+                                            # because it is still being written during the
+                                            # commit step. Do not read or stage it.
 ```
 
 `sources:` frontmatter paths are **relative to `data/`** (e.g. `wiki/summaries/...`, NOT `data/wiki/summaries/...`).
+
+Every wrapper uses `TARGET_DATE` (= yesterday in KST) as the filename prefix, even when its workflow target is a week or month — so the daily wrap-up's glob `{TARGET}_*.log` matches every wrapper that ran in last night's pipeline. The actual weekly/monthly period stays in the log body and the produced wiki page.
+
+Per-run log files replace the legacy append-only `.cron/logs/<job>.log`. Each run writes its own immutable file, so the wrap-up reads exactly one file per job per target — no time-window grep required.
 
 ## Wiki Summary Schema (the only thing lint ERRORs you for)
 
@@ -174,10 +181,10 @@ Compute in this order; the first match wins:
 | Verdict | Condition |
 |---|---|
 | `FAILED`   | Any cron wrapper exited non-zero **OR** any *required* input is missing (memory page, all three usage reports). |
-| `DEGRADED` | Any non-blocking anomaly: lint warnings appearing today that weren't there yesterday, lock skip, late start > 10 min, optional input missing (promote handoff on a day promote was supposed to run). |
+| `DEGRADED` | Any non-blocking anomaly: lint warnings appearing today that weren't there yesterday, lock skip, optional input missing (promote handoff on a day promote was supposed to run), or a per-run log file file-mtime far past its scheduled cron time. |
 | `OK`       | All expected logs show clean exit; Anomalies list is `- none`. |
 
-Late-start detection: compare each wrapper's log line for the run to its schedule. > 10 min slip is degraded.
+Late-start detection: per-run logs do not contain wrapper-side start timestamps, so use the log file's mtime (or first content line's timestamp if the underlying tool emits one) versus the scheduled cron time. Treat slips > 10 min as DEGRADED only when the signal is clearly available; otherwise omit the anomaly rather than guess.
 
 ## Inputs the wrap-up reads — and what to extract from each
 
@@ -189,10 +196,10 @@ Late-start detection: compare each wrapper's log line for the run to its schedul
 | `wiki/summaries/{Y}/{M}/{T}-memory.md`             | path, key events, promotion candidates, open items, next-run notes; **do not copy the whole narrative** |
 | `handoffs/{Y}/{M}/wiki-daily-build/{T}_*_handoff_*.md` | path, new pages count from §6 Outputs, risks, next handoff instructions |
 | `handoffs/{Y}/{M}/wiki-promote/...`                | promoted count, rejected count, expired count |
-| `.cron/logs/wiki-ttl-sweep.log` (last-run window)  | swept count + exit code |
-| `.cron/logs/*.log` (last 24h window only)          | non-zero exit lines, `ERROR:` lines, `Lock` skip lines |
+| `raw/ops/cron/{Y}/{M}/{T}_kb-wiki-ttl-sweep.log`   | swept count + exit code |
+| `raw/ops/cron/{Y}/{M}/{T}_*.log` (every per-run file matching this target — there is no `kb-cron-wrapup.log` in this folder) | non-zero exit lines, `ERROR:` lines, `Lock` skip lines |
 
-Read each input at most once. Never use lint as a discovery source, never re-render existing summaries, never read `data/raw/`. The wrap-up may extract concise insights/actions from the daily memory and handoffs, but must not duplicate the memory page's full content narrative.
+Read each input at most once. Never use lint as a discovery source, never re-render existing summaries. The wrap-up MUST NOT read `data/raw/` other than `raw/ops/cron/{Y}/{M}/{TARGET}_*.log`. The wrap-up may extract concise insights/actions from the daily memory and handoffs, but must not duplicate the memory page's full content narrative.
 
 ## Lint Order — DO THIS, the past runs failed by skipping step 1
 
@@ -236,7 +243,7 @@ This skill specifies only:
 ## YYYY-MM-DD (cron wrap-up — target: {TARGET})
 
 - **fill**: {TARGET} cron wrap-up summary
-  - 소스: wiki/summaries/Y/M/{TARGET}-{opencode,claude-code,hermes}-usage.md, wiki/summaries/Y/M/{TARGET}-memory.md, .cron/logs/*.log
+  - 소스: wiki/summaries/Y/M/{TARGET}-{opencode,claude-code,hermes}-usage.md, wiki/summaries/Y/M/{TARGET}-memory.md, raw/ops/cron/Y/M/{TARGET}_*.log
   - 출력: wiki/summaries/Y/M/{TARGET}-cron-wrapup.md (신규)
 - **handoff**: handoffs/Y/M/cron-wrapup/{TARGET}_{role}_handoff_NN.md
 - **lint**: kb-wiki-index + kb-lint-wiki --check-immutability PASSED (errors 0, warnings N)
@@ -249,10 +256,10 @@ This skill specifies only:
 ```
 1. Resolve TARGET = yesterday in KST (or accept explicit argument)
 2. Locate inputs: 3 usage pages, memory page, daily handoff, promote handoff (optional),
-   TTL log, all cron logs. Note any MISSING required input → Status: FAILED later.
+   per-run cron logs at `raw/ops/cron/{Y}/{M}/{TARGET}_*.log`. Note any MISSING required input → Status: FAILED later.
 3. Extract per-input metrics (see Inputs table). Compute Counters.
-4. Walk .cron/logs/*.log within the last 24h window for non-zero exits, ERRORs,
-   lock skips, late starts > 10 min. Collect into Anomalies.
+4. Read every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` (the wrap-up's own log lives at `.cron/logs/cron-wrapup.log`, outside this folder — do not read it)
+   for non-zero exits, ERRORs, lock skips. Collect into Anomalies.
 5. Compute Status verdict (FAILED > DEGRADED > OK, first match wins).
 6. Copy reference/templates/cron-wrapup-summary.md → write
    data/wiki/summaries/{Y}/{M}/{TARGET}-cron-wrapup.md with seven canonical H2 sections filled.
@@ -270,7 +277,7 @@ This skill specifies only:
 Rules:
 
 - Commit only inside `data/` with `git -C data ...`.
-- Include the wrap-up summary, run handoff, `data/log.md`, regenerated `wiki/INDEX.md`, and any same-run report/memory artefacts that are still uncommitted and are required by the wrap-up sources.
+- Include the wrap-up summary, run handoff, `data/log.md`, regenerated `wiki/INDEX.md`, any same-run report/memory artefacts that are still uncommitted and are required by the wrap-up sources, and every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` for the target. The wrap-up's own log lives at `.cron/logs/cron-wrapup.log` (outside `data/`) — it is never staged.
 - Commit only after `kb-wiki-index`, `kb-lint-wiki --check-immutability`, and `kb-lint-handoff` all exit 0.
 - Use commit message `cron-wrapup: {TARGET}`.
 - Never push.
@@ -293,7 +300,8 @@ If a required input is missing (e.g. memory page never wrote):
 ## Workflow Discipline
 
 - **One target per run.** Never extend scope implicitly to "and also the day before".
-- **Never edit raw files.** The wrap-up does not touch `data/raw/` at all.
+- **Never edit raw files.** The wrap-up reads `data/raw/ops/cron/{Y}/{M}/{TARGET}_*.log` as evidence and `git add`s them on commit, but must never modify their contents. Do not read other `data/raw/` subtrees.
+- **Replay caveat.** A wrapper rerunning for an already-committed TARGET will append to a tracked raw log and trip `check_raw_immutability` on the next wrap-up. If you must replay a job for a committed TARGET, first `git -C data rm` the existing log file (or move it aside) before the wrapper runs.
 - **Do not auto-promote** anything — wiki promotion is `wiki-approval`'s job.
 - **Do not use lint as analysis input** — run only the required final gate: `kb-wiki-index`, `kb-lint-wiki --check-immutability`, `kb-lint-handoff` once each.
 - **Commit only nested data outputs after lint passes.** Never commit outer repo files and never push.
@@ -301,7 +309,8 @@ If a required input is missing (e.g. memory page never wrote):
 
 ## Red Flags — STOP and re-check
 
-- About to read `.cron/logs/*` beyond the last 24h → narrow the window, you are only summarizing yesterday's run
+- About to read any cron log other than `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` → STOP. The wrap-up summarizes exactly this target's per-run files; no time-window scan. (`.cron/logs/cron-wrapup.log` is the wrap-up's own runtime log — never read it.)
+- About to `git add` something under `raw/ops/cron/` for a TARGET other than the one you are wrapping up → STOP. Stage only this target's per-run logs.
 - About to re-render the full memory page into the wrap-up → STOP. Extract only concise insights and action items.
 - About to rename or reorder one of the seven H2 sections → STOP. The Slack digest will break.
 - About to create a wiki page but `kb-wiki-index` not yet run → run index first
