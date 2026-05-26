@@ -33,6 +33,13 @@
   box-shadow: inset 0 -1.5px 0 var(--color-signal);
 }
 
+.count {
+  font: var(--type-body-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-muted);
+  margin-left: var(--space-1);
+}
+
 .freshness {
   font: var(--type-body-mono);
   color: var(--color-ink-dim);

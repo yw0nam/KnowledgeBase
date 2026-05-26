@@ -1,0 +1,35 @@
+/* Decisions tab shell. Page list on the left (auto-sized 1fr) with
+ * the PageInspector pushed in from the right at its persisted width.
+ */
+
+.shell {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  background: var(--color-bench);
+  color: var(--color-ink);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-panel);
+  border-right: 1px solid var(--color-hairline);
+  overflow: hidden;
+}
+
+.error {
+  padding: var(--space-5);
+  font: var(--type-body);
+  color: var(--color-danger);
+  margin: 0;
+}
+
+.error code {
+  font: var(--type-body-mono);
+  color: var(--color-ink);
+}
