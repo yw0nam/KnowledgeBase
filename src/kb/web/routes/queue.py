@@ -15,7 +15,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request
 
-from kb_mcp.cli.wiki_review._store import _split_frontmatter, iter_pages
+from kb.cli.wiki_review._store import _split_frontmatter, iter_pages
 
 router = APIRouter(tags=["queue"])
 

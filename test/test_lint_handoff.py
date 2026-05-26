@@ -1,11 +1,11 @@
-"""Tests for kb_mcp.cli.lint_handoff."""
+"""Tests for kb.cli.lint_handoff."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from textwrap import dedent
 
-import kb_mcp.cli.lint_handoff as lh
+import kb.cli.lint_handoff as lh
 
 
 def _write(path: Path, content: str) -> None:

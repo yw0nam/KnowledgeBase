@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-from kb_mcp import REPO_ROOT as BASEDIR
+from kb import REPO_ROOT as BASEDIR
 
 WIKI_DIR = BASEDIR / "data" / "wiki"
 

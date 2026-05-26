@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from kb_mcp.cli.wiki.utils import parse_frontmatter
+from kb.cli.wiki.utils import parse_frontmatter
 
 INDEX_FILENAME = "INDEX.md"
 INDEX_STEM = "INDEX"

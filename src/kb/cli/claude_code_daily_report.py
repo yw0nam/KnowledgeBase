@@ -13,8 +13,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from kb_mcp import REPO_ROOT as BASEDIR
-from kb_mcp.cli.usage_reports.render import _fmt, _int, _num, _pct
+from kb import REPO_ROOT as BASEDIR
+from kb.cli.usage_reports.render import _fmt, _int, _num, _pct
 
 DEFAULT_PROM = "http://127.0.0.1:9090"
 DEFAULT_LOKI = "http://127.0.0.1:3110"

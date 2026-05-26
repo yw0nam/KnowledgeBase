@@ -2,7 +2,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Local FastAPI service (see src/kb_mcp/web/config.py).
+// Local FastAPI service (see src/kb/web/config.py).
 // Vite dev server proxies /api/* to it so the frontend speaks to the
 // same origin and avoids CORS in development.
 const API_PORT = Number(process.env.KB_WEB_PORT ?? 8765);

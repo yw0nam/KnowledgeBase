@@ -1,5 +1,5 @@
 // Mirrors the response shape from /api/queue (see
-// src/kb_mcp/web/routes/queue.py). Frontmatter is a free dict because
+// src/kb/web/routes/queue.py). Frontmatter is a free dict because
 // wiki frontmatter is open-ended; known fields are accessed via
 // helpers in api.ts.
 

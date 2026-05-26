@@ -7,7 +7,7 @@ import datetime
 import sys
 from zoneinfo import ZoneInfo
 
-from kb_mcp.cli.wiki_review import _commands, _store
+from kb.cli.wiki_review import _commands, _store
 
 KST = ZoneInfo("Asia/Seoul")
 

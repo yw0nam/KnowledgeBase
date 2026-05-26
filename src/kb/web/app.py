@@ -11,8 +11,8 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from kb_mcp.web import config
-from kb_mcp.web.routes import dashboard, kanban, pages, queue
+from kb.web import config
+from kb.web.routes import dashboard, kanban, pages, queue
 
 
 def create_app() -> FastAPI:

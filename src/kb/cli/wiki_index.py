@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import sys
 
-from kb_mcp import REPO_ROOT as BASEDIR
-from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+from kb import REPO_ROOT as BASEDIR
+from kb.cli.wiki.index import INDEX_FILENAME, build_index
 
 WIKI_DIR = BASEDIR / "data" / "wiki"
 

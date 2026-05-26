@@ -1,4 +1,4 @@
-"""kb_mcp — KnowledgeBase lint and reporting CLI tooling."""
+"""kb — KnowledgeBase lint and reporting CLI tooling."""
 
 from pathlib import Path
 

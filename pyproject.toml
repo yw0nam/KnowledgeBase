@@ -30,19 +30,19 @@ testpaths = ["test"]
 pythonpath = ["src"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/kb_mcp"]
+packages = ["src/kb"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-kb-lint-wiki = "kb_mcp.cli.lint_wiki:main"
-kb-lint-handoff = "kb_mcp.cli.lint_handoff:main"
-kb-wiki-index = "kb_mcp.cli.wiki_index:main"
-kb-wiki-review = "kb_mcp.cli.wiki_review:main"
-kb-tool-trace-parse = "kb_mcp.cli.tool_trace_parse:main"
-kb-opencode-daily-report = "kb_mcp.cli.opencode_daily_report:main"
-kb-hermes-daily-report = "kb_mcp.cli.hermes_daily_report:main"
-kb-claude-code-daily-report = "kb_mcp.cli.claude_code_daily_report:main"
-kb-web = "kb_mcp.web.main:main"
+kb-lint-wiki = "kb.cli.lint_wiki:main"
+kb-lint-handoff = "kb.cli.lint_handoff:main"
+kb-wiki-index = "kb.cli.wiki_index:main"
+kb-wiki-review = "kb.cli.wiki_review:main"
+kb-tool-trace-parse = "kb.cli.tool_trace_parse:main"
+kb-opencode-daily-report = "kb.cli.opencode_daily_report:main"
+kb-hermes-daily-report = "kb.cli.hermes_daily_report:main"
+kb-claude-code-daily-report = "kb.cli.claude_code_daily_report:main"
+kb-web = "kb.web.main:main"

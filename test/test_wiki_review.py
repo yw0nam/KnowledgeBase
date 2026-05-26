@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from kb_mcp.cli.wiki_review import _store
+from kb.cli.wiki_review import _store
 
 
 def _write_page(path: Path, fm: dict, body: str = "Body. " * 20) -> None:
@@ -122,7 +122,7 @@ def test_get_field_reads_value(tmp_path):
 
 
 def test_append_feedback_creates_section(tmp_path):
-    from kb_mcp.cli.wiki_review import _feedback
+    from kb.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
     p.write_text("---\ntype: entity\n---\n\n# Title\n\nSome body.\n")
@@ -136,7 +136,7 @@ def test_append_feedback_creates_section(tmp_path):
 
 
 def test_append_feedback_appends_to_existing_section(tmp_path):
-    from kb_mcp.cli.wiki_review import _feedback
+    from kb.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
     p.write_text(
@@ -154,7 +154,7 @@ def test_append_feedback_appends_to_existing_section(tmp_path):
 
 
 def test_append_feedback_skip_empty_input(tmp_path):
-    from kb_mcp.cli.wiki_review import _feedback
+    from kb.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
     original = "---\ntype: entity\n---\n\n# Title\n\nBody.\n"
@@ -165,7 +165,7 @@ def test_append_feedback_skip_empty_input(tmp_path):
 
 
 def test_append_feedback_strips_input_whitespace(tmp_path):
-    from kb_mcp.cli.wiki_review import _feedback
+    from kb.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
     p.write_text("---\ntype: entity\n---\n\n# Title\n")
@@ -218,7 +218,7 @@ def _make_page(
 
 
 def test_promote_transitions_to_pending(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     wiki = tmp_path / "wiki"
     page = _make_page(wiki, "entity", "Foo", status="not_processed")
@@ -230,7 +230,7 @@ def test_promote_transitions_to_pending(tmp_path):
 
 
 def test_promote_errors_when_already_pending(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "Foo", status="pending_for_approve")
@@ -241,7 +241,7 @@ def test_promote_errors_when_already_pending(tmp_path, capsys):
 
 
 def test_promote_errors_when_already_approved(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "Foo", status="approved")
@@ -251,7 +251,7 @@ def test_promote_errors_when_already_approved(tmp_path, capsys):
 
 
 def test_promote_errors_when_page_not_found(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     wiki.mkdir()
@@ -261,7 +261,7 @@ def test_promote_errors_when_page_not_found(tmp_path, capsys):
 
 
 def test_approve_with_feedback_arg(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     wiki = tmp_path / "wiki"
     page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
@@ -281,7 +281,7 @@ def test_approve_with_feedback_arg(tmp_path):
 
 
 def test_approve_empty_feedback_skips_section(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     wiki = tmp_path / "wiki"
     page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
@@ -299,7 +299,7 @@ def test_approve_empty_feedback_skips_section(tmp_path):
 
 
 def test_approve_errors_on_not_processed(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "Foo", status="not_processed")
@@ -316,7 +316,7 @@ def test_approve_errors_on_not_processed(tmp_path, capsys):
 
 
 def test_approve_errors_on_already_approved(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "Foo", status="approved")
@@ -355,7 +355,7 @@ def _init_data_repo(data_dir: Path) -> None:
 
 
 def test_reject_moves_file_to_rejected_tree(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -401,7 +401,7 @@ def test_reject_moves_file_to_rejected_tree(tmp_path):
 
 
 def test_reject_errors_on_not_pending(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -422,7 +422,7 @@ def test_reject_errors_on_not_pending(tmp_path, capsys):
 
 
 def test_reject_collision_errors(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -451,7 +451,7 @@ def test_reject_collision_errors(tmp_path, capsys):
 
 
 def test_list_filters_by_status(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "A", status="not_processed", created="2026-05-15")
@@ -469,7 +469,7 @@ def test_list_filters_by_status(tmp_path, capsys):
 
 
 def test_list_all_status(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "A", status="not_processed")
@@ -483,7 +483,7 @@ def test_list_all_status(tmp_path, capsys):
 
 
 def test_list_counts(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "A", status="not_processed")
@@ -500,7 +500,7 @@ def test_list_counts(tmp_path, capsys):
 
 
 def test_ttl_sweep_rejects_old_not_processed(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -555,7 +555,7 @@ def test_ttl_sweep_rejects_old_not_processed(tmp_path, capsys):
 
 def test_list_with_unknown_age_does_not_crash(tmp_path, capsys):
     """A page missing `created` must not break `cmd_list` sort."""
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     # Normal page with valid created.
@@ -584,7 +584,7 @@ def test_list_with_unknown_age_does_not_crash(tmp_path, capsys):
 
 def test_approve_twice_does_not_duplicate_approved_at(tmp_path):
     """Re-approve (after self-reset → re-promote) must not duplicate approved_at."""
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     wiki = tmp_path / "wiki"
     page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
@@ -623,7 +623,7 @@ def test_approve_twice_does_not_duplicate_approved_at(tmp_path):
 
 def test_reject_leaves_source_unchanged_when_git_mv_fails(tmp_path, capsys):
     """If git mv fails (no git repo), source frontmatter must stay intact."""
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     # No `_init_data_repo` → data_dir is not a git repo, git mv will fail.
     data = tmp_path / "data"
@@ -652,7 +652,7 @@ def test_reject_leaves_source_unchanged_when_git_mv_fails(tmp_path, capsys):
 
 def test_log_write_failure_surfaces_to_stderr(tmp_path, capsys):
     """OSError during log write must produce a stderr warning, not silent pass."""
-    from kb_mcp.cli.wiki_review import _log
+    from kb.cli.wiki_review import _log
 
     # Point the log at a path whose parent doesn't exist → OSError on open().
     bogus = tmp_path / "no-such-dir" / "log.md"
@@ -663,16 +663,14 @@ def test_log_write_failure_surfaces_to_stderr(tmp_path, capsys):
 
 
 def test_main_dispatch_list(tmp_path, capsys, monkeypatch):
-    from kb_mcp.cli import wiki_review
+    from kb.cli import wiki_review
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "A", status="pending_for_approve")
 
     # Force REPO_ROOT to our tmp tree.
-    monkeypatch.setattr("kb_mcp.cli.wiki_review._store.WIKI_DIR", wiki)
-    monkeypatch.setattr(
-        "kb_mcp.cli.wiki_review._store.REJECTED_DIR", tmp_path / "rejected"
-    )
+    monkeypatch.setattr("kb.cli.wiki_review._store.WIKI_DIR", wiki)
+    monkeypatch.setattr("kb.cli.wiki_review._store.REJECTED_DIR", tmp_path / "rejected")
 
     rc = wiki_review.main(["list"])
     assert rc == 0
@@ -681,7 +679,7 @@ def test_main_dispatch_list(tmp_path, capsys, monkeypatch):
 
 
 def test_main_unknown_command(capsys):
-    from kb_mcp.cli import wiki_review
+    from kb.cli import wiki_review
 
     rc = wiki_review.main(["bogus"])
     assert rc != 0

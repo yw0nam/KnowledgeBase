@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from kb_mcp.cli.wiki_review._store import _split_frontmatter
+from kb.cli.wiki_review._store import _split_frontmatter
 
 KST = ZoneInfo("Asia/Seoul")
 

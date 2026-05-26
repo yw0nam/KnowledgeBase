@@ -1,10 +1,10 @@
-"""Tests for kb_mcp.cli.wiki.index — global INDEX.md generator."""
+"""Tests for kb.cli.wiki.index — global INDEX.md generator."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from kb_mcp.cli.wiki.index import build_index
+from kb.cli.wiki.index import build_index
 
 FM = """\
 ---
@@ -145,7 +145,7 @@ def test_build_index_dates_derived_from_pages(tmp_path):
 
 def test_build_index_excludes_non_approved(tmp_path):
     """build_index should skip pages with review_status != approved."""
-    from kb_mcp.cli.wiki.index import build_index
+    from kb.cli.wiki.index import build_index
 
     wiki = tmp_path / "wiki"
     (wiki / "entities" / "Subj").mkdir(parents=True)
@@ -199,7 +199,7 @@ tags: []
 
 def test_build_index_includes_pages_without_review_status(tmp_path):
     """Pages of types outside REVIEW_STATUS_TYPES (e.g. summary) appear regardless."""
-    from kb_mcp.cli.wiki.index import build_index
+    from kb.cli.wiki.index import build_index
 
     wiki = tmp_path / "wiki"
     (wiki / "summaries" / "2026" / "05").mkdir(parents=True)

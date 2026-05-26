@@ -6,8 +6,8 @@ uv run black src/ test/
 uv run ruff check src/ test/ --unsafe-fixes --fix
 
 # Verify (non-mutating)
-uv run python -m kb_mcp.cli.lint_wiki
-uv run python -m kb_mcp.cli.lint_handoff
+uv run python -m kb.cli.lint_wiki
+uv run python -m kb.cli.lint_handoff
 
 # Frontend (only when present and installed).
 if [ -d frontend ] && [ -d frontend/node_modules ]; then
