@@ -19,6 +19,7 @@ Keep entries concise and user/operator-facing. Avoid tool traces, lint output, h
 
 ### Added
 
+- Added Phase 2a Task A foundation for the operational state DB: `sqlalchemy>=2.0` and `alembic>=1.13` dependencies, a `src/kb/db/` module exposing `make_engine`, `make_session_factory`, `get_session`, and a `db_path` helper that resolves `<KB_DATA_DIR>/db/state.db`, plus connection-time PRAGMAs (WAL, foreign_keys=ON, busy_timeout=5000ms, synchronous=NORMAL) wired via a SQLAlchemy `Engine` `connect` listener. Initial Alembic migration creates `dispatches` and `wiki_edits` tables with the spec DDL — CHECK constraints on `status`/`field`/`source`, ISO-8601 KST timestamp shape checks, `json_valid` checks on JSON columns, a partial unique index on `dispatches(idempotency_key)`, status- and stem-keyed lookup indexes, and `BEFORE UPDATE`/`BEFORE DELETE` triggers that abort with `'wiki_edits is append-only'`. `alembic/env.py` reads `KB_DATA_DIR` (default `<repo_root>/data`). Tests in `test/test_db_init.py` cover migration round-trip, PRAGMA application, and trigger enforcement. Tasks B/C/D will build dispatch/wiki-edit repos and routes on this foundation.
 - Added a README screenshot for the local review console.
 - Added the `cron-wrapup` skill and `kb-cron-wrapup.sh` wrapper for nightly KB operational summaries.
 - Added optional global digest guidance under `knowledgebase-initialize/reference/optional-global-digest.md`.
