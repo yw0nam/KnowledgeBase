@@ -516,6 +516,86 @@ def test_get_decisions_dispatch_summary_last_status_at_beats_null(
     assert row["dispatch_summary"]["last_status"] == "done"
 
 
+def test_get_decisions_has_dispatch_filter(client: TestClient, data_dir: Path) -> None:
+    """``has_dispatch`` partitions the result by dispatch ledger presence.
+
+    Three pages, all ``pending_for_approve``. Dispatches inserted for
+    A and B only; C has none.
+
+    - ``has_dispatch=true``  → A + B (total=2).
+    - ``has_dispatch=false`` → C     (total=1).
+
+    The FE "Dispatched" sub-tab depends on this so pagination + total
+    are honest across the full corpus, not just the current page slice.
+    """
+    _write_page(
+        data_dir,
+        "improvements/2026-05/PageA.md",
+        _improvement_fm(),
+    )
+    _write_page(
+        data_dir,
+        "improvements/2026-05/PageB.md",
+        _improvement_fm(),
+    )
+    _write_page(
+        data_dir,
+        "improvements/2026-05/PageC.md",
+        _improvement_fm(),
+    )
+
+    from kb.db.repos import dispatch_repo
+
+    engine = make_engine(data_dir)
+    factory = make_session_factory(engine)
+    sess = factory()
+    try:
+        dispatch_repo.create_dispatch(
+            sess,
+            page_stem="PageA",
+            page_path_at_dispatch="wiki/improvements/2026-05/PageA.md",
+            external_board_id="kb-main",
+            external_task_id="t-a",
+            direction=None,
+            idempotency_key=None,
+            created_at="2026-05-26T09:00:00+09:00",
+            dispatched_at="2026-05-26T09:00:00+09:00",
+        )
+        dispatch_repo.create_dispatch(
+            sess,
+            page_stem="PageB",
+            page_path_at_dispatch="wiki/improvements/2026-05/PageB.md",
+            external_board_id="kb-main",
+            external_task_id="t-b",
+            direction=None,
+            idempotency_key=None,
+            created_at="2026-05-26T10:00:00+09:00",
+            dispatched_at="2026-05-26T10:00:00+09:00",
+        )
+    finally:
+        sess.close()
+        engine.dispose()
+
+    resp_true = client.get(
+        "/api/decisions",
+        params={"status": "pending_for_approve", "has_dispatch": "true"},
+    )
+    assert resp_true.status_code == 200, resp_true.text
+    body_true = resp_true.json()
+    assert body_true["total"] == 2
+    stems_true = sorted(it["stem"] for it in body_true["items"])
+    assert stems_true == ["PageA", "PageB"]
+
+    resp_false = client.get(
+        "/api/decisions",
+        params={"status": "pending_for_approve", "has_dispatch": "false"},
+    )
+    assert resp_false.status_code == 200, resp_false.text
+    body_false = resp_false.json()
+    assert body_false["total"] == 1
+    assert [it["stem"] for it in body_false["items"]] == ["PageC"]
+
+
 def test_get_enums_categories_distinct_values(
     client: TestClient, data_dir: Path
 ) -> None:

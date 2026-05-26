@@ -179,6 +179,7 @@ def list_decisions(
     category: list[str] | None = Query(default=None),
     source: list[str] | None = Query(default=None),
     edited_since: str | None = Query(default=None),
+    has_dispatch: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(get_session),
@@ -218,6 +219,15 @@ def list_decisions(
             edited_since=edited_since,
         )
     ]
+
+    # ``has_dispatch`` is the server-side gate for the FE "Dispatched"
+    # sub-tab. Applied AFTER the other filters so the resulting ``total``
+    # and pagination reflect the true row count of pages with (or
+    # without) a dispatch ledger entry. Absent = no filter.
+    if has_dispatch is True:
+        filtered = [it for it in filtered if it.get("dispatch_summary") is not None]
+    elif has_dispatch is False:
+        filtered = [it for it in filtered if it.get("dispatch_summary") is None]
 
     filtered.sort(key=lambda it: it.get("last_edited_at") or "", reverse=True)
 
