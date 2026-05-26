@@ -256,6 +256,8 @@ export function QueuePage() {
             ? readDraft(selectedStem)
             : undefined
         }
+        page={selected ?? null}
+        onDispatched={handleReload}
       />
       <CommandPalette
         open={paletteOpen}

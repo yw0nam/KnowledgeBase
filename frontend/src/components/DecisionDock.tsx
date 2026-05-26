@@ -2,6 +2,8 @@
 // action mode: idle / approving / reject-confirm / rejecting.
 
 import type { ActionMode } from '../QueuePage';
+import type { ReviewPage } from '../types';
+import { KanbanDispatchPanel } from './KanbanDispatchPanel';
 import styles from './DecisionDock.module.css';
 
 interface Props {
@@ -13,6 +15,8 @@ interface Props {
   onRejectConfirm: () => void;
   onRejectCancel: () => void;
   rejectDraftPreview?: string;
+  page?: ReviewPage | null;
+  onDispatched?: () => void;
 }
 
 export function DecisionDock({
@@ -24,6 +28,8 @@ export function DecisionDock({
   onRejectConfirm,
   onRejectCancel,
   rejectDraftPreview,
+  page,
+  onDispatched,
 }: Props) {
   const submitting = mode === 'approving' || mode === 'rejecting';
   const inReject = mode === 'reject-confirm' || mode === 'rejecting';
@@ -104,6 +110,8 @@ export function DecisionDock({
         ) : null}
       </div>
 
+      {page ? <KanbanDispatchPanel page={page} onDispatched={onDispatched} /> : null}
+
       <div className={styles.section}>
         <h3 className={styles.heading}>Shortcuts</h3>
         <dl className={styles.shortcuts}>
@@ -119,6 +127,10 @@ export function DecisionDock({
             <kbd className={styles.kbd}>Esc</kbd>
           </dt>
           <dd>cancel reject</dd>
+          <dt>
+            <kbd className={styles.kbd}>s</kbd>
+          </dt>
+          <dd>send to kanban</dd>
           <dt>
             <kbd className={styles.kbd}>j</kbd>
             <kbd className={styles.kbd}>k</kbd>

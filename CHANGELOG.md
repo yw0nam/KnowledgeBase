@@ -22,6 +22,14 @@ Keep entries concise and user/operator-facing. Avoid tool traces, lint output, h
 - Added a README screenshot for the local review console.
 - Added the `cron-wrapup` skill and `kb-cron-wrapup.sh` wrapper for nightly KB operational summaries.
 - Added optional global digest guidance under `knowledgebase-initialize/reference/optional-global-digest.md`.
+- Added Phase 1 backend for Improvement → Kanban Dispatch: `GET /api/kanban/boards` (with a 30s in-memory TTL cache, invalidated on successful dispatch) and `POST /api/pages/{stem}/send-to-kanban` for sending a `pending_for_approve` improvement page to a Hermes kanban board. Helpers live in `src/kb_mcp/cli/wiki_review/_kanban.py` (`list_boards`, `create_card`, `archive_card`, `append_dispatch`); the route layer translates them per the spec's error taxonomy and writes the dispatch entry back onto the page's `kanban_dispatches` frontmatter list. Unit and route tests added under `test/test_kanban_helpers.py` and `test/test_kanban_route.py`.
+
+### Deviations from spec (2026-05-26 improvement-to-kanban design)
+
+- `hermes kanban create` does not accept a `--metadata` flag in the installed Hermes. Per Appendix A item 2, the `{kb_page_stem, kb_source}` pair is now embedded in the card body as a trailing `<!-- kb-meta: {...} -->` HTML comment instead of being passed as a JSON parameter. Future tooling that wants to reverse-lookup KB pages from a card must parse the body, not a metadata field.
+- `hermes kanban create --json` returns the new task id under `id`, not `task_id`. `_kanban.create_card` normalizes this to `task_id` at the boundary so the route, response payload, and frontmatter all match the spec's contract.
+- `counts` on a board listing is sparse (Hermes omits zero buckets), not the fixed five-key shape sketched in §7.1. The route passes the dict through verbatim; the frontend should default missing keys to zero where it needs them.
+- §6.1 noted that `kb-lint-wiki` "MUST be updated" to allow `kanban_dispatches`. The current linter has no allowed-keys allowlist (only `REQUIRED_FM_FIELDS`), so no lint change was needed; a regression test in `test/test_kanban_route.py` locks this in.
 
 ### Changed
 

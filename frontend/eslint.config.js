@@ -62,4 +62,25 @@ export default [
       ...tsPlugin.configs.recommended.rules,
     },
   },
+  {
+    // Test files run under vitest + jsdom; they touch additional DOM
+    // globals and use vitest's auto-injected `describe`/`it`/`expect`.
+    files: ['src/**/*.test.{ts,tsx}', 'src/setupTests.ts'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        vi: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        globalThis: 'readonly',
+        Response: 'readonly',
+        HTMLSelectElement: 'readonly',
+        HTMLTextAreaElement: 'readonly',
+      },
+    },
+  },
 ];

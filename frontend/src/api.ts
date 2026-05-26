@@ -2,7 +2,15 @@
 // truth for talking to the FastAPI backend. No retries, no caching —
 // the API is local and the network round-trip is sub-millisecond.
 
-import type { Frontmatter, QueueResponse, ReviewPage, WikiType } from './types';
+import type {
+  BoardsResponse,
+  Frontmatter,
+  QueueResponse,
+  ReviewPage,
+  SendToKanbanRequest,
+  SendToKanbanResponse,
+  WikiType,
+} from './types';
 
 const WIKI_TYPES: ReadonlySet<WikiType> = new Set<WikiType>([
   'entity',
@@ -15,10 +23,15 @@ const WIKI_TYPES: ReadonlySet<WikiType> = new Set<WikiType>([
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  // Populated when the rollback path failed and Hermes left a task
+  // behind that the user must reclaim. See send-to-kanban 500 body
+  // shape `{detail, orphan_task_id}`.
+  orphan_task_id?: string;
+  constructor(status: number, message: string, orphan_task_id?: string) {
     super(message);
     this.status = status;
     this.name = 'ApiError';
+    if (orphan_task_id) this.orphan_task_id = orphan_task_id;
   }
 }
 
@@ -65,6 +78,42 @@ export function approvePage(stem: string, feedback: string): Promise<DecisionRes
 
 export function rejectPage(stem: string, feedback: string): Promise<DecisionResponse> {
   return postDecision(`/api/pages/${encodeURIComponent(stem)}/reject`, feedback);
+}
+
+// ── Kanban dispatch endpoints. ───────────────────────────────────
+
+export function listKanbanBoards(): Promise<BoardsResponse> {
+  return getJson<BoardsResponse>('/api/kanban/boards');
+}
+
+export async function sendPageToKanban(
+  stem: string,
+  payload: SendToKanbanRequest,
+): Promise<SendToKanbanResponse> {
+  const res = await fetch(`/api/pages/${encodeURIComponent(stem)}/send-to-kanban`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    // FastAPI returns `{detail: ...}` on HTTPException. The rollback
+    // failure path also includes `{orphan_task_id}` which we surface
+    // verbatim so the UI can render the reclaim instruction.
+    let detail = `${res.status} ${res.statusText}`;
+    let orphan: string | undefined;
+    try {
+      const body = (await res.json()) as {
+        detail?: string;
+        orphan_task_id?: string;
+      };
+      if (body?.detail) detail = body.detail;
+      if (typeof body?.orphan_task_id === 'string') orphan = body.orphan_task_id;
+    } catch {
+      // body wasn't json; keep the status-line detail.
+    }
+    throw new ApiError(res.status, detail, orphan);
+  }
+  return (await res.json()) as SendToKanbanResponse;
 }
 
 // ── Frontmatter accessors. ────────────────────────────────────
