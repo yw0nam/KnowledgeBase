@@ -36,6 +36,7 @@ export default [
         MouseEvent: 'readonly',
         Event: 'readonly',
         EventTarget: 'readonly',
+        navigator: 'readonly',
         URLSearchParams: 'readonly',
         URL: 'readonly',
         localStorage: 'readonly',

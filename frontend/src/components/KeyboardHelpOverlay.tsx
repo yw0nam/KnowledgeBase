@@ -9,12 +9,13 @@ interface Props {
   onClose: () => void;
 }
 
+// r/a/k are deliberately omitted: those verbs belong to the Pending
+// queue (they move files in/out of data/wiki/). The Decisions
+// inspector only PATCHes frontmatter; promising approve/reject from
+// here would lie about the action's destination.
 const ROWS: { keys: string; label: string }[] = [
   { keys: '⌘S / ⌘↵', label: 'save inspector' },
   { keys: 'esc', label: 'close inspector' },
-  { keys: 'a', label: 'approve focused row' },
-  { keys: 'r', label: 'reject focused row' },
-  { keys: 'k', label: 'send to kanban' },
   { keys: 'j / k', label: 'next / previous row' },
   { keys: 'g p', label: 'go to Pending' },
   { keys: 'g d', label: 'go to Decisions' },

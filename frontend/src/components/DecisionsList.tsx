@@ -17,6 +17,14 @@ interface Props {
   page: number;
   perPage: number;
   loading: boolean;
+  // Active tab — drives the empty-state copy ("No <tab> pages match
+  // these filters…"). Free string so this primitive doesn't have to
+  // import the DecisionsTab union.
+  tabLabel: string;
+  // Total approved pages in the corpus, refreshed on save. Used in
+  // the parenthetical of the empty-state copy per spec §7.5. May be
+  // null while the aux fetch is in flight or has failed.
+  approvedTotal: number | null;
   selectedStem: string | null;
   onSelect: (stem: string) => void;
   onPage: (page: number) => void;
@@ -46,6 +54,8 @@ export function DecisionsList({
   page,
   perPage,
   loading,
+  tabLabel,
+  approvedTotal,
   selectedStem,
   onSelect,
   onPage,
@@ -92,7 +102,10 @@ export function DecisionsList({
     return (
       <div className={styles.empty}>
         <p className={styles.emptyLine}>
-          No pages match these filters.{' '}
+          No {tabLabel} pages match these filters.
+          {approvedTotal !== null
+            ? ` (${approvedTotal} approved pages total.)`
+            : ''}{' '}
           <button type="button" className={styles.resetLink} onClick={onReset}>
             Reset filters
           </button>
@@ -103,6 +116,11 @@ export function DecisionsList({
 
   return (
     <div className={styles.wrap}>
+      {loading ? (
+        <p className={styles.loadingLine} role="status">
+          Loading…
+        </p>
+      ) : null}
       <table className={styles.table} role="grid" aria-rowcount={total}>
         <thead>
           <tr className={styles.headRow}>

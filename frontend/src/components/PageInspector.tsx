@@ -2,10 +2,13 @@
 // Spec §7.3:
 //   - Two zones only: frontmatter editor (top) + edit history (bottom).
 //   - NO body preview.
-//   - Header is one mono line (stem) + "Open source ↗" link.
+//   - Header is one mono line (stem) + a "Copy path" button.
+//     The spec asked for a `file://` link, but every modern browser
+//     blocks that navigation from an http:// origin, so we copy the
+//     path to the clipboard instead — same intent, working result.
 //   - cmd+s / cmd+enter → save. esc → close (confirm if dirty).
-//   - Footer cheat strip: cmd+s save · esc close · r reject · a approve
-//     · k send to kanban. Dims when an input is focused.
+//   - Footer cheat strip: cmd+s save · esc close. r/a/k are queue
+//     verbs (Pending tab); promising them here would lie.
 //   - Drag-handle 4px, col-resize, hairline visual. localStorage
 //     persists width. <1100px viewport: inspector becomes overlay.
 //
@@ -50,15 +53,16 @@ function readPersistedWidth(): number {
   }
 }
 
-function fileUrl(absPath: string): string {
-  // The decision row carries the wiki-relative path. The spec asks
-  // for an "Open source" link that hands the file to the OS; a
-  // `file://` href is the contract. The link only works when the
-  // browser can resolve absolute paths — for now we hand it the
-  // best string we have. The user can also copy the path from the
-  // anchor target.
-  if (absPath.startsWith('/')) return `file://${absPath}`;
-  return `file:///${absPath}`;
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    // navigator.clipboard requires a secure context (https/localhost);
+    // both KB use cases qualify. If clipboard API is unavailable we
+    // fail silently — the user sees the path stays visible on hover.
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function PageInspector({ decision, onClose, onSaved }: Props) {
@@ -66,7 +70,9 @@ export function PageInspector({ decision, onClose, onSaved }: Props) {
   const [dirty, setDirty] = useState(false);
   const [timeline, setTimeline] = useState<TimelineEvent[]>([]);
   const [timelineTotal, setTimelineTotal] = useState(0);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
   const [timelineReloadKey, setTimelineReloadKey] = useState(0);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [overlay, setOverlay] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < OVERLAY_BREAKPOINT,
   );
@@ -92,19 +98,23 @@ export function PageInspector({ decision, onClose, onSaved }: Props) {
     }
   }, [width]);
 
-  // Load timeline. Refresh when stem changes or after a save.
+  // Load timeline. Refresh when stem changes or after a save. The
+  // catch path sets `timelineError` (NOT an empty-state) so the
+  // inspector doesn't lie about "no edits" when the fetch failed.
   useEffect(() => {
     let cancelled = false;
+    setTimelineError(null);
     fetchTimeline(decision.stem, { limit: 50 })
       .then((res) => {
         if (cancelled) return;
         setTimeline(res.items);
         setTimelineTotal(res.total);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
         setTimeline([]);
         setTimelineTotal(0);
+        setTimelineError(err instanceof Error ? err.message : 'fetch failed');
       });
     return () => {
       cancelled = true;
@@ -129,6 +139,12 @@ export function PageInspector({ decision, onClose, onSaved }: Props) {
     },
     [onSaved],
   );
+
+  const handleCopyPath = useCallback(async () => {
+    const ok = await copyToClipboard(decision.path);
+    setCopyMessage(ok ? 'Copied.' : 'Copy failed.');
+    setTimeout(() => setCopyMessage(null), 1500);
+  }, [decision.path]);
 
   // Keyboard: cmd+s / cmd+enter save; esc close. No `r`/`a`/`k`
   // bindings here — those live on the page-level handler (spec §7.4
@@ -193,14 +209,21 @@ export function PageInspector({ decision, onClose, onSaved }: Props) {
       ) : null}
       <header className={styles.header}>
         <code className={styles.stem}>{decision.stem}</code>
-        <a
-          className={styles.openSource}
-          href={fileUrl(decision.path)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Open source ↗
-        </a>
+        <span className={styles.headerRight}>
+          {copyMessage ? (
+            <span className={styles.copyMsg} role="status">
+              {copyMessage}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className={styles.copyPath}
+            onClick={() => void handleCopyPath()}
+            title={decision.path}
+          >
+            Copy path
+          </button>
+        </span>
       </header>
 
       <div className={styles.editor}>
@@ -213,16 +236,18 @@ export function PageInspector({ decision, onClose, onSaved }: Props) {
       </div>
 
       <div className={styles.history}>
-        <EditTimeline events={timeline} total={timelineTotal} />
+        <EditTimeline events={timeline} total={timelineTotal} error={timelineError} />
       </div>
 
       <footer className={styles.footer}>
         <span className={styles.cheat}>
+          {/* r/a/k are queue-tab verbs (approve/reject move the file
+              in/out of data/wiki/; send-to-kanban is the Pending tab's
+              affordance). They are intentionally absent here so the
+              cheat strip is honest about what the Decisions inspector
+              actually does — frontmatter PATCH only. */}
           <kbd className={styles.kbd}>⌘S</kbd> save ·{' '}
-          <kbd className={styles.kbd}>esc</kbd> close ·{' '}
-          <kbd className={styles.kbd}>r</kbd> reject ·{' '}
-          <kbd className={styles.kbd}>a</kbd> approve ·{' '}
-          <kbd className={styles.kbd}>k</kbd> send to kanban
+          <kbd className={styles.kbd}>esc</kbd> close
         </span>
       </footer>
     </aside>

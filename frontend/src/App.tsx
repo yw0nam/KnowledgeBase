@@ -55,7 +55,10 @@ export function App() {
         <Nav meta={dashboardMeta} pendingCount={pendingCount} />
         <Routes>
           <Route path="/" element={<QueuePage onCountChange={handlePendingReload} />} />
-          <Route path="/decisions" element={<DecisionsPage />} />
+          <Route
+            path="/decisions"
+            element={<DecisionsPage onReviewStatusChange={handlePendingReload} />}
+          />
           <Route
             path="/dashboard"
             element={<DashboardPage onMetaChange={handleMetaChange} />}

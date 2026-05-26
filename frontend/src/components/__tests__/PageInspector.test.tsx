@@ -67,7 +67,7 @@ describe('PageInspector', () => {
     await waitFor(() => {
       expect(screen.getByText('hermes-zombie-session')).toBeInTheDocument();
     });
-    expect(screen.getByText(/open source/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copy path/i })).toBeInTheDocument();
 
     // Escape with no dirty state closes immediately (no confirm).
     await act(async () => {

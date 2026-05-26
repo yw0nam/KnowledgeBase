@@ -13,6 +13,10 @@ interface Props {
   events: TimelineEvent[];
   total: number;
   defaultVisible?: number;
+  // When set, replaces the "No edits yet" empty state with a factual
+  // failure line so we don't claim the page has no history when the
+  // fetch never landed (lint-grade honesty per DESIGN.md).
+  error?: string | null;
 }
 
 function formatTimestamp(at: string): string {
@@ -40,22 +44,32 @@ function eventLabel(ev: TimelineEvent): string {
   return 'status';
 }
 
-function eventRightSide(ev: TimelineEvent): { old: string; next: string } {
+interface RightSide {
+  old: string | null;
+  next: string;
+}
+
+function eventRightSide(ev: TimelineEvent): RightSide {
   if (ev.kind === 'edit') {
     return { old: formatValue(ev.old_value), next: formatValue(ev.new_value) };
   }
   if (ev.kind === 'dispatched') {
-    return { old: '—', next: ev.external_task_id };
+    return { old: null, next: ev.external_task_id };
   }
-  // status:<status>
-  const status = ev.kind.slice('status:'.length);
-  return { old: 'dispatched', next: status };
+  // status:<status> — backend doesn't carry the previous status, so
+  // render as `status: → done`. The arrow form is reserved for edits
+  // where both sides are known; here the left side is omitted.
+  return { old: null, next: ev.kind.slice('status:'.length) };
 }
 
-export function EditTimeline({ events, total, defaultVisible = 3 }: Props) {
+export function EditTimeline({ events, total, defaultVisible = 3, error }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const hasMore = events.length > defaultVisible;
+  const hasMore = total > defaultVisible;
   const visible = expanded ? events : events.slice(0, defaultVisible);
+
+  if (error) {
+    return <p className={styles.empty}>Could not load history.</p>;
+  }
 
   if (events.length === 0) {
     return (
@@ -75,14 +89,22 @@ export function EditTimeline({ events, total, defaultVisible = 3 }: Props) {
         {visible.map((ev, i) => {
           const { old, next } = eventRightSide(ev);
           return (
-            <li key={i} className={styles.row}>
+            <li key={`${ev.at}-${ev.kind}-${i}`} className={styles.row}>
               <time className={styles.ts}>{formatTimestamp(ev.at)}</time>
               <span className={styles.field}>{eventLabel(ev)}:</span>
               <span className={styles.transition}>
-                <span className={styles.oldVal}>{old}</span>
-                <span className={styles.arrow} aria-hidden>
-                  {' → '}
-                </span>
+                {old !== null ? (
+                  <>
+                    <span className={styles.oldVal}>{old}</span>
+                    <span className={styles.arrow} aria-hidden>
+                      {' → '}
+                    </span>
+                  </>
+                ) : (
+                  <span className={styles.arrow} aria-hidden>
+                    {'→ '}
+                  </span>
+                )}
                 <span className={styles.newVal}>{next}</span>
               </span>
             </li>
@@ -95,7 +117,7 @@ export function EditTimeline({ events, total, defaultVisible = 3 }: Props) {
           className={styles.expand}
           onClick={() => setExpanded((x) => !x)}
         >
-          {expanded ? 'Collapse' : `Show all ${events.length}`}
+          {expanded ? 'Collapse' : `Show all ${total}`}
         </button>
       ) : null}
     </div>

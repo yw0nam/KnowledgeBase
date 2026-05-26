@@ -21,11 +21,27 @@ interface Props {
   filters: UrlFilters;
 }
 
-const TABS: { value: DecisionsTab; label: string }[] = [
-  { value: 'approved', label: 'Approved' },
-  { value: 'rejected', label: 'Rejected' },
-  { value: 'dispatched', label: 'Dispatched' },
-  { value: 'unprocessed', label: 'Unprocessed' },
+const TABS: { value: DecisionsTab; label: string; subtitle: string }[] = [
+  {
+    value: 'approved',
+    label: 'Approved',
+    subtitle: "Pages you've approved.",
+  },
+  {
+    value: 'rejected',
+    label: 'Rejected',
+    subtitle: "Pages you've rejected.",
+  },
+  {
+    value: 'dispatched',
+    label: 'Dispatched',
+    subtitle: "Pages sent to Kanban that haven't returned a status.",
+  },
+  {
+    value: 'unprocessed',
+    label: 'Unprocessed',
+    subtitle: 'Pages awaiting first triage.',
+  },
 ];
 
 const TYPE_OPTIONS = [
@@ -83,24 +99,38 @@ export function DecisionsFilter({ filters }: Props) {
   }, [filters.type]);
 
   const showClearAll = filters.activeFilterCount >= 2;
+  const activeTab = TABS.find((t) => t.value === filters.tab);
+
+  const removeFrom = (next: string[], value: string, setter: (n: string[]) => void) => {
+    setter(next.filter((v) => v !== value));
+  };
 
   return (
     <div className={styles.wrap}>
-      <nav className={styles.tabs} aria-label="Decision status">
-        {TABS.map((t) => {
-          const active = filters.tab === t.value;
-          return (
-            <button
-              key={t.value}
-              type="button"
-              className={active ? styles.tabActive : styles.tab}
-              onClick={() => filters.setTab(t.value)}
-            >
-              {t.label}
-            </button>
-          );
-        })}
-      </nav>
+      <div className={styles.headerRow}>
+        <nav className={styles.tabs} aria-label="Decision status">
+          {TABS.map((t) => {
+            const active = filters.tab === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                className={active ? styles.tabActive : styles.tab}
+                onClick={() => filters.setTab(t.value)}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </nav>
+        {showClearAll ? (
+          <button type="button" className={styles.clearAll} onClick={filters.clearAll}>
+            Clear all ({filters.activeFilterCount})
+          </button>
+        ) : null}
+      </div>
+
+      {activeTab ? <p className={styles.subtitle}>{activeTab.subtitle}</p> : null}
 
       <div className={styles.filterRow}>
         <Dropdown
@@ -147,13 +177,70 @@ export function DecisionsFilter({ filters }: Props) {
           placeholder="Edited"
           triggerClassName={filters.editedSince ? styles.activeChip : ''}
         />
-
-        {showClearAll ? (
-          <button type="button" className={styles.clearAll} onClick={filters.clearAll}>
-            Clear all ({filters.activeFilterCount})
-          </button>
-        ) : null}
       </div>
+
+      {filters.activeFilterCount > 0 ? (
+        <ul className={styles.chipStrip} aria-label="Active filters">
+          {filters.type.map((v) => (
+            <li key={`type-${v}`} className={styles.chip}>
+              <span className={styles.chipKey}>type:</span>
+              <span className={styles.chipValue}>{v}</span>
+              <button
+                type="button"
+                className={styles.chipRemove}
+                aria-label={`Remove type filter ${v}`}
+                onClick={() => removeFrom(filters.type, v, filters.setType)}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+          {filters.category.map((v) => (
+            <li key={`cat-${v}`} className={styles.chip}>
+              <span className={styles.chipKey}>category:</span>
+              <span className={styles.chipValue}>{v}</span>
+              <button
+                type="button"
+                className={styles.chipRemove}
+                aria-label={`Remove category filter ${v}`}
+                onClick={() => removeFrom(filters.category, v, filters.setCategory)}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+          {filters.source.map((v) => (
+            <li key={`src-${v}`} className={styles.chip}>
+              <span className={styles.chipKey}>source:</span>
+              <span className={styles.chipValue}>{v}</span>
+              <button
+                type="button"
+                className={styles.chipRemove}
+                aria-label={`Remove source filter ${v}`}
+                onClick={() => removeFrom(filters.source, v, filters.setSource)}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+          {filters.editedSince ? (
+            <li className={styles.chip}>
+              <span className={styles.chipKey}>edited:</span>
+              <span className={styles.chipValue}>
+                {editedSinceLabel(filters.editedSince)}
+              </span>
+              <button
+                type="button"
+                className={styles.chipRemove}
+                aria-label="Remove edited filter"
+                onClick={() => filters.setEditedSince(null)}
+              >
+                ×
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
     </div>
   );
 }

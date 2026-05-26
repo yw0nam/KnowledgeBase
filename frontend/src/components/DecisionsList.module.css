@@ -122,6 +122,16 @@
   color: var(--color-ink-muted);
 }
 
+.loadingLine {
+  /* Top-of-list mono loading indicator. Stale rows stay visible
+   * below it, matching the QueuePage "Loading queue…" pattern. */
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
 .empty {
   padding: var(--space-8) var(--space-5);
 }

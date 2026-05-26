@@ -11,20 +11,27 @@ import { DecisionsFilter } from './components/DecisionsFilter';
 import { DecisionsList } from './components/DecisionsList';
 import { PageInspector } from './components/PageInspector';
 import { KeyboardHelpOverlay } from './components/KeyboardHelpOverlay';
-import type { Decision } from './types';
+import type { Decision, FrontmatterPatchResponse } from './types';
 import styles from './DecisionsPage.module.css';
+
+interface Props {
+  // Bumped on every PATCH /api/pages/{stem}/frontmatter that touches
+  // review_status, so the App-level Pending (n) badge stays live.
+  onReviewStatusChange?: () => void;
+}
 
 const PER_PAGE = 50;
 
 const TAB_TO_REVIEW_STATUS: Record<DecisionsTab, string> = {
   approved: 'approved',
   rejected: 'rejected',
-  // The "Dispatched" tab is a derived view — see the fetch effect.
+  // The "Dispatched" tab is a derived view backed by has_dispatch on
+  // the server (see the fetch effect).
   dispatched: 'pending_for_approve',
   unprocessed: 'not_processed',
 };
 
-export function DecisionsPage() {
+export function DecisionsPage({ onReviewStatusChange }: Props = {}) {
   const filters = useUrlFilters();
 
   const [items, setItems] = useState<Decision[]>([]);
@@ -34,11 +41,11 @@ export function DecisionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [approvedTotal, setApprovedTotal] = useState<number | null>(null);
 
   // Build the query from the current filters + tab. The "Dispatched"
-  // tab is the only one that filters on dispatch_summary (not a
-  // review_status); for that we send no status filter and post-filter
-  // client-side.
+  // sub-tab is server-filtered via has_dispatch=true so total +
+  // pagination reflect the full corpus, not a post-filter slice.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -51,16 +58,14 @@ export function DecisionsPage() {
       category: filters.category.length > 0 ? filters.category : undefined,
       source: filters.source.length > 0 ? filters.source : undefined,
       edited_since: filters.editedSince ?? undefined,
+      has_dispatch: isDispatched ? true : undefined,
       page,
       per_page: PER_PAGE,
     })
       .then((res) => {
         if (cancelled) return;
-        const filtered = isDispatched
-          ? res.items.filter((d) => d.dispatch_summary !== null)
-          : res.items;
-        setItems(filtered);
-        setTotal(isDispatched ? filtered.length : res.total);
+        setItems(res.items);
+        setTotal(res.total);
         setLoading(false);
       })
       .catch((err: unknown) => {
@@ -91,6 +96,23 @@ export function DecisionsPage() {
     filters.source,
     filters.editedSince,
   ]);
+
+  // Auxiliary approved-total fetch, fire-and-forget, used by the
+  // empty-state copy per spec §7.5. Re-fetched on `reloadKey` so a
+  // PATCH that crosses approve/reject keeps the count honest.
+  useEffect(() => {
+    let cancelled = false;
+    fetchDecisions({ status: ['approved'], page: 1, per_page: 1 })
+      .then((res) => {
+        if (!cancelled) setApprovedTotal(res.total);
+      })
+      .catch(() => {
+        if (!cancelled) setApprovedTotal(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const selected = items.find((d) => d.stem === filters.stem) ?? null;
 
@@ -134,6 +156,16 @@ export function DecisionsPage() {
     filters.clearAll();
   }, [filters]);
 
+  const handleSaved = useCallback(
+    (res: FrontmatterPatchResponse) => {
+      setReloadKey((k) => k + 1);
+      if (res.edits.some((e) => e.field === 'review_status')) {
+        onReviewStatusChange?.();
+      }
+    },
+    [onReviewStatusChange],
+  );
+
   return (
     <div className={styles.shell}>
       <main className={styles.main}>
@@ -149,6 +181,8 @@ export function DecisionsPage() {
             page={page}
             perPage={PER_PAGE}
             loading={loading}
+            tabLabel={filters.tab}
+            approvedTotal={approvedTotal}
             selectedStem={filters.stem}
             onSelect={(stem) => filters.setStem(stem)}
             onPage={(p) => setPage(p)}
@@ -160,7 +194,7 @@ export function DecisionsPage() {
         <PageInspector
           decision={selected}
           onClose={handleCloseInspector}
-          onSaved={() => setReloadKey((k) => k + 1)}
+          onSaved={handleSaved}
         />
       ) : null}
       <KeyboardHelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />

@@ -159,6 +159,10 @@ export interface DecisionsQuery {
   category?: string[];
   source?: string[];
   edited_since?: string;
+  // Server-side filter for the "Dispatched" sub-tab. true → only
+  // pages with a non-null dispatch_summary; false → only pages
+  // without; absent = no filter.
+  has_dispatch?: boolean;
   page?: number;
   per_page?: number;
 }

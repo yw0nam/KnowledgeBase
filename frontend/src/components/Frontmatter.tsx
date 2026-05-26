@@ -35,7 +35,11 @@ const PRIMARY_ORDER = [
 
 // Frontmatter keys rendered by a dedicated surface elsewhere; skipped
 // here to avoid duplicate (and lossy) rendering of complex shapes.
-const SKIP_KEYS = new Set(['kanban_dispatches']);
+// Phase 2: kanban_dispatches is DB-backed (see /api/dispatches); any
+// legacy page still carrying the key renders as raw text below until
+// kb-migrate-kanban-dispatches has been run. That's honest, not a
+// regression — the user sees pre-backfill state for what it is.
+const SKIP_KEYS: ReadonlySet<string> = new Set();
 
 function formatValue(value: unknown): string {
   if (Array.isArray(value)) {

@@ -55,17 +55,31 @@
   min-width: 0;
 }
 
-.openSource {
+.headerRight {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.copyPath {
   font: var(--type-label);
   letter-spacing: var(--letter-label);
   text-transform: uppercase;
   color: var(--color-ink-muted);
-  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
 }
 
-.openSource:hover {
+.copyPath:hover {
   color: var(--color-signal);
-  text-decoration: none;
+}
+
+.copyMsg {
+  font: var(--type-body-mono);
+  color: var(--color-ink-muted);
 }
 
 .editor {
