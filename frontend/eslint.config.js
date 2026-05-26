@@ -33,6 +33,7 @@ export default [
         KeyboardEvent: 'readonly',
         MouseEvent: 'readonly',
         Event: 'readonly',
+        EventTarget: 'readonly',
         URLSearchParams: 'readonly',
         URL: 'readonly',
         localStorage: 'readonly',
