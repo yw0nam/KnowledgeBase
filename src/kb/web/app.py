@@ -11,8 +11,9 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from kb.db import make_engine, make_session_factory
 from kb.web import config
-from kb.web.routes import dashboard, kanban, pages, queue
+from kb.web.routes import dashboard, dispatches, kanban, pages, queue
 
 
 def create_app() -> FastAPI:
@@ -33,10 +34,13 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type"],
     )
     app.state.config = cfg
+    app.state.engine = make_engine(cfg.data_dir)
+    app.state.session_factory = make_session_factory(app.state.engine)
     app.include_router(queue.router, prefix="/api")
     app.include_router(pages.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
     app.include_router(kanban.router, prefix="/api")
+    app.include_router(dispatches.router, prefix="/api")
     return app
 
 

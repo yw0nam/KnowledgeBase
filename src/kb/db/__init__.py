@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
+from fastapi import Request
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -58,7 +59,7 @@ def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
-def get_session(request) -> Iterator[Session]:
+def get_session(request: Request) -> Iterator[Session]:
     """FastAPI dependency yielding a session from ``app.state.session_factory``."""
     session_factory: sessionmaker[Session] = request.app.state.session_factory
     session = session_factory()
