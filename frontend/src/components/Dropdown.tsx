@@ -74,7 +74,6 @@ export function Dropdown(props: Props) {
   );
 
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const listboxId = useId();
 
@@ -115,32 +114,51 @@ export function Dropdown(props: Props) {
     return options;
   }, [allowFreeText, isMulti, draft, options]);
 
+  const onChange = props.onChange;
   const commit = useCallback(
     (next: string) => {
       if (isMulti) {
         const current = Array.isArray(value) ? value : [];
         const exists = current.includes(next);
         const after = exists ? current.filter((v) => v !== next) : [...current, next];
-        (props.onChange as (next: string[]) => void)(after);
+        (onChange as (next: string[]) => void)(after);
       } else {
-        (props.onChange as (next: string) => void)(next);
+        (onChange as (next: string) => void)(next);
         if (allowFreeText) setDraft(next);
         setOpen(false);
       }
     },
-    // props.onChange is stable in callers; tracked via props
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isMulti, value, allowFreeText, options],
+    [isMulti, value, allowFreeText, onChange],
   );
 
   const onTriggerKey = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+    // Closed: open on ArrowDown/Enter/Space. Open: drive the list
+    // (highlight / commit) from the trigger directly so the user
+    // never has to tab into a separate listbox node.
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setOpen(true);
+      setHighlight((i) => Math.min(visible.length - 1, i + 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlight((i) => Math.max(0, i - 1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const opt = visible[highlight];
+      if (opt) commit(opt.value);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
     }
   };
 
-  const onListKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+  const onListKey = (e: ReactKeyboardEvent<HTMLUListElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlight((i) => Math.min(visible.length - 1, i + 1));
@@ -200,7 +218,6 @@ export function Dropdown(props: Props) {
     <div ref={rootRef} className={styles.root}>
       {allowFreeText && !isMulti ? (
         <input
-          ref={inputRef}
           type="text"
           className={`${styles.input} ${triggerClassName ?? ''}`}
           value={draft}
@@ -234,7 +251,7 @@ export function Dropdown(props: Props) {
         </button>
       )}
       {open && visible.length > 0 ? (
-        <div
+        <ul
           id={listboxId}
           role="listbox"
           tabIndex={-1}
@@ -247,11 +264,11 @@ export function Dropdown(props: Props) {
               ? Array.isArray(value) && value.includes(opt.value)
               : value === opt.value;
             return (
-              <button
+              <li
                 key={opt.value}
-                type="button"
                 role="option"
                 aria-selected={selected}
+                tabIndex={-1}
                 className={`${styles.option} ${
                   i === highlight ? styles.optionHi : ''
                 } ${selected ? styles.optionSelected : ''}`}
@@ -264,10 +281,10 @@ export function Dropdown(props: Props) {
                     ✓
                   </span>
                 ) : null}
-              </button>
+              </li>
             );
           })}
-        </div>
+        </ul>
       ) : null}
     </div>
   );

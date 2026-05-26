@@ -52,7 +52,7 @@ export function KeyboardHelpOverlay({ open, onClose }: Props) {
           {ROWS.map((r) => (
             <div key={r.keys} className={styles.row}>
               <dt className={styles.keys}>
-                <kbd className={styles.kbd}>{r.keys}</kbd>
+                <kbd>{r.keys}</kbd>
               </dt>
               <dd className={styles.label}>{r.label}</dd>
             </div>

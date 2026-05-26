@@ -308,7 +308,7 @@ export function FrontmatterEditor({
         >
           {dirty ? <span className={styles.dirty}>·</span> : null}
           {saving ? 'Saving…' : 'Save'}
-          <kbd className={styles.kbd}>⌘S</kbd>
+          <kbd>⌘S</kbd>
         </button>
       </div>
     </form>

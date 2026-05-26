@@ -100,10 +100,4 @@
   color: var(--color-signal);
 }
 
-.kbd {
-  font: var(--type-label);
-  color: var(--color-ink-dim);
-  border: 0;
-  background: transparent;
-  padding: 0;
-}
+/* kbd glyphs use the canonical global rule in styles/global.css. */

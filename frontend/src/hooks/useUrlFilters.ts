@@ -81,14 +81,37 @@ export function useUrlFilters(): UrlFilters {
     [replace],
   );
 
-  const setMulti = (key: string) => (next: string[]) => {
-    replace((p) => {
-      p.delete(key);
-      for (const v of next) {
-        if (v) p.append(key, v);
-      }
-    });
-  };
+  // setType / setCategory / setSource are memoized over `replace`
+  // so consumers that read filters.setType from useEffect deps don't
+  // re-fire on every parent render. The whole `filters` object still
+  // re-renders fresh, but the inner callbacks are stable.
+  const setType = useCallback(
+    (next: string[]) => {
+      replace((p) => {
+        p.delete('type');
+        for (const v of next) if (v) p.append('type', v);
+      });
+    },
+    [replace],
+  );
+  const setCategory = useCallback(
+    (next: string[]) => {
+      replace((p) => {
+        p.delete('category');
+        for (const v of next) if (v) p.append('category', v);
+      });
+    },
+    [replace],
+  );
+  const setSource = useCallback(
+    (next: string[]) => {
+      replace((p) => {
+        p.delete('source');
+        for (const v of next) if (v) p.append('source', v);
+      });
+    },
+    [replace],
+  );
 
   const setEditedSince = useCallback(
     (next: string | null) => {
@@ -130,9 +153,9 @@ export function useUrlFilters(): UrlFilters {
     editedSince,
     stem,
     setTab,
-    setType: setMulti('type'),
-    setCategory: setMulti('category'),
-    setSource: setMulti('source'),
+    setType,
+    setCategory,
+    setSource,
     setEditedSince,
     setStem,
     clearAll,

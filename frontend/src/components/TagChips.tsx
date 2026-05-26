@@ -6,7 +6,7 @@
 //   - Save sends the full new tag list (PATCH semantics: presence of
 //     `tags` = full replacement).
 
-import { useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useState, type ChangeEvent, type KeyboardEvent } from 'react';
 import styles from './TagChips.module.css';
 
 interface Props {
@@ -23,7 +23,6 @@ function normalize(raw: string): string {
 
 export function TagChips({ value, onChange, label, disabled, placeholder }: Props) {
   const [draft, setDraft] = useState('');
-  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const commit = (raw: string) => {
     const tag = normalize(raw);
@@ -77,7 +76,6 @@ export function TagChips({ value, onChange, label, disabled, placeholder }: Prop
         ))}
         <li className={styles.inputItem}>
           <input
-            ref={inputRef}
             type="text"
             className={styles.input}
             value={draft}

@@ -78,7 +78,6 @@ export function PageInspector({ decision, onClose, onSaved }: Props) {
   );
 
   const saveRef = useRef<(() => Promise<void>) | null>(null);
-  const rootRef = useRef<HTMLElement | null>(null);
 
   // Track viewport for the <1100px overlay breakpoint.
   useEffect(() => {
@@ -193,7 +192,6 @@ export function PageInspector({ decision, onClose, onSaved }: Props) {
 
   return (
     <aside
-      ref={rootRef}
       className={`${styles.rail} ${overlay ? styles.overlay : ''}`}
       style={style}
       aria-label="Page inspector"
@@ -246,8 +244,7 @@ export function PageInspector({ decision, onClose, onSaved }: Props) {
               affordance). They are intentionally absent here so the
               cheat strip is honest about what the Decisions inspector
               actually does — frontmatter PATCH only. */}
-          <kbd className={styles.kbd}>⌘S</kbd> save ·{' '}
-          <kbd className={styles.kbd}>esc</kbd> close
+          <kbd>⌘S</kbd> save · <kbd>esc</kbd> close
         </span>
       </footer>
     </aside>

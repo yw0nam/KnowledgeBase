@@ -31,6 +31,7 @@ export default [
         HTMLAnchorElement: 'readonly',
         HTMLDivElement: 'readonly',
         HTMLFormElement: 'readonly',
+        HTMLUListElement: 'readonly',
         Node: 'readonly',
         KeyboardEvent: 'readonly',
         MouseEvent: 'readonly',
