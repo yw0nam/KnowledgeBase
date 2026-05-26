@@ -42,7 +42,7 @@ body:
         - "3. Fill — LLM wiki writing"
         - "4. Lint (lint_wiki / scripts/lint.sh)"
         - "5. Log"
-        - "src/kb_mcp — MCP server / core / tools"
+        - "src/kb — CLI / web / core"
         - "CI / GitHub Actions"
         - "Docs / CLAUDE.md"
         - "Other (specify below)"

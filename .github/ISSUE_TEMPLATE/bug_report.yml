@@ -27,7 +27,7 @@ body:
         - "3. Fill (LLM wiki writing)"
         - "4. Lint (scripts/lint.sh / kb-lint-wiki)"
         - "5. Log (log.md)"
-        - "src/kb_mcp — MCP server / core / tools"
+        - "src/kb — CLI / web / core"
         - "Other (specify below)"
     validations:
       required: true
