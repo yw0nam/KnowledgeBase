@@ -66,7 +66,7 @@ A local-only FastAPI server and React SPA that expose the same `data/` tree as a
 
 | Component | Path | Role |
 |---|---|---|
-| FastAPI server | `src/kb_mcp/web/` | HTTP API over `data/wiki/` and `data/rejected/`; approve/reject go through `kb-wiki-review` machinery |
+| FastAPI server | `src/kb/web/` | HTTP API over `data/wiki/` and `data/rejected/`; approve/reject go through `kb-wiki-review` machinery |
 | React SPA | `frontend/` | Browser UI — review queue and weekly-read dashboard |
 | Dev script | `scripts/dev-web.sh` | Start FastAPI (`:8765`) + Vite (`:5173`) together |
 
@@ -94,6 +94,6 @@ When deciding where information belongs:
 
 - 2026-05-20: Removed workflow docs from the active documentation map; project skills are the runtime workflow layer.
 - 2026-05-20: Reframed workflow docs as design references and `.claude/skills/` as runtime operating instructions.
-- 2026-05-20: Added Web Review Console section (FastAPI + React SPA, `src/kb_mcp/web/`, `frontend/`, `scripts/dev-web.sh`).
+- 2026-05-20: Added Web Review Console section (FastAPI + React SPA, `src/kb/web/`, `frontend/`, `scripts/dev-web.sh`).
 - 2026-05-19: Added `data/rejected/` memory layer; noted `review_status` on six in-scope wiki types.
 - 2026-05-18: Initial architecture overview after docs restructuring.

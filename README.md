@@ -11,7 +11,7 @@ KnowledgeBase separates code from data:
 
 ```
 KnowledgeBase/
-├── src/kb_mcp/                   CLI tools (lint, daily reports)
+├── src/kb/                   CLI tools (lint, daily reports)
 ├── scripts/
 │   └── ingest-github.sh          GitHub source collection
 ├── .claude/skills/               Runtime workflow contracts + bundled templates
@@ -119,9 +119,9 @@ the UI does not fabricate placeholder content.
 |---|---|
 | `CLAUDE.md` | LLM entry point and project skill map |
 | `scripts/ingest-github.sh` | GitHub source collection |
-| `src/kb_mcp/cli/lint_wiki.py` | Wiki validation |
-| `src/kb_mcp/cli/lint_handoff.py` | Handoff validation |
-| `src/kb_mcp/cli/wiki_review/` | Wiki page approval CLI (`kb-wiki-review`) |
+| `src/kb/cli/lint_wiki.py` | Wiki validation |
+| `src/kb/cli/lint_handoff.py` | Handoff validation |
+| `src/kb/cli/wiki_review/` | Wiki page approval CLI (`kb-wiki-review`) |
 | `data/log.md` | Operation record |
 | `data/raw/` | Immutable sources |
 | `data/wiki/` | LLM-generated pages |

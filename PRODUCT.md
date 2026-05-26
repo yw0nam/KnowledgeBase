@@ -60,7 +60,7 @@ What this must explicitly NOT look or feel like:
 ## Implementation Stack
 
 - **Frontend:** Vite + React + TypeScript. Single-page application loaded locally; no SSR, no SEO.
-- **Backend:** small FastAPI service inside the existing `src/kb_mcp/` Python tree. Read-mostly endpoints over the markdown content of `data/wiki/`, `data/handoffs/`, `data/log.md`, and over `kb-wiki-review` actions for approve / reject / TTL queries.
+- **Backend:** small FastAPI service inside the existing `src/kb/` Python tree. Read-mostly endpoints over the markdown content of `data/wiki/`, `data/handoffs/`, `data/log.md`, and over `kb-wiki-review` actions for approve / reject / TTL queries.
 - **Data:** the markdown files in `data/` remain the source of truth. The API reads them with frontmatter parsing on demand; no separate database. Approve / reject mutations go through the existing `kb-wiki-review` machinery, not a parallel write path.
 - **Runtime posture:** local-only, single user, single machine. Same privacy stance as the rest of the repo: never deployed, never exposed beyond localhost.
 - **Why this stack over HTMX:** the review console's keyboard-first interactions (command palette, multi-select queue actions, optimistic approve / reject with TTL hint motion) and tabular data with live filters are native in React and possible-but-grafted in HTMX. The two-runtime cost (uv + npm) is accepted in exchange for that fit.

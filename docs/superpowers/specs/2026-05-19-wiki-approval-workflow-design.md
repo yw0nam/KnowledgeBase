@@ -206,11 +206,11 @@ CLI는 working tree만 변경. commit/push는 user 책임.
 
 | 파일 | 변경 |
 |---|---|
-| `src/kb_mcp/cli/lint_wiki.py` | REQUIRED_FM_FIELDS 6타입 업데이트(review_status 추가), improvement은 status → issue_status rename, orphan 완화 |
-| `src/kb_mcp/cli/wiki/validators.py` | REVIEW_STATUS_VALUES, `_validate_review_status`, `IMPROVEMENT_STATUS_VALUES → IMPROVEMENT_ISSUE_STATUS_VALUES` rename, `_validate_improvement_fm` 의 field key 변경 |
-| `src/kb_mcp/cli/wiki/index.py` | build_index에 approved filter |
-| `src/kb_mcp/cli/wiki/checks.py` | check_index_sync, check_global_index_sync에 status filter |
-| `src/kb_mcp/cli/wiki_review.py` *(신규)* | 5 subcommand 진입점 |
+| `src/kb/cli/lint_wiki.py` | REQUIRED_FM_FIELDS 6타입 업데이트(review_status 추가), improvement은 status → issue_status rename, orphan 완화 |
+| `src/kb/cli/wiki/validators.py` | REVIEW_STATUS_VALUES, `_validate_review_status`, `IMPROVEMENT_STATUS_VALUES → IMPROVEMENT_ISSUE_STATUS_VALUES` rename, `_validate_improvement_fm` 의 field key 변경 |
+| `src/kb/cli/wiki/index.py` | build_index에 approved filter |
+| `src/kb/cli/wiki/checks.py` | check_index_sync, check_global_index_sync에 status filter |
+| `src/kb/cli/wiki_review.py` *(신규)* | 5 subcommand 진입점 |
 | `pyproject.toml` | scripts entry: `kb-wiki-review` |
 | `templates/wiki/{entity,concept,decision,improvement,checklist,question}.md` | `review_status: not_processed` 라인 추가. `improvement.md` 는 추가로 `status:` → `issue_status:` rename |
 | `test/test_lint_wiki.py` | `IMPROVEMENT_STATUS_VALUES` 참조 + improvement fixture frontmatter의 `status:` → `issue_status:` 업데이트, 새 `REVIEW_STATUS_VALUES` 테스트 추가 |
