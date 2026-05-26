@@ -22,14 +22,12 @@ helpers enforce this and we translate their stderr into HTTP errors.
 from __future__ import annotations
 
 import contextlib
-import datetime
 import io
 import os
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Literal
-from zoneinfo import ZoneInfo
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -48,11 +46,9 @@ from kb.cli.wiki_review._store import (
 )
 from kb.db import get_session
 from kb.db.repos import dispatch_repo, wiki_edit_repo
-from kb.web._time import now_iso_kst
+from kb.web._time import now_iso_kst, today_kst
 
 router = APIRouter(tags=["pages"])
-
-KST = ZoneInfo("Asia/Seoul")
 
 # Type → required wiki subdir. Used by PATCH to reject a type change
 # that would require a cross-directory file move (deferred to Phase
@@ -71,14 +67,6 @@ _TYPE_DIR: dict[str, str] = {
 # CHECK constraint enforces the same set — application-side guard so
 # we surface a clean 422 instead of an IntegrityError.
 _EDITABLE_FIELDS = ("review_status", "type", "category", "tags")
-
-
-def _today_kst() -> str:
-    return datetime.datetime.now(KST).date().isoformat()
-
-
-def _now_iso_kst() -> str:
-    return datetime.datetime.now(KST).isoformat(timespec="seconds")
 
 
 class DecisionBody(BaseModel):
@@ -116,8 +104,8 @@ def approve_page(stem: str, body: DecisionBody, request: Request) -> DecisionRes
         data_dir=cfg.data_dir,
         stem=stem,
         feedback=body.feedback,
-        today=_today_kst(),
-        now_iso=_now_iso_kst(),
+        today=today_kst(),
+        now_iso=now_iso_kst(),
     )
     if rc != 0:
         raise HTTPException(status_code=400, detail=err or "approve failed")
@@ -134,8 +122,8 @@ def reject_page(stem: str, body: DecisionBody, request: Request) -> DecisionResp
         data_dir=cfg.data_dir,
         stem=stem,
         feedback=body.feedback,
-        today=_today_kst(),
-        now_iso=_now_iso_kst(),
+        today=today_kst(),
+        now_iso=now_iso_kst(),
         rejected_by="user",
     )
     if rc != 0:
@@ -205,15 +193,21 @@ def _build_candidate_text(fm: dict, body: str) -> str:
     return f"---\n{fm_block}---{body}"
 
 
-def _mirror_corpus(wiki_dir: Path, candidate_rel: Path, candidate_text: str) -> Path:
-    """Hardlink-mirror ``wiki_dir`` into a temp dir, then drop the candidate.
+def _populate_mirror(
+    tmp_wiki: Path,
+    wiki_dir: Path,
+    candidate_rel: Path,
+    candidate_text: str,
+) -> None:
+    """Hardlink-mirror ``wiki_dir`` into ``tmp_wiki``, then drop the candidate.
 
     Hardlink keeps the operation O(1) per file; the candidate is the
     only divergence from the live corpus. Falls back to copy when the
-    filesystem refuses to hardlink (e.g. cross-mount tmp). Caller is
-    responsible for cleanup via ``shutil.rmtree``.
+    filesystem refuses to hardlink (e.g. cross-mount tmp). The route
+    owns ``tmp_wiki`` and its cleanup — this helper only populates it,
+    so a mid-loop failure cannot leak the temp dir (the route's
+    ``finally`` always runs ``shutil.rmtree``).
     """
-    tmp_wiki = Path(tempfile.mkdtemp(prefix="kb-patch-lint-"))
     for src in wiki_dir.rglob("*.md"):
         rel = src.relative_to(wiki_dir)
         if rel == candidate_rel:
@@ -233,10 +227,9 @@ def _mirror_corpus(wiki_dir: Path, candidate_rel: Path, candidate_text: str) -> 
     # an approved page. Regenerate against the candidate corpus so the
     # lint validates real frontmatter problems, not the artifact gap.
     index_path = tmp_wiki / INDEX_FILENAME
-    if index_path.exists() or (index_path.is_symlink()):
+    if index_path.exists() or index_path.is_symlink():
         index_path.unlink()
     index_path.write_text(build_index(tmp_wiki), encoding="utf-8")
-    return tmp_wiki
 
 
 def _atomic_write(page: Path, text: str) -> None:
@@ -312,9 +305,13 @@ def patch_frontmatter(
     candidate_text = _build_candidate_text(candidate_fm, file_body)
 
     # Step 6 — lint the candidate against a hardlink mirror of the
-    # corpus. Tmp dir is removed regardless of result.
-    tmp_wiki = _mirror_corpus(wiki_dir, page_path.relative_to(wiki_dir), candidate_text)
+    # corpus. The route owns the temp dir so cleanup is unconditional
+    # even if mirror population raises mid-iteration.
+    tmp_wiki = Path(tempfile.mkdtemp(prefix="kb-patch-lint-"))
     try:
+        _populate_mirror(
+            tmp_wiki, wiki_dir, page_path.relative_to(wiki_dir), candidate_text
+        )
         result = LintResult()
         lint(
             result,
@@ -335,16 +332,18 @@ def patch_frontmatter(
     # the new value; subsequent failure is post-commit-of-the-file.
     _atomic_write(page_path, candidate_text)
 
-    # Step 8 — append audit rows. If this fails after the file write,
-    # surface 500 with file_written=true so the operator can decide
-    # whether to retry (idempotent: diff will be empty) or accept the
-    # audit gap (spec §6.4 recovery contract).
+    # Step 8 — append audit rows. Capture ``edited_at`` once so the
+    # response and the DB row carry the same timestamp. If the insert
+    # fails after the file write, surface 500 with file_written=true
+    # so the operator can retry (idempotent: diff will be empty) or
+    # accept the audit gap (spec §6.4 recovery contract).
+    edited_at = now_iso_kst()
     try:
         wiki_edit_repo.insert_edits(
             session,
             page_stem=stem,
             changes=diff,
-            edited_at=now_iso_kst(),
+            edited_at=edited_at,
             source="console",
         )
     except Exception as exc:  # noqa: BLE001 — see recovery contract
@@ -366,7 +365,7 @@ def patch_frontmatter(
     return {
         "stem": stem,
         "frontmatter": final_fm,
-        "edits": [{"field": field, "edited_at": now_iso_kst()} for field, _, _ in diff],
+        "edits": [{"field": field, "edited_at": edited_at} for field, _, _ in diff],
     }
 
 
@@ -419,10 +418,15 @@ def get_page_timeline(
     Per spec §6.4 we do NOT keep a transition history table; the
     visible dispatch signal is the row's ``dispatched_at`` (kind
     ``dispatched``) and ``last_status_at`` (kind ``status:<status>``).
+
+    ``total`` is the unfiltered DB event count for the page — edit
+    rows plus one event per dispatch ``dispatched_at`` plus one per
+    non-NULL ``last_status_at``. Matches the ``/edits`` semantics so
+    a UI can render "showing N of M" without a second round-trip.
     """
     capped = 50 if limit is None else max(1, min(int(limit), 200))
 
-    edit_rows, _ = wiki_edit_repo.list_edits(
+    edit_rows, edit_total = wiki_edit_repo.list_edits(
         session, page_stem=stem, since=None, limit=200
     )
     items: list[dict] = [
@@ -438,6 +442,7 @@ def get_page_timeline(
     ]
 
     dispatch_rows, _ = dispatch_repo.list_dispatches(session, page_stem=stem, limit=200)
+    dispatch_event_count = 0
     for d in dispatch_rows:
         items.append(
             {
@@ -447,6 +452,7 @@ def get_page_timeline(
                 "external_task_id": d.external_task_id,
             }
         )
+        dispatch_event_count += 1
         if d.last_status_at is not None:
             items.append(
                 {
@@ -456,9 +462,11 @@ def get_page_timeline(
                     "external_task_id": d.external_task_id,
                 }
             )
+            dispatch_event_count += 1
+
+    total = edit_total + dispatch_event_count
 
     items.sort(key=lambda it: it["at"], reverse=True)
-    total = len(items)
     if since is not None:
         items = [it for it in items if it["at"] < since]
     items = items[:capped]

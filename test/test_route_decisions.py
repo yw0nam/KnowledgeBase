@@ -154,6 +154,9 @@ def test_patch_frontmatter_single_field_atomic_rename_and_edit_row_inserted(
         assert rows[0].field == "review_status"
         assert rows[0].old_value == "pending_for_approve"
         assert rows[0].new_value == "approved"
+        # Response and audit row must carry the SAME timestamp (one
+        # ``now()`` per PATCH — no clock drift between line 5 and 8).
+        assert body["edits"][0]["edited_at"] == rows[0].edited_at
     finally:
         sess.close()
         engine.dispose()
@@ -437,6 +440,78 @@ def test_get_decisions_dispatch_summary_count_and_last_status(
     assert resp.status_code == 200, resp.text
     items = resp.json()["items"]
     row = next(it for it in items if it["stem"] == "Disp")
+    assert row["dispatch_summary"]["count"] == 2
+    assert row["dispatch_summary"]["last_status"] == "done"
+
+
+def test_get_decisions_dispatch_summary_last_status_at_beats_null(
+    client: TestClient, data_dir: Path
+) -> None:
+    """Spec §6.4 ordering: ``last_status_at DESC`` ties broken by
+    ``dispatched_at DESC``.
+
+    Two dispatches for one stem:
+      - row A: ``last_status_at=2026-05-26T11:00:00`` (earlier time),
+        ``dispatched_at=2026-05-26T09:00:00``, status='done'
+      - row B: ``last_status_at=NULL``,
+        ``dispatched_at=2026-05-26T12:00:00`` (LATER), status='dispatched'
+
+    Spec says A wins because NULL ``last_status_at`` sorts after any
+    real timestamp on ``DESC``. A naive COALESCE on
+    ``(last_status_at, dispatched_at)`` would substitute B's later
+    ``dispatched_at`` and pick B's status — that's the bug this guards.
+    """
+    _write_page(
+        data_dir,
+        "improvements/2026-05/NullCmp.md",
+        _improvement_fm(review_status="approved"),
+    )
+
+    from kb.db.repos import dispatch_repo
+
+    engine = make_engine(data_dir)
+    factory = make_session_factory(engine)
+    sess = factory()
+    try:
+        a = dispatch_repo.create_dispatch(
+            sess,
+            page_stem="NullCmp",
+            page_path_at_dispatch="wiki/improvements/2026-05/NullCmp.md",
+            external_board_id="kb-main",
+            external_task_id="t_a_early",
+            direction=None,
+            idempotency_key=None,
+            created_at="2026-05-26T09:00:00+09:00",
+            dispatched_at="2026-05-26T09:00:00+09:00",
+        )
+        dispatch_repo.update_status(
+            sess,
+            dispatch_id=a.id,
+            new_status="done",
+            occurred_at=None,
+            result_payload=None,
+            server_now="2026-05-26T11:00:00+09:00",
+        )
+        # B: dispatched LATER than A's last_status_at, but has no
+        # last_status_at of its own — must not win the tie.
+        dispatch_repo.create_dispatch(
+            sess,
+            page_stem="NullCmp",
+            page_path_at_dispatch="wiki/improvements/2026-05/NullCmp.md",
+            external_board_id="kb-main",
+            external_task_id="t_b_later",
+            direction=None,
+            idempotency_key=None,
+            created_at="2026-05-26T12:00:00+09:00",
+            dispatched_at="2026-05-26T12:00:00+09:00",
+        )
+    finally:
+        sess.close()
+        engine.dispose()
+
+    resp = client.get("/api/decisions", params={"status": "approved"})
+    assert resp.status_code == 200, resp.text
+    row = next(it for it in resp.json()["items"] if it["stem"] == "NullCmp")
     assert row["dispatch_summary"]["count"] == 2
     assert row["dispatch_summary"]["last_status"] == "done"
 

@@ -89,11 +89,14 @@ def _last_edited_map(session: Session, stems: Iterable[str]) -> dict[str, str]:
 def _dispatch_summary_map(session: Session, stems: Iterable[str]) -> dict[str, dict]:
     """One ``{count, last_status}`` per stem with any dispatches.
 
-    "Latest" is defined as the row with the greatest
-    ``last_status_at`` (ties broken by ``dispatched_at``). Computed
-    in two queries — a per-stem COUNT and a per-stem-latest row
-    fetched in Python — because SQLite's ``ROW_NUMBER`` support is
-    flaky across Alembic-managed versions and the corpus is tiny.
+    Spec §6.4: "latest by ``dispatches.last_status_at DESC``, ties
+    broken by ``dispatched_at DESC``". Literal columns (no COALESCE):
+    SQLite puts NULL last on ``DESC`` by default, so a row with NULL
+    ``last_status_at`` loses to any row with a real timestamp
+    regardless of ``dispatched_at``. Computed in two queries — a
+    per-stem COUNT and a per-stem-latest row fetched in Python —
+    because SQLite's ``ROW_NUMBER`` support is flaky across
+    Alembic-managed versions and the corpus is tiny.
     """
     stems_list = list(stems)
     if not stems_list:
@@ -114,7 +117,7 @@ def _dispatch_summary_map(session: Session, stems: Iterable[str]) -> dict[str, d
             select(Dispatch)
             .where(Dispatch.page_stem.in_(stems_list))
             .order_by(
-                desc(func.coalesce(Dispatch.last_status_at, Dispatch.dispatched_at)),
+                desc(Dispatch.last_status_at),
                 desc(Dispatch.dispatched_at),
                 desc(Dispatch.id),
             )

@@ -15,3 +15,8 @@ def now_iso_kst() -> str:
     ``dispatches.*_at`` and ``wiki_edits.edited_at``.
     """
     return datetime.datetime.now(KST).isoformat(timespec="seconds")
+
+
+def today_kst() -> str:
+    """Return today's date in KST as ``YYYY-MM-DD``."""
+    return datetime.datetime.now(KST).date().isoformat()
