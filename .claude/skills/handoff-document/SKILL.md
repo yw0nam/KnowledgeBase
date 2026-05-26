@@ -14,7 +14,7 @@ Handoffs are this repo's operational state board. Every task that crosses an age
 - `reference/templates/final.md` — task-close `<slug>_final.md` template
 - `reference/templates/readme.md` — task `README.md` template
 
-The schema, enum values, and lint rules below are the canonical operational summary. If anything contradicts the lint code (`src/kb_mcp/cli/handoff/validators.py`), the lint code wins — file an issue and update this skill.
+The schema, enum values, and lint rules below are the canonical operational summary. If anything contradicts the lint code (`src/kb/cli/handoff/validators.py`), the lint code wins — file an issue and update this skill.
 
 ## When to Use
 

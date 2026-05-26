@@ -1,1 +1,1 @@
-"""Shared pytest fixtures for kb_mcp tests."""
+"""Shared pytest fixtures for kb tests."""

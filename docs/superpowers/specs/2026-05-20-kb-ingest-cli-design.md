@@ -112,7 +112,7 @@ top-cited:
 ## 7. Implementation Structure
 
 ```
-src/kb_mcp/cli/ingest/
+src/kb/cli/ingest/
 ├── __init__.py     ← argparse, main() — ~60 LOC
 ├── _scan.py        ← build_citation_map, list_filesystem — ~50 LOC
 └── _commands.py    ← cmd_status, cmd_pending, cmd_report — ~140 LOC
@@ -121,10 +121,10 @@ src/kb_mcp/cli/ingest/
 `pyproject.toml`:
 ```toml
 [project.scripts]
-kb-ingest = "kb_mcp.cli.ingest:main"
+kb-ingest = "kb.cli.ingest:main"
 ```
 
-기존 `kb_mcp.cli.wiki_review._store.iter_pages` 재사용. 신규 외부 의존성 0.
+기존 `kb.cli.wiki_review._store.iter_pages` 재사용. 신규 외부 의존성 0.
 
 ## 8. Edge Cases
 

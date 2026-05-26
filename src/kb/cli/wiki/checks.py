@@ -7,9 +7,9 @@ import re
 import subprocess
 from pathlib import Path
 
-from kb_mcp import REPO_ROOT as BASEDIR
-from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
-from kb_mcp.cli.wiki.utils import _find_relative, _parse_yaml_frontmatter, extract_links
+from kb import REPO_ROOT as BASEDIR
+from kb.cli.wiki.index import INDEX_FILENAME, build_index
+from kb.cli.wiki.utils import _find_relative, _parse_yaml_frontmatter, extract_links
 
 WIKI_DIR = BASEDIR / "data" / "wiki"
 RAW_DIR = BASEDIR / "data" / "raw"

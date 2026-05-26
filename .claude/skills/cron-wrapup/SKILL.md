@@ -22,7 +22,7 @@ This skill is the **operational command layer**. Content synthesis (what happene
 
 For handoff authoring, import `handoff-document`. This skill does not duplicate the handoff schema.
 
-If anything below contradicts the lint code (`src/kb_mcp/cli/wiki/validators.py`), the lint code wins — file an issue and update this skill.
+If anything below contradicts the lint code (`src/kb/cli/wiki/validators.py`), the lint code wins — file an issue and update this skill.
 
 ## When to Use
 

@@ -1,7 +1,7 @@
 """Entrypoint for the `kb-web` console script.
 
 Starts uvicorn programmatically using KB_WEB_HOST / KB_WEB_PORT (see
-`kb_mcp.web.config`). Reload is on in development; production is out
+`kb.web.config`). Reload is on in development; production is out
 of scope for now per the local-only posture.
 """
 
@@ -11,7 +11,7 @@ import argparse
 
 import uvicorn
 
-from kb_mcp.web import config
+from kb.web import config
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     port = args.port or cfg.port
 
     uvicorn.run(
-        "kb_mcp.web.app:app",
+        "kb.web.app:app",
         host=host,
         port=port,
         reload=args.reload,

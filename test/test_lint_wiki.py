@@ -1,4 +1,4 @@
-"""Tests for src/kb_mcp/cli/lint_wiki.py — stub + index sync checks."""
+"""Tests for src/kb/cli/lint_wiki.py — stub + index sync checks."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-import kb_mcp.cli.lint_wiki as lint_mod_module
+import kb.cli.lint_wiki as lint_mod_module
 
 
 @pytest.fixture(scope="module")
@@ -169,7 +169,7 @@ def test_index_sync_clean(lint_mod, tmp_path):
 
 def test_clean_minimal_wiki_zero_errors(lint_mod, tmp_path):
     """A minimal but well-formed wiki triggers no errors at all."""
-    from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+    from kb.cli.wiki.index import INDEX_FILENAME, build_index
 
     wiki = make_wiki_root(tmp_path)
     long_body = (
@@ -1041,7 +1041,7 @@ def test_global_index_missing_errors(lint_mod, tmp_path):
 
 def test_global_index_in_sync_passes(lint_mod, tmp_path):
     """INDEX.md matching build_index() output → no sync errors."""
-    from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+    from kb.cli.wiki.index import INDEX_FILENAME, build_index
 
     wiki = make_wiki_root(tmp_path)
     _seed_wiki_with_page(wiki)
@@ -1056,7 +1056,7 @@ def test_global_index_in_sync_passes(lint_mod, tmp_path):
 
 def test_global_index_stale_errors(lint_mod, tmp_path):
     """INDEX.md with arbitrary content → lint reports stale, not missing."""
-    from kb_mcp.cli.wiki.index import INDEX_FILENAME
+    from kb.cli.wiki.index import INDEX_FILENAME
 
     wiki = make_wiki_root(tmp_path)
     _seed_wiki_with_page(wiki)
@@ -1074,7 +1074,7 @@ def test_global_index_stale_errors(lint_mod, tmp_path):
 def test_global_index_does_not_mask_orphans(lint_mod, tmp_path):
     """INDEX.md links to every page, but orphan detection must still surface
     pages with no contextual inbound links."""
-    from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+    from kb.cli.wiki.index import INDEX_FILENAME, build_index
 
     wiki = make_wiki_root(tmp_path)
     _seed_wiki_with_page(wiki)
@@ -1092,7 +1092,7 @@ def test_global_index_does_not_mask_orphans(lint_mod, tmp_path):
 def test_dead_link_across_categories_errors(lint_mod, tmp_path):
     """A wikilink in one category pointing at a non-existent stem in another
     must be flagged as ERROR — the cross-category integrity gate."""
-    from kb_mcp.cli.wiki.index import INDEX_FILENAME, build_index
+    from kb.cli.wiki.index import INDEX_FILENAME, build_index
 
     wiki = make_wiki_root(tmp_path)
     body = (
@@ -1110,7 +1110,7 @@ def test_dead_link_across_categories_errors(lint_mod, tmp_path):
 
 def test_improvement_issue_status_enum_renamed(lint_mod):
     """IMPROVEMENT_STATUS_VALUES is renamed to IMPROVEMENT_ISSUE_STATUS_VALUES."""
-    from kb_mcp.cli.wiki import validators
+    from kb.cli.wiki import validators
 
     assert hasattr(validators, "IMPROVEMENT_ISSUE_STATUS_VALUES")
     assert validators.IMPROVEMENT_ISSUE_STATUS_VALUES == frozenset(
@@ -1120,7 +1120,7 @@ def test_improvement_issue_status_enum_renamed(lint_mod):
 
 
 def test_review_status_values_enum(lint_mod):
-    from kb_mcp.cli.wiki import validators
+    from kb.cli.wiki import validators
 
     assert validators.REVIEW_STATUS_VALUES == frozenset(
         {"not_processed", "pending_for_approve", "approved"}

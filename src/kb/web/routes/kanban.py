@@ -24,8 +24,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from kb_mcp.cli.wiki_review import _kanban
-from kb_mcp.cli.wiki_review._store import (
+from kb.cli.wiki_review import _kanban
+from kb.cli.wiki_review._store import (
     PageNotFound,
     StemCollision,
     _split_frontmatter,

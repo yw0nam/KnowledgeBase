@@ -13,8 +13,8 @@ from pathlib import Path
 
 import yaml
 
-from kb_mcp import REPO_ROOT
-from kb_mcp.cli.wiki.validators import REVIEW_STATUS_TYPES
+from kb import REPO_ROOT
+from kb.cli.wiki.validators import REVIEW_STATUS_TYPES
 
 WIKI_DIR = REPO_ROOT / "data" / "wiki"
 REJECTED_DIR = REPO_ROOT / "data" / "rejected"

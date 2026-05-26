@@ -9,8 +9,8 @@ Scans data/handoffs/<YYYY>/<MM>/<task-slug>/*.md for:
   - Task README handoff index ↔ on-disk file consistency
 
 Usage:
-    uv run python -m kb_mcp.cli.lint_handoff           # full lint
-    uv run python -m kb_mcp.cli.lint_handoff --strict  # warnings → errors
+    uv run python -m kb.cli.lint_handoff           # full lint
+    uv run python -m kb.cli.lint_handoff --strict  # warnings → errors
 
 Exit code: 0 if no errors (or --strict and no warnings), 1 otherwise.
 """
@@ -25,8 +25,8 @@ from pathlib import Path
 
 import yaml
 
-from kb_mcp import REPO_ROOT as BASEDIR
-from kb_mcp.cli.handoff.validators import (
+from kb import REPO_ROOT as BASEDIR
+from kb.cli.handoff.validators import (
     CANONICAL_BODY_SECTIONS as CANONICAL_BODY_SECTIONS,
     FINAL_FILENAME_RE,
     HANDOFF_FILENAME_RE,

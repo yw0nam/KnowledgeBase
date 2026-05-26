@@ -12,7 +12,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from kb_mcp.cli.wiki_review import _feedback, _log, _store
+from kb.cli.wiki_review import _feedback, _log, _store
 
 
 def _err(msg: str) -> None:

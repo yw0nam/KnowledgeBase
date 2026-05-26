@@ -16,7 +16,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from kb_mcp.cli.wiki_review import _kanban
+from kb.cli.wiki_review import _kanban
 
 # ---------------------------------------------------------------------------
 # Corpus + client fixtures
@@ -67,11 +67,11 @@ def client(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("KB_DATA_DIR", str(data_dir))
     # Always start with an empty boards cache so cache-hit tests are
     # deterministic across the whole module.
-    from kb_mcp.web.routes import kanban as kanban_route
+    from kb.web.routes import kanban as kanban_route
 
     kanban_route._BOARDS_CACHE.clear()
 
-    from kb_mcp.web.app import create_app
+    from kb.web.app import create_app
 
     return TestClient(create_app())
 
@@ -335,7 +335,7 @@ def test_send_to_kanban_invalidates_cache_on_success(
 
 def test_lint_accepts_kanban_dispatches_field(tmp_path: Path) -> None:
     """Lint has no allowed-key allowlist, so the field passes through."""
-    from kb_mcp.cli.lint_wiki import LintResult, lint
+    from kb.cli.lint_wiki import LintResult, lint
 
     wiki = tmp_path / "wiki"
     page = wiki / "improvements" / "2026-05" / "Foo.md"

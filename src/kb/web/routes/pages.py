@@ -1,7 +1,7 @@
 """Per-page mutation endpoints.
 
 POST /api/pages/{stem}/approve and /reject thinly wrap the existing
-kb_mcp.cli.wiki_review._commands functions so the markdown files
+kb.cli.wiki_review._commands functions so the markdown files
 remain the single source of truth and the CLI + API stay in lockstep.
 
 Status semantics follow the workflow spec exactly: only pages in
@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from kb_mcp.cli.wiki_review import _commands
+from kb.cli.wiki_review import _commands
 
 router = APIRouter(tags=["pages"])
 

@@ -1,6 +1,6 @@
 """Hermes kanban CLI bridges + improvement-page dispatch frontmatter edit.
 
-Pure helpers consumed by ``kb_mcp.web.routes.kanban``. Subprocess shells
+Pure helpers consumed by ``kb.web.routes.kanban``. Subprocess shells
 out to ``hermes kanban`` and parses JSON; no FastAPI awareness lives
 here. The route layer is responsible for translating these exceptions
 into HTTP responses.
@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-from kb_mcp.cli.wiki_review._store import _split_frontmatter
+from kb.cli.wiki_review._store import _split_frontmatter
 
 # Subprocess timeout for hermes calls (seconds). Hermes is local; if it
 # hasn't responded in 10s the daemon is effectively unavailable.

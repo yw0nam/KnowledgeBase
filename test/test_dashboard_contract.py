@@ -9,7 +9,7 @@ Strategy
 --------
 Build a hermetic ``data/`` tree under ``tmp_path`` and point the web app
 at it via the ``KB_DATA_DIR`` environment variable (the supported hook
-in ``kb_mcp.web.config.load``). ``create_app()`` is then called fresh
+in ``kb.web.config.load``). ``create_app()`` is then called fresh
 so config is re-read; ``TestClient`` exercises the real route against
 the real aggregator. Asserts are on SHAPE not VALUES — counts, rates
 and dates can drift without breaking the contract.
@@ -126,8 +126,8 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("KB_DATA_DIR", str(data_dir))
     # Import + create_app inside the fixture so config.load() picks up
     # the patched env var. Module-level ``app = create_app()`` in
-    # ``kb_mcp.web.app`` is bypassed by calling create_app() again.
-    from kb_mcp.web.app import create_app
+    # ``kb.web.app`` is bypassed by calling create_app() again.
+    from kb.web.app import create_app
 
     return TestClient(create_app())
 

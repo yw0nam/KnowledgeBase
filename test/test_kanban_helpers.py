@@ -1,4 +1,4 @@
-"""Unit tests for ``kb_mcp.cli.wiki_review._kanban``.
+"""Unit tests for ``kb.cli.wiki_review._kanban``.
 
 Covers:
 - ``list_boards``: subprocess JSON parsing.
@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from kb_mcp.cli.wiki_review import _kanban
+from kb.cli.wiki_review import _kanban
 
 
 class _FakeCompleted:

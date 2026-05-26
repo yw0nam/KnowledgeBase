@@ -4,11 +4,11 @@ import json
 import sqlite3
 from pathlib import Path
 
-from kb_mcp.cli.hermes_daily_report import (
+from kb.cli.hermes_daily_report import (
     collect_metrics as collect_hermes_metrics,
     render_report as render_hermes_report,
 )
-from kb_mcp.cli.opencode_daily_report import (
+from kb.cli.opencode_daily_report import (
     collect_metrics as collect_opencode_metrics,
     render_report as render_opencode_report,
 )

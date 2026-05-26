@@ -4,7 +4,7 @@
 
 **Goal:** Introduce a `review_status` field (`not_processed | pending_for_approve | approved`) on six wiki page types, with a new `kb-wiki-review` CLI managing transitions, a TTL cron auto-rejecting stale drafts, and lint/index filtering for approved-only content. Rejected pages move to `data/rejected/`. Spec: `docs/superpowers/specs/2026-05-19-wiki-approval-workflow-design.md`.
 
-**Architecture:** Frontmatter-only state (no folder shuffling for active lifecycle). Reject is a terminal exit that moves files to `data/rejected/` as audit data. Lint/index code learns to filter by `review_status`. New CLI is a small package `src/kb_mcp/cli/wiki_review/`. Migration is a one-shot Python script documented in the spec (no permanent migrate subcommand).
+**Architecture:** Frontmatter-only state (no folder shuffling for active lifecycle). Reject is a terminal exit that moves files to `data/rejected/` as audit data. Lint/index code learns to filter by `review_status`. New CLI is a small package `src/kb/cli/wiki_review/`. Migration is a one-shot Python script documented in the spec (no permanent migrate subcommand).
 
 **Tech Stack:** Python 3.11, PyYAML for reading frontmatter, regex-based writeback to preserve YAML format/comments, pytest for tests, uv for dependency/script management.
 
@@ -22,7 +22,7 @@ When a task says "commit in outer repo" run git from `/home/spow12/codes/Knowled
 ### New files (outer repo)
 
 ```
-src/kb_mcp/cli/wiki_review/
+src/kb/cli/wiki_review/
 ├── __init__.py          # main() entry, argparse dispatch
 ├── _store.py            # frontmatter R/W, stem resolution, page enumeration
 ├── _feedback.py         # User Feedback section management
@@ -37,10 +37,10 @@ docs/workflows/wiki-approval-workflow.md   # operator manual
 
 ### Modified files (outer repo)
 
-- `src/kb_mcp/cli/wiki/validators.py` — `REVIEW_STATUS_VALUES` enum + helper, `IMPROVEMENT_STATUS_VALUES → IMPROVEMENT_ISSUE_STATUS_VALUES` rename, `_validate_improvement_fm` reads `issue_status`.
-- `src/kb_mcp/cli/lint_wiki.py` — `REQUIRED_FM_FIELDS` updates (review_status added to 6 types, improvement gets `issue_status` instead of `status`), orphan-check relaxation.
-- `src/kb_mcp/cli/wiki/index.py` — `build_index` filters `review_status == "approved"`.
-- `src/kb_mcp/cli/wiki/checks.py` — `check_index_sync` + `check_global_index_sync` filter by approved.
+- `src/kb/cli/wiki/validators.py` — `REVIEW_STATUS_VALUES` enum + helper, `IMPROVEMENT_STATUS_VALUES → IMPROVEMENT_ISSUE_STATUS_VALUES` rename, `_validate_improvement_fm` reads `issue_status`.
+- `src/kb/cli/lint_wiki.py` — `REQUIRED_FM_FIELDS` updates (review_status added to 6 types, improvement gets `issue_status` instead of `status`), orphan-check relaxation.
+- `src/kb/cli/wiki/index.py` — `build_index` filters `review_status == "approved"`.
+- `src/kb/cli/wiki/checks.py` — `check_index_sync` + `check_global_index_sync` filter by approved.
 - `templates/wiki/{entity,concept,decision,improvement,checklist,question}.md` — add `review_status: not_processed`; improvement also `status:` → `issue_status:`.
 - `test/test_lint_wiki.py` — fixture `_improvement_fm` uses `issue_status:`; add tests for `REVIEW_STATUS_VALUES` and filter behavior.
 - `pyproject.toml` — add `kb-wiki-review` script entry.
@@ -57,7 +57,7 @@ docs/workflows/wiki-approval-workflow.md   # operator manual
 ## Task 1: Validators — REVIEW_STATUS_VALUES + IMPROVEMENT rename
 
 **Files:**
-- Modify: `src/kb_mcp/cli/wiki/validators.py`
+- Modify: `src/kb/cli/wiki/validators.py`
 - Test: `test/test_lint_wiki.py` (find the `_improvement_fm` fixture around line 518; add a new test block for `REVIEW_STATUS_VALUES`)
 
 - [ ] **Step 1: Write failing test for IMPROVEMENT_ISSUE_STATUS_VALUES rename**
@@ -67,7 +67,7 @@ Append to `test/test_lint_wiki.py`:
 ```python
 def test_improvement_issue_status_enum_renamed(lint_mod):
     """IMPROVEMENT_STATUS_VALUES is renamed to IMPROVEMENT_ISSUE_STATUS_VALUES."""
-    from kb_mcp.cli.wiki import validators
+    from kb.cli.wiki import validators
 
     assert hasattr(validators, "IMPROVEMENT_ISSUE_STATUS_VALUES")
     assert validators.IMPROVEMENT_ISSUE_STATUS_VALUES == frozenset(
@@ -82,7 +82,7 @@ Append to `test/test_lint_wiki.py`:
 
 ```python
 def test_review_status_values_enum(lint_mod):
-    from kb_mcp.cli.wiki import validators
+    from kb.cli.wiki import validators
 
     assert validators.REVIEW_STATUS_VALUES == frozenset(
         {"not_processed", "pending_for_approve", "approved"}
@@ -96,7 +96,7 @@ Expected: both FAIL (`IMPROVEMENT_STATUS_VALUES` still exists; `REVIEW_STATUS_VA
 
 - [ ] **Step 4: Update validators.py — rename and add enum**
 
-Edit `src/kb_mcp/cli/wiki/validators.py`:
+Edit `src/kb/cli/wiki/validators.py`:
 
 ```python
 """Frontmatter/body validators for wiki linting."""
@@ -200,7 +200,7 @@ Expected: all existing tests PASS (the two new ones added in steps 1-2 still pas
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki/validators.py test/test_lint_wiki.py
+git add src/kb/cli/wiki/validators.py test/test_lint_wiki.py
 git commit -m "$(cat <<'EOF'
 feat(lint): add REVIEW_STATUS_VALUES, rename IMPROVEMENT_STATUS_VALUES
 
@@ -219,7 +219,7 @@ EOF
 ## Task 2: Lint REQUIRED_FM_FIELDS + orphan check relaxation
 
 **Files:**
-- Modify: `src/kb_mcp/cli/lint_wiki.py` (REQUIRED_FM_FIELDS dict around line 111, orphan check around line 330)
+- Modify: `src/kb/cli/lint_wiki.py` (REQUIRED_FM_FIELDS dict around line 111, orphan check around line 330)
 - Test: `test/test_lint_wiki.py`
 
 - [ ] **Step 1: Write failing test for required review_status field**
@@ -300,7 +300,7 @@ Expected: both FAIL.
 
 - [ ] **Step 4: Update REQUIRED_FM_FIELDS in lint_wiki.py**
 
-Edit `src/kb_mcp/cli/lint_wiki.py` (around line 111-135), replace the `REQUIRED_FM_FIELDS` dict:
+Edit `src/kb/cli/lint_wiki.py` (around line 111-135), replace the `REQUIRED_FM_FIELDS` dict:
 
 ```python
 REQUIRED_FM_FIELDS = {
@@ -333,10 +333,10 @@ REQUIRED_FM_FIELDS = {
 
 - [ ] **Step 5: Wire `_validate_review_status` into the per-page loop**
 
-In `src/kb_mcp/cli/lint_wiki.py`, find the imports block (around line 65) and add:
+In `src/kb/cli/lint_wiki.py`, find the imports block (around line 65) and add:
 
 ```python
-from kb_mcp.cli.wiki.validators import (
+from kb.cli.wiki.validators import (
     IMPROVEMENT_DOMAIN_VALUES,
     IMPROVEMENT_ISSUE_STATUS_VALUES,
     IMPROVEMENT_KIND_VALUES,
@@ -350,7 +350,7 @@ from kb_mcp.cli.wiki.validators import (
 )
 ```
 
-(Replace the existing `from kb_mcp.cli.wiki.validators import (...)` block with the above. Adjust `IMPROVEMENT_STATUS_VALUES → IMPROVEMENT_ISSUE_STATUS_VALUES` in any prior import or `__all__` lists.)
+(Replace the existing `from kb.cli.wiki.validators import (...)` block with the above. Adjust `IMPROVEMENT_STATUS_VALUES → IMPROVEMENT_ISSUE_STATUS_VALUES` in any prior import or `__all__` lists.)
 
 Then in the per-page loop (around line 280, after the `if page_type == "improvement":` block), add:
 
@@ -361,7 +361,7 @@ Then in the per-page loop (around line 280, after the `if page_type == "improvem
 
 - [ ] **Step 6: Relax orphan check for non-approved pages**
 
-In `src/kb_mcp/cli/lint_wiki.py`, find the orphan loop (search for `# ── 10. Orphan pages` — around line 325), replace:
+In `src/kb/cli/lint_wiki.py`, find the orphan loop (search for `# ── 10. Orphan pages` — around line 325), replace:
 
 ```python
     # ── 10. Orphan pages ────────────────────────────────────────────────
@@ -388,7 +388,7 @@ Note: pages of types outside `REVIEW_STATUS_TYPES` (e.g., summary) have no `revi
 
 - [ ] **Step 7: Update `__all__` in lint_wiki.py**
 
-Find the `__all__` list in `src/kb_mcp/cli/lint_wiki.py` (around line 70-103) and:
+Find the `__all__` list in `src/kb/cli/lint_wiki.py` (around line 70-103) and:
 - Replace `"IMPROVEMENT_STATUS_VALUES"` with `"IMPROVEMENT_ISSUE_STATUS_VALUES"`
 - Add `"REVIEW_STATUS_VALUES"` and `"REVIEW_STATUS_TYPES"`
 - Add `"_validate_review_status"`
@@ -402,7 +402,7 @@ Expected: ALL PASS. The two new tests pass; all existing tests still pass (fixtu
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/lint_wiki.py test/test_lint_wiki.py
+git add src/kb/cli/lint_wiki.py test/test_lint_wiki.py
 git commit -m "$(cat <<'EOF'
 feat(lint): require review_status on 6 wiki types, relax orphan check
 
@@ -421,7 +421,7 @@ EOF
 ## Task 3: Index filter — build_index includes only approved
 
 **Files:**
-- Modify: `src/kb_mcp/cli/wiki/index.py` (`_scan_pages` around line 41)
+- Modify: `src/kb/cli/wiki/index.py` (`_scan_pages` around line 41)
 - Test: `test/test_wiki_index.py`
 
 - [ ] **Step 1: Write failing test for approved-only filter**
@@ -431,7 +431,7 @@ Append to `test/test_wiki_index.py`:
 ```python
 def test_build_index_excludes_non_approved(tmp_path):
     """build_index should skip pages with review_status != approved."""
-    from kb_mcp.cli.wiki.index import build_index
+    from kb.cli.wiki.index import build_index
 
     wiki = tmp_path / "wiki"
     (wiki / "entities" / "Subj").mkdir(parents=True)
@@ -485,7 +485,7 @@ tags: []
 
 def test_build_index_includes_pages_without_review_status(tmp_path):
     """Pages of types outside REVIEW_STATUS_TYPES (e.g. summary) appear regardless."""
-    from kb_mcp.cli.wiki.index import build_index
+    from kb.cli.wiki.index import build_index
 
     wiki = tmp_path / "wiki"
     (wiki / "summaries" / "2026" / "05").mkdir(parents=True)
@@ -512,7 +512,7 @@ Expected: first FAIL (build_index includes all pages), second PASS (already work
 
 - [ ] **Step 3: Update _scan_pages to filter approved**
 
-Edit `src/kb_mcp/cli/wiki/index.py`, replace `_scan_pages`:
+Edit `src/kb/cli/wiki/index.py`, replace `_scan_pages`:
 
 ```python
 def _scan_pages(root: Path) -> list[tuple[Path, dict | None]]:
@@ -547,7 +547,7 @@ Expected: all PASS.
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki/index.py test/test_wiki_index.py
+git add src/kb/cli/wiki/index.py test/test_wiki_index.py
 git commit -m "$(cat <<'EOF'
 feat(index): build_index filters non-approved pages
 
@@ -565,7 +565,7 @@ EOF
 ## Task 4: Sync check filter — non-approved exempt from subject hub sync
 
 **Files:**
-- Modify: `src/kb_mcp/cli/wiki/checks.py` (`check_index_sync` around line 32)
+- Modify: `src/kb/cli/wiki/checks.py` (`check_index_sync` around line 32)
 - Test: `test/test_lint_wiki.py`
 
 - [ ] **Step 1: Write failing test for sync-warning relaxation**
@@ -644,7 +644,7 @@ Expected: first FAIL (warning emitted), second PASS (current behavior).
 
 - [ ] **Step 3: Update check_index_sync to filter by review_status**
 
-Edit `src/kb_mcp/cli/wiki/checks.py`, replace the on-disk stem collection in `check_index_sync` (around line 79-81):
+Edit `src/kb/cli/wiki/checks.py`, replace the on-disk stem collection in `check_index_sync` (around line 79-81):
 
 ```python
         on_disk_stems = set()
@@ -678,7 +678,7 @@ Expected: all PASS.
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki/checks.py test/test_lint_wiki.py
+git add src/kb/cli/wiki/checks.py test/test_lint_wiki.py
 git commit -m "$(cat <<'EOF'
 feat(lint): subject _index.md sync ignores non-approved pages
 
@@ -802,8 +802,8 @@ EOF
 ## Task 6: CLI helper module — `_store.py`
 
 **Files:**
-- Create: `src/kb_mcp/cli/wiki_review/__init__.py` (empty package marker for now)
-- Create: `src/kb_mcp/cli/wiki_review/_store.py`
+- Create: `src/kb/cli/wiki_review/__init__.py` (empty package marker for now)
+- Create: `src/kb/cli/wiki_review/_store.py`
 - Create: `test/test_wiki_review.py`
 
 - [ ] **Step 1: Write failing tests for stem resolution**
@@ -819,7 +819,7 @@ from pathlib import Path
 
 import pytest
 
-from kb_mcp.cli.wiki_review import _store
+from kb.cli.wiki_review import _store
 
 
 def _write_page(path: Path, fm: dict, body: str = "Body. " * 20) -> None:
@@ -929,11 +929,11 @@ def test_get_field_reads_value(tmp_path):
 - [ ] **Step 3: Run tests, verify they fail (module not found)**
 
 Run: `uv run pytest test/test_wiki_review.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'kb_mcp.cli.wiki_review'`.
+Expected: FAIL with `ModuleNotFoundError: No module named 'kb.cli.wiki_review'`.
 
 - [ ] **Step 4: Create package __init__.py**
 
-Create `src/kb_mcp/cli/wiki_review/__init__.py`:
+Create `src/kb/cli/wiki_review/__init__.py`:
 
 ```python
 """kb-wiki-review CLI — manage review_status lifecycle of wiki pages."""
@@ -941,7 +941,7 @@ Create `src/kb_mcp/cli/wiki_review/__init__.py`:
 
 - [ ] **Step 5: Create _store.py with stem resolution + frontmatter R/W**
 
-Create `src/kb_mcp/cli/wiki_review/_store.py`:
+Create `src/kb/cli/wiki_review/_store.py`:
 
 ```python
 """Frontmatter R/W and page enumeration helpers for kb-wiki-review.
@@ -959,8 +959,8 @@ from pathlib import Path
 
 import yaml
 
-from kb_mcp import REPO_ROOT
-from kb_mcp.cli.wiki.validators import REVIEW_STATUS_TYPES
+from kb import REPO_ROOT
+from kb.cli.wiki.validators import REVIEW_STATUS_TYPES
 
 WIKI_DIR = REPO_ROOT / "data" / "wiki"
 REJECTED_DIR = REPO_ROOT / "data" / "rejected"
@@ -1105,7 +1105,7 @@ Expected: all 6 tests PASS.
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki_review/ test/test_wiki_review.py
+git add src/kb/cli/wiki_review/ test/test_wiki_review.py
 git commit -m "$(cat <<'EOF'
 feat(wiki-review): add _store helpers for kb-wiki-review
 
@@ -1123,7 +1123,7 @@ EOF
 ## Task 7: User Feedback body section helper — `_feedback.py`
 
 **Files:**
-- Create: `src/kb_mcp/cli/wiki_review/_feedback.py`
+- Create: `src/kb/cli/wiki_review/_feedback.py`
 - Test: `test/test_wiki_review.py`
 
 - [ ] **Step 1: Write failing tests for feedback append**
@@ -1132,7 +1132,7 @@ Append to `test/test_wiki_review.py`:
 
 ```python
 def test_append_feedback_creates_section(tmp_path):
-    from kb_mcp.cli.wiki_review import _feedback
+    from kb.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
     p.write_text(
@@ -1148,7 +1148,7 @@ def test_append_feedback_creates_section(tmp_path):
 
 
 def test_append_feedback_appends_to_existing_section(tmp_path):
-    from kb_mcp.cli.wiki_review import _feedback
+    from kb.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
     p.write_text(
@@ -1166,7 +1166,7 @@ def test_append_feedback_appends_to_existing_section(tmp_path):
 
 
 def test_append_feedback_skip_empty_input(tmp_path):
-    from kb_mcp.cli.wiki_review import _feedback
+    from kb.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
     original = "---\ntype: entity\n---\n\n# Title\n\nBody.\n"
@@ -1177,7 +1177,7 @@ def test_append_feedback_skip_empty_input(tmp_path):
 
 
 def test_append_feedback_strips_input_whitespace(tmp_path):
-    from kb_mcp.cli.wiki_review import _feedback
+    from kb.cli.wiki_review import _feedback
 
     p = tmp_path / "page.md"
     p.write_text("---\ntype: entity\n---\n\n# Title\n")
@@ -1193,7 +1193,7 @@ Expected: 4 new tests FAIL (`_feedback` module missing).
 
 - [ ] **Step 3: Create _feedback.py**
 
-Create `src/kb_mcp/cli/wiki_review/_feedback.py`:
+Create `src/kb/cli/wiki_review/_feedback.py`:
 
 ```python
 """Append User Feedback lines to wiki page bodies.
@@ -1269,7 +1269,7 @@ Expected: all PASS.
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki_review/_feedback.py test/test_wiki_review.py
+git add src/kb/cli/wiki_review/_feedback.py test/test_wiki_review.py
 git commit -m "$(cat <<'EOF'
 feat(wiki-review): User Feedback body section helper
 
@@ -1287,7 +1287,7 @@ EOF
 ## Task 8: CLI commands — `_commands.py` with `promote` first
 
 **Files:**
-- Create: `src/kb_mcp/cli/wiki_review/_commands.py`
+- Create: `src/kb/cli/wiki_review/_commands.py`
 - Test: `test/test_wiki_review.py`
 
 - [ ] **Step 1: Write failing tests for promote**
@@ -1333,7 +1333,7 @@ def _make_page(wiki: Path, type_: str, stem: str, status: str = "not_processed",
 
 
 def test_promote_transitions_to_pending(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     wiki = tmp_path / "wiki"
     page = _make_page(wiki, "entity", "Foo", status="not_processed")
@@ -1345,7 +1345,7 @@ def test_promote_transitions_to_pending(tmp_path):
 
 
 def test_promote_errors_when_already_pending(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "Foo", status="pending_for_approve")
@@ -1356,7 +1356,7 @@ def test_promote_errors_when_already_pending(tmp_path, capsys):
 
 
 def test_promote_errors_when_already_approved(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "Foo", status="approved")
@@ -1366,7 +1366,7 @@ def test_promote_errors_when_already_approved(tmp_path, capsys):
 
 
 def test_promote_errors_when_page_not_found(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     wiki.mkdir()
@@ -1382,7 +1382,7 @@ Expected: 4 new FAIL (`_commands` missing).
 
 - [ ] **Step 3: Create _commands.py with promote**
 
-Create `src/kb_mcp/cli/wiki_review/_commands.py`:
+Create `src/kb/cli/wiki_review/_commands.py`:
 
 ```python
 """Subcommand implementations for kb-wiki-review.
@@ -1396,7 +1396,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from kb_mcp.cli.wiki_review import _store
+from kb.cli.wiki_review import _store
 
 
 def _err(msg: str) -> None:
@@ -1438,7 +1438,7 @@ Expected: all PASS.
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki_review/_commands.py test/test_wiki_review.py
+git add src/kb/cli/wiki_review/_commands.py test/test_wiki_review.py
 git commit -m "feat(wiki-review): promote subcommand
 
 Transitions not_processed → pending_for_approve. Rejects calls from
@@ -1452,7 +1452,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ## Task 9: `approve` subcommand
 
 **Files:**
-- Modify: `src/kb_mcp/cli/wiki_review/_commands.py`
+- Modify: `src/kb/cli/wiki_review/_commands.py`
 - Test: `test/test_wiki_review.py`
 
 - [ ] **Step 1: Write failing tests for approve**
@@ -1461,7 +1461,7 @@ Append to `test/test_wiki_review.py`:
 
 ```python
 def test_approve_with_feedback_arg(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     wiki = tmp_path / "wiki"
     page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
@@ -1474,7 +1474,7 @@ def test_approve_with_feedback_arg(tmp_path):
 
 
 def test_approve_empty_feedback_skips_section(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     wiki = tmp_path / "wiki"
     page = _make_page(wiki, "entity", "Foo", status="pending_for_approve")
@@ -1485,7 +1485,7 @@ def test_approve_empty_feedback_skips_section(tmp_path):
 
 
 def test_approve_errors_on_not_processed(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "Foo", status="not_processed")
@@ -1495,7 +1495,7 @@ def test_approve_errors_on_not_processed(tmp_path, capsys):
 
 
 def test_approve_errors_on_already_approved(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "Foo", status="approved")
@@ -1511,7 +1511,7 @@ Expected: 4 new FAIL.
 
 - [ ] **Step 3: Add cmd_approve to _commands.py**
 
-First, add the `_feedback` import alongside the existing imports at the top of `src/kb_mcp/cli/wiki_review/_commands.py`. The import block should now read:
+First, add the `_feedback` import alongside the existing imports at the top of `src/kb/cli/wiki_review/_commands.py`. The import block should now read:
 
 ```python
 from __future__ import annotations
@@ -1519,7 +1519,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from kb_mcp.cli.wiki_review import _feedback, _store
+from kb.cli.wiki_review import _feedback, _store
 ```
 
 Then append the function at the end of the file:
@@ -1555,7 +1555,7 @@ Expected: all PASS.
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki_review/_commands.py test/test_wiki_review.py
+git add src/kb/cli/wiki_review/_commands.py test/test_wiki_review.py
 git commit -m "feat(wiki-review): approve subcommand
 
 Transitions pending_for_approve → approved. Appends a User Feedback
@@ -1570,7 +1570,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ## Task 10: `reject` subcommand (with `git mv` to `data/rejected/`)
 
 **Files:**
-- Modify: `src/kb_mcp/cli/wiki_review/_commands.py`, `_store.py` (add a rejection helper)
+- Modify: `src/kb/cli/wiki_review/_commands.py`, `_store.py` (add a rejection helper)
 - Test: `test/test_wiki_review.py`
 
 - [ ] **Step 1: Write failing tests for reject**
@@ -1593,7 +1593,7 @@ def _init_data_repo(data_dir: Path) -> None:
 
 
 def test_reject_moves_file_to_rejected_tree(tmp_path):
-    from kb_mcp.cli.wiki_review import _commands, _store
+    from kb.cli.wiki_review import _commands, _store
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -1624,7 +1624,7 @@ def test_reject_moves_file_to_rejected_tree(tmp_path):
 
 
 def test_reject_errors_on_not_pending(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -1640,7 +1640,7 @@ def test_reject_errors_on_not_pending(tmp_path, capsys):
 
 
 def test_reject_collision_errors(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -1670,7 +1670,7 @@ Expected: 3 new FAIL.
 
 - [ ] **Step 3: Add cmd_reject to _commands.py**
 
-First, add `import subprocess` to the top-of-file imports in `src/kb_mcp/cli/wiki_review/_commands.py`:
+First, add `import subprocess` to the top-of-file imports in `src/kb/cli/wiki_review/_commands.py`:
 
 ```python
 from __future__ import annotations
@@ -1679,7 +1679,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from kb_mcp.cli.wiki_review import _feedback, _store
+from kb.cli.wiki_review import _feedback, _store
 ```
 
 Then append the function at the end of the file:
@@ -1770,7 +1770,7 @@ Expected: all PASS.
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki_review/_commands.py test/test_wiki_review.py
+git add src/kb/cli/wiki_review/_commands.py test/test_wiki_review.py
 git commit -m "feat(wiki-review): reject subcommand with git mv to data/rejected/
 
 Updates frontmatter (review_status: rejected, rejected_at, rejected_by)
@@ -1786,7 +1786,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ## Task 11: `list` and `ttl-sweep` subcommands
 
 **Files:**
-- Modify: `src/kb_mcp/cli/wiki_review/_commands.py`
+- Modify: `src/kb/cli/wiki_review/_commands.py`
 - Test: `test/test_wiki_review.py`
 
 - [ ] **Step 1: Write failing tests for list**
@@ -1795,7 +1795,7 @@ Append to `test/test_wiki_review.py`:
 
 ```python
 def test_list_filters_by_status(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "A", status="not_processed", created="2026-05-15")
@@ -1811,7 +1811,7 @@ def test_list_filters_by_status(tmp_path, capsys):
 
 
 def test_list_all_status(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "A", status="not_processed")
@@ -1825,7 +1825,7 @@ def test_list_all_status(tmp_path, capsys):
 
 
 def test_list_counts(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "A", status="not_processed")
@@ -1847,7 +1847,7 @@ Append to `test/test_wiki_review.py`:
 
 ```python
 def test_ttl_sweep_rejects_old_not_processed(tmp_path, capsys):
-    from kb_mcp.cli.wiki_review import _commands
+    from kb.cli.wiki_review import _commands
 
     data = tmp_path / "data"
     _init_data_repo(data)
@@ -1888,7 +1888,7 @@ Expected: 4 new FAIL.
 
 - [ ] **Step 4: Add cmd_list and cmd_ttl_sweep**
 
-First, add `datetime` and `Counter` to the top-of-file imports in `src/kb_mcp/cli/wiki_review/_commands.py`:
+First, add `datetime` and `Counter` to the top-of-file imports in `src/kb/cli/wiki_review/_commands.py`:
 
 ```python
 from __future__ import annotations
@@ -1899,7 +1899,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from kb_mcp.cli.wiki_review import _feedback, _store
+from kb.cli.wiki_review import _feedback, _store
 ```
 
 Then append the function at the end of the file:
@@ -1996,7 +1996,7 @@ Expected: all PASS.
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki_review/_commands.py test/test_wiki_review.py
+git add src/kb/cli/wiki_review/_commands.py test/test_wiki_review.py
 git commit -m "feat(wiki-review): list and ttl-sweep subcommands
 
 list filters pages by review_status (default pending_for_approve) and
@@ -2012,7 +2012,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ## Task 12: CLI entry point — argparse dispatch
 
 **Files:**
-- Modify: `src/kb_mcp/cli/wiki_review/__init__.py`
+- Modify: `src/kb/cli/wiki_review/__init__.py`
 - Modify: `pyproject.toml` (add scripts entry)
 - Test: `test/test_wiki_review.py`
 
@@ -2022,17 +2022,17 @@ Append to `test/test_wiki_review.py`:
 
 ```python
 def test_main_dispatch_list(tmp_path, capsys, monkeypatch):
-    from kb_mcp.cli import wiki_review
+    from kb.cli import wiki_review
 
     wiki = tmp_path / "wiki"
     _make_page(wiki, "entity", "A", status="pending_for_approve")
 
     # Force REPO_ROOT to our tmp tree.
     monkeypatch.setattr(
-        "kb_mcp.cli.wiki_review._store.WIKI_DIR", wiki
+        "kb.cli.wiki_review._store.WIKI_DIR", wiki
     )
     monkeypatch.setattr(
-        "kb_mcp.cli.wiki_review._store.REJECTED_DIR", tmp_path / "rejected"
+        "kb.cli.wiki_review._store.REJECTED_DIR", tmp_path / "rejected"
     )
 
     rc = wiki_review.main(["list"])
@@ -2042,7 +2042,7 @@ def test_main_dispatch_list(tmp_path, capsys, monkeypatch):
 
 
 def test_main_unknown_command(capsys):
-    from kb_mcp.cli import wiki_review
+    from kb.cli import wiki_review
 
     rc = wiki_review.main(["bogus"])
     assert rc != 0
@@ -2055,7 +2055,7 @@ Expected: 2 new FAIL (`main` missing).
 
 - [ ] **Step 3: Write the main() dispatcher**
 
-Replace `src/kb_mcp/cli/wiki_review/__init__.py`:
+Replace `src/kb/cli/wiki_review/__init__.py`:
 
 ```python
 """kb-wiki-review CLI — manage review_status lifecycle of wiki pages."""
@@ -2068,7 +2068,7 @@ import sys
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from kb_mcp.cli.wiki_review import _commands, _store
+from kb.cli.wiki_review import _commands, _store
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -2186,14 +2186,14 @@ Edit `pyproject.toml` `[project.scripts]` block (around line 36) — add the new
 
 ```toml
 [project.scripts]
-kb-lint-wiki = "kb_mcp.cli.lint_wiki:main"
-kb-lint-handoff = "kb_mcp.cli.lint_handoff:main"
-kb-wiki-index = "kb_mcp.cli.wiki_index:main"
-kb-wiki-review = "kb_mcp.cli.wiki_review:main"
-kb-tool-trace-parse = "kb_mcp.cli.tool_trace_parse:main"
-kb-opencode-daily-report = "kb_mcp.cli.opencode_daily_report:main"
-kb-hermes-daily-report = "kb_mcp.cli.hermes_daily_report:main"
-kb-claude-code-daily-report = "kb_mcp.cli.claude_code_daily_report:main"
+kb-lint-wiki = "kb.cli.lint_wiki:main"
+kb-lint-handoff = "kb.cli.lint_handoff:main"
+kb-wiki-index = "kb.cli.wiki_index:main"
+kb-wiki-review = "kb.cli.wiki_review:main"
+kb-tool-trace-parse = "kb.cli.tool_trace_parse:main"
+kb-opencode-daily-report = "kb.cli.opencode_daily_report:main"
+kb-hermes-daily-report = "kb.cli.hermes_daily_report:main"
+kb-claude-code-daily-report = "kb.cli.claude_code_daily_report:main"
 ```
 
 - [ ] **Step 5: Sync uv**
@@ -2218,7 +2218,7 @@ Expected: may fail before migration (existing pages lack review_status) or succe
 
 ```bash
 cd /home/spow12/codes/KnowledgeBase
-git add src/kb_mcp/cli/wiki_review/__init__.py pyproject.toml test/test_wiki_review.py uv.lock
+git add src/kb/cli/wiki_review/__init__.py pyproject.toml test/test_wiki_review.py uv.lock
 git commit -m "feat(wiki-review): kb-wiki-review CLI entry point
 
 argparse dispatcher for 5 subcommands (list, promote, approve, reject,

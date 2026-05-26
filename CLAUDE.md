@@ -10,7 +10,7 @@ KnowledgeBase is a memory-workflow system (v0) that captures knowledge from mult
 
 ```
 KnowledgeBase/                    # Outer repo: code, lint, templates, docs
-├── src/kb_mcp/                   # CLI tools + FastAPI web server
+├── src/kb/                   # CLI tools + FastAPI web server
 │   ├── cli/
 │   │   ├── lint_wiki.py          # kb-lint-wiki command
 │   │   ├── lint_handoff.py       # kb-lint-handoff command

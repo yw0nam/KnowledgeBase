@@ -10,14 +10,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from kb_mcp import REPO_ROOT as BASEDIR
-from kb_mcp.cli.usage_reports.collect import (
+from kb import REPO_ROOT as BASEDIR
+from kb.cli.usage_reports.collect import (
     DEFAULT_HERMES_DB,
     DEFERRED_METRICS,
     _collect_hermes,
     _pct,
 )
-from kb_mcp.cli.usage_reports.render import (
+from kb.cli.usage_reports.render import (
     _fmt,
     _hourly_lines,
     _int,

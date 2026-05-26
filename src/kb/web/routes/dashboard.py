@@ -38,7 +38,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from kb_mcp.web.routes._aggregate import (
+from kb.web.routes._aggregate import (
     AUTO_REJECT_TTL_DAYS,
     KST,
     _build_activity,

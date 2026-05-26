@@ -12,7 +12,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from kb_mcp import REPO_ROOT
+from kb import REPO_ROOT
 
 
 @dataclass(frozen=True)

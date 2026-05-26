@@ -19,7 +19,7 @@ This SKILL replaces the doc-load pattern where each cron agent re-read 6 markdow
 
 For new atomic wiki pages, import `wiki-authoring` as the canonical page-authoring contract. Handoff authoring is delegated to `handoff-document` — invoke that skill for the period handoff. This skill does not duplicate handoff schema.
 
-If anything below contradicts the lint code (`src/kb_mcp/cli/wiki/validators.py`), the lint code wins — file an issue and update this skill.
+If anything below contradicts the lint code (`src/kb/cli/wiki/validators.py`), the lint code wins — file an issue and update this skill.
 
 ## Period Dispatch — find your period BEFORE reading sections
 
