@@ -14,6 +14,8 @@ other write surface is localhost-only.
 from __future__ import annotations
 
 import os
+import secrets
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -75,12 +77,9 @@ def list_dispatches(
 
 
 class StatusPushBody(BaseModel):
-    status: str
+    status: Literal["in_progress", "done", "failed", "cancelled"]
     result_payload: dict | None = None
     occurred_at: str | None = None
-
-
-_ALLOWED_PUSH_STATUSES = frozenset({"in_progress", "done", "failed", "cancelled"})
 
 
 @router.post("/dispatches/{dispatch_id}/status")
@@ -96,13 +95,16 @@ def post_status(
             status_code=500,
             detail="KB_API_TOKEN env var not set; status push disabled",
         )
-    header = request.headers.get("authorization") or ""
-    scheme, _, token = header.partition(" ")
-    if scheme.lower() != "bearer" or token != expected:
+    # Header parsing: require the canonical "Bearer <token>" shape and
+    # trim any extra whitespace before the constant-time comparison.
+    # compare_digest demands equal-length operands; an empty `provided`
+    # short-circuits to 401 before we hit it.
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="invalid bearer token")
-
-    if body.status not in _ALLOWED_PUSH_STATUSES:
-        raise HTTPException(status_code=422, detail=f"invalid status {body.status!r}")
+    provided = header[len("Bearer ") :].strip()
+    if not provided or not secrets.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="invalid bearer token")
 
     try:
         row = dispatch_repo.update_status(

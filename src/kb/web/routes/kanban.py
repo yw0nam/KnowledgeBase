@@ -20,6 +20,7 @@ import json
 import time
 from pathlib import Path
 
+import yaml
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
@@ -74,7 +75,7 @@ def get_kanban_boards() -> dict:
         boards = _fetch_boards_cached()
     except _kanban.HermesUnavailable:
         raise HTTPException(
-            status_code=503,
+            status_code=502,
             detail="Hermes kanban is not reachable. Is the daemon running?",
         )
     except _kanban.HermesRejected as exc:
@@ -144,8 +145,6 @@ def send_page_to_kanban(
             status_code=409,
             detail=f"page {stem!r} has no parseable frontmatter",
         )
-    import yaml
-
     try:
         fm = yaml.safe_load(parts[0]) or {}
     except yaml.YAMLError as exc:
@@ -167,7 +166,7 @@ def send_page_to_kanban(
         boards = _fetch_boards_cached()
     except _kanban.HermesUnavailable:
         raise HTTPException(
-            status_code=503,
+            status_code=502,
             detail="Hermes kanban is not reachable. Is the daemon running?",
         )
     except _kanban.HermesRejected as exc:
@@ -199,15 +198,20 @@ def send_page_to_kanban(
         )
     except _kanban.HermesUnavailable:
         raise HTTPException(
-            status_code=503,
+            status_code=502,
             detail="Hermes kanban is not reachable. Is the daemon running?",
         )
     except _kanban.HermesRejected as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    # Step 6: persist the dispatch row. No frontmatter write. On DB
-    # failure the card becomes orphaned — we report the id so the
-    # operator can `hermes kanban archive` it manually.
+    # Step 6: persist the dispatch row. No frontmatter write. The only
+    # realistic non-success path is a UNIQUE collision on
+    # (external_board_id, external_task_id), which surfaces here as
+    # IntegrityError; on that path the card is orphaned and we report
+    # its id so the operator can `hermes kanban archive` it manually.
+    # Anything else (programming bug, DB outage) bubbles to FastAPI's
+    # default 500 handler with the real traceback — deliberately not
+    # swallowed.
     dispatched_at = now_iso_kst()
     try:
         row = dispatch_repo.create_dispatch(
@@ -222,14 +226,6 @@ def send_page_to_kanban(
             dispatched_at=dispatched_at,
         )
     except IntegrityError:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "detail": "DB insert failed after card creation",
-                "external_task_id": card.task_id,
-            },
-        )
-    except Exception:
         raise HTTPException(
             status_code=500,
             detail={

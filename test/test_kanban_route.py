@@ -1,7 +1,7 @@
 """Route tests for kanban dispatch endpoints.
 
-Covers GET /api/kanban/boards (success, cache hit, 503) and
-POST /api/pages/{stem}/send-to-kanban (success, 404, 409, 400, 503).
+Covers GET /api/kanban/boards (success, cache hit, 502) and
+POST /api/pages/{stem}/send-to-kanban (success, 404, 409, 400, 502).
 
 Helpers in ``_kanban`` are monkeypatched so no real subprocess runs.
 The page fixture mirrors the spec's improvement-page shape. The
@@ -142,7 +142,7 @@ def test_get_boards_uses_cache_on_second_call(
     assert state["calls"] == 1
 
 
-def test_get_boards_503_on_hermes_unavailable(
+def test_get_boards_502_on_hermes_unavailable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def boom():
@@ -150,7 +150,7 @@ def test_get_boards_503_on_hermes_unavailable(
 
     monkeypatch.setattr(_kanban, "list_boards", boom)
     resp = client.get("/api/kanban/boards")
-    assert resp.status_code == 503
+    assert resp.status_code == 502
     assert "Hermes" in resp.json()["detail"]
 
 
@@ -250,7 +250,7 @@ def test_send_to_kanban_400_when_board_unknown(
     assert resp.status_code == 400
 
 
-def test_send_to_kanban_503_when_hermes_down(
+def test_send_to_kanban_502_when_hermes_down(
     client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write_improvement_page(data_dir, "Foo")
@@ -260,7 +260,7 @@ def test_send_to_kanban_503_when_hermes_down(
 
     monkeypatch.setattr(_kanban, "list_boards", boom)
     resp = client.post("/api/pages/Foo/send-to-kanban", json={"board_slug": "kb-main"})
-    assert resp.status_code == 503
+    assert resp.status_code == 502
 
 
 def test_send_to_kanban_invalidates_cache_on_success(
