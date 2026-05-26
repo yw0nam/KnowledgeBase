@@ -31,6 +31,7 @@ Keep entries concise and user/operator-facing. Avoid tool traces, lint output, h
 - Updated the cron-wrapup template and optional digest prompt to consume the expanded summary contract.
 - Clarified that `kb-cron-wrapup` commits only nested `data/` repo outputs after successful lint, while the optional global digest remains read-only and report-only.
 - Cron wrappers now write per-run logs to `data/raw/ops/cron/{YYYY}/{MM}/{TARGET}_kb-<job>.log` instead of appending to `.cron/logs/<job>.log`. The cron wrap-up reads each target's per-run files directly and stages them with its data commit. The `kb-cron-wrapup` wrapper itself still logs to `.cron/logs/cron-wrapup.log` to avoid staging an in-flight file during its own commit.
+- Aligned the root `CLAUDE.md` cron-wrapup skill summary with the current per-run cron evidence path under `data/raw/ops/cron/`.
 
 ### Fixed
 

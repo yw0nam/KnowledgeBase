@@ -109,7 +109,7 @@ Project skills live under `.claude/skills/`, auto-load by description match, and
 - `usage-report-setup` — select and wire source-specific OpenCode/Hermes/Claude Code usage report jobs.
 - `handoff-document` — write or update handoff documents under `data/handoffs/` with lintable frontmatter, filename grammar, and canonical body sections.
 - `memory-report` — daily, weekly, or monthly memory workflow (period dispatch inside the skill). Imports `wiki-authoring` for page edits and `handoff-document` for run handoffs.
-- `cron-wrapup` — nightly KB cron wrap-up. Aggregates the previous day's usage reports, memory page, wiki-promote/TTL outcomes, and `.cron/logs/` exit states into a single Slack-digest-stable `wiki/summaries/.../{date}-cron-wrapup.md` plus run handoff. Runtime contract for the 05:00 cron job.
+- `cron-wrapup` — nightly KB cron wrap-up. Aggregates the previous day's usage reports, memory page, wiki-promote/TTL outcomes, and per-run cron evidence from `data/raw/ops/cron/{YYYY}/{MM}/{date}_kb-*.log` into a single Slack-digest-stable `wiki/summaries/.../{date}-cron-wrapup.md` plus run handoff. Runtime contract for the 05:00 cron job.
 
 ## Documentation
 
