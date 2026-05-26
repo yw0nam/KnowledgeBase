@@ -61,11 +61,11 @@ Enable only selected sources.
 Each wrapper must:
 
 1. Resolve `KB_ROOT` from the script location.
-2. Create `.cron/logs` and `.cron/locks`.
+2. Create `.cron/locks`.
 3. Use a source-specific `flock` lock.
 4. Compute target date in KST as yesterday.
-5. Run the source-specific report command with `--lint`.
-6. Write process logs to `.cron/logs/<source>-daily-report.log`.
+5. Compute `LOG_FILE="$KB_ROOT/data/raw/ops/cron/$(TZ=Asia/Seoul date -d "$TARGET_DATE" +%Y/%m)/${TARGET_DATE}_kb-<source>-daily-report.log"` and `mkdir -p` its parent.
+6. Run the source-specific report command with `--lint`, redirecting stdout/stderr to `$LOG_FILE`.
 7. Exit non-zero if the report command fails.
 
 Example command inside a wrapper:

@@ -14,8 +14,7 @@ The digest should consume only:
 It should not read:
 
 - `data/wiki/summaries/.../*-memory.md`
-- `data/raw/`
-- `.cron/logs/`
+- `data/raw/` (including `data/raw/ops/cron/` — that is the wrap-up's input, not the digest's)
 - individual usage report pages
 
 ## Recommended Schedule
