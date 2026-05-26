@@ -155,33 +155,42 @@ export interface WikiEditsResponse {
   total: number;
 }
 
-// GET /api/pages/{stem}/timeline event. Discriminated by `kind`:
-//   - 'edit'           : wiki_edits row.
-//   - 'dispatched'     : the moment a dispatch was created.
-//   - 'status:<status>': last status push for a dispatch (no per-
-//                        transition history; see spec §6.4).
+// GET /api/pages/{stem}/timeline event. The backend's `kind` value
+// is either 'edit', 'dispatched', or 'status:<status>' (e.g.
+// 'status:done'). The status:* form keeps the FE from caring about
+// the specific transition vocabulary — render anything after the
+// colon as the new state.
+export interface TimelineEditEvent {
+  kind: 'edit';
+  at: string;
+  field: string;
+  old_value: unknown;
+  new_value: unknown;
+  source: string;
+}
+
+export interface TimelineDispatchEvent {
+  kind: 'dispatched';
+  at: string;
+  dispatch_id: number;
+  external_task_id: string;
+}
+
+export interface TimelineStatusEvent {
+  // Literally `status:<status>` (the backend never returns bare
+  // 'status'). The FE strips the prefix at render time. Typed as a
+  // template literal so the union discriminator stays clean against
+  // the 'edit'/'dispatched' variants.
+  kind: `status:${string}`;
+  at: string;
+  dispatch_id: number;
+  external_task_id: string;
+}
+
 export type TimelineEvent =
-  | {
-      kind: 'edit';
-      at: string;
-      field: string;
-      old_value: unknown;
-      new_value: unknown;
-      source: string;
-    }
-  | {
-      kind: 'dispatched';
-      at: string;
-      dispatch_id: number;
-      external_task_id: string;
-    }
-  | {
-      // `kind` is literally `status:<status>` (e.g. `status:done`).
-      kind: string;
-      at: string;
-      dispatch_id: number;
-      external_task_id: string;
-    };
+  | TimelineEditEvent
+  | TimelineDispatchEvent
+  | TimelineStatusEvent;
 
 export interface TimelineResponse {
   items: TimelineEvent[];
