@@ -63,6 +63,14 @@ export function fetchQueue(): Promise<QueueResponse> {
   return getJson<QueueResponse>('/api/queue');
 }
 
+// GET /api/pages/{stem} — full page with body. Used by the Decisions
+// browser to render markdown in the center panel without dragging in
+// the whole queue payload. 404 means the page is no longer on disk
+// (commonly: rejected and moved to data/rejected/).
+export function fetchPageWithBody(stem: string): Promise<ReviewPage> {
+  return getJson<ReviewPage>(`/api/pages/${encodeURIComponent(stem)}`);
+}
+
 interface DecisionResponse {
   stem: string;
   status: 'approved' | 'rejected';

@@ -1,17 +1,20 @@
 // Decisions tab. Spec §7.2 + §7.3:
 //   - Top: tab + filter row over the live URL state.
-//   - Center: paginated list. Row click opens PageInspector.
+//   - Left: paginated list. Row click opens body + PageInspector.
+//   - Center: markdown body of the selected page (read-only) — added
+//     to let the user decide without opening an external editor.
 //   - Right: PageInspector (push-rail; overlay <1100px).
 //   - `?` overlay toggle, leader nav (g p / g d / g a), j/k row nav.
 
 import { useCallback, useEffect, useState } from 'react';
-import { fetchDecisions } from './api';
+import { ApiError, fetchDecisions, fetchPageWithBody } from './api';
 import { useUrlFilters, type DecisionsTab } from './hooks/useUrlFilters';
 import { DecisionsFilter } from './components/DecisionsFilter';
 import { DecisionsList } from './components/DecisionsList';
+import { PageDetail } from './components/PageDetail';
 import { PageInspector } from './components/PageInspector';
 import { KeyboardHelpOverlay } from './components/KeyboardHelpOverlay';
-import type { Decision, FrontmatterPatchResponse } from './types';
+import type { Decision, FrontmatterPatchResponse, ReviewPage } from './types';
 import styles from './DecisionsPage.module.css';
 
 interface Props {
@@ -31,6 +34,13 @@ const TAB_TO_REVIEW_STATUS: Record<DecisionsTab, string> = {
   unprocessed: 'not_processed',
 };
 
+type BodyState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; page: ReviewPage }
+  | { kind: 'missing' }
+  | { kind: 'error'; message: string };
+
 export function DecisionsPage({ onReviewStatusChange }: Props = {}) {
   const filters = useUrlFilters();
 
@@ -42,6 +52,7 @@ export function DecisionsPage({ onReviewStatusChange }: Props = {}) {
   const [reloadKey, setReloadKey] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
   const [approvedTotal, setApprovedTotal] = useState<number | null>(null);
+  const [bodyState, setBodyState] = useState<BodyState>({ kind: 'idle' });
 
   // Build the query from the current filters + tab. The "Dispatched"
   // sub-tab is server-filtered via has_dispatch=true so total +
@@ -115,6 +126,38 @@ export function DecisionsPage({ onReviewStatusChange }: Props = {}) {
   }, [reloadKey]);
 
   const selected = items.find((d) => d.stem === filters.stem) ?? null;
+
+  // Fetch the markdown body for the selected stem. Race-safe via the
+  // cancelled flag so a rapid j/k stream always lands on the latest
+  // selection. `reloadKey` re-fetches after a frontmatter save so the
+  // frontmatter strip in PageDetail stays truthful.
+  useEffect(() => {
+    if (!filters.stem) {
+      setBodyState({ kind: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setBodyState({ kind: 'loading' });
+    fetchPageWithBody(filters.stem)
+      .then((page) => {
+        if (cancelled) return;
+        setBodyState({ kind: 'ready', page });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 404) {
+          setBodyState({ kind: 'missing' });
+          return;
+        }
+        setBodyState({
+          kind: 'error',
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.stem, reloadKey]);
 
   // Auto-select the first row when nothing is selected and the
   // current selection no longer matches the loaded list. Keeps the
@@ -190,6 +233,11 @@ export function DecisionsPage({ onReviewStatusChange }: Props = {}) {
           />
         )}
       </main>
+      <section className={styles.center} aria-label="Page body">
+        <div className={styles.centerInner}>
+          <BodyPanel state={bodyState} hasSelection={!!filters.stem} />
+        </div>
+      </section>
       {selected ? (
         <PageInspector
           decision={selected}
@@ -199,5 +247,49 @@ export function DecisionsPage({ onReviewStatusChange }: Props = {}) {
       ) : null}
       <KeyboardHelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
+  );
+}
+
+interface BodyPanelProps {
+  state: BodyState;
+  hasSelection: boolean;
+}
+
+function BodyPanel({ state, hasSelection }: BodyPanelProps) {
+  if (state.kind === 'ready') {
+    return <PageDetail page={state.page} />;
+  }
+  if (state.kind === 'loading') {
+    return (
+      <p className={styles.systemLine} role="status">
+        Loading body…
+      </p>
+    );
+  }
+  if (state.kind === 'missing') {
+    return (
+      <p className={styles.systemLine}>
+        Page not found on disk. It may have been moved to <code>rejected/</code> or
+        deleted by the TTL sweep.
+      </p>
+    );
+  }
+  if (state.kind === 'error') {
+    return (
+      <p className={styles.systemLine} role="alert">
+        Could not load page body.
+        <span className={styles.systemLineSub}>{state.message}</span>
+      </p>
+    );
+  }
+  // idle — either initial mount with no ?stem= in URL, or all filters
+  // cleared. The list auto-selects the first row when one exists, so
+  // this lands only when the list is empty too.
+  return (
+    <p className={styles.systemLine}>
+      {hasSelection
+        ? 'Loading body…'
+        : 'Select a page from the list to read its content.'}
+    </p>
   );
 }
