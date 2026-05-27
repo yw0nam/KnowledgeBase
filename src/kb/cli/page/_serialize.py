@@ -36,7 +36,8 @@ def parse_frontmatter(fm: dict) -> ParsedPage:
     extra: dict[str, object] = {}
     for key, value in fm.items():
         if key in TYPED_COLUMNS:
-            typed[key] = value
+            if value is not None:
+                typed[key] = value
         elif key in JOIN_FIELDS:
             joins[key] = list(value or [])
         else:
@@ -57,7 +58,13 @@ def _dump_scalar_or_list(key: str, value: object) -> str:
 
 
 def render_block(page: ParsedPage) -> str:
-    """Render the deterministic frontmatter block (no surrounding fences)."""
+    """Render the deterministic frontmatter block (no surrounding fences).
+
+    Returns the block WITHOUT surrounding ``---`` fences; callers add the
+    fences. Do not feed a fenced string directly to ``yaml.safe_load`` --
+    strip the fences first (a trailing ``---`` reads as a second YAML
+    document).
+    """
     lines: list[str] = [MARKER]
     join_values = {"tags": page.tags, "sources": page.sources, "aliases": page.aliases}
     for slot in RENDER_ORDER:
