@@ -4,15 +4,15 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from kb.db import make_engine
 
 
 @pytest.fixture()
-def migrated_engine(tmp_path: Path):
+def migrated_engine(tmp_path, monkeypatch):
+    monkeypatch.setenv("KB_DATA_DIR", str(tmp_path))
     cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    import os
-    os.environ["KB_DATA_DIR"] = str(tmp_path)
     command.upgrade(cfg, "head")
     return make_engine(tmp_path)
 
@@ -34,7 +34,7 @@ def test_pages_tables_exist(migrated_engine):
 def test_review_status_presence_check(migrated_engine):
     # summary must have NULL review_status; entity must have non-NULL.
     with migrated_engine.begin() as c:
-        with pytest.raises(Exception):
+        with pytest.raises(IntegrityError):
             c.execute(
                 text(
                     "INSERT INTO pages(stem,rel_path,type,review_status,created,updated)"
