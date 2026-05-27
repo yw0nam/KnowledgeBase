@@ -67,18 +67,19 @@ data/
 │   ├── {TARGET}_kb-wiki-promote.log
 │   ├── {TARGET}_kb-memory-weekly.log       # exists on Monday (after weekly run for prior ISO week)
 │   └── {TARGET}_kb-memory-monthly.log      # exists on day 1 (after monthly run for prior month)
+│   └── {TARGET}_kb-cron-wrapup.log         # committed by the shell wrapper AFTER session exits
 └── log.md
-
-.cron/logs/cron-wrapup.log                  # wrap-up's OWN log stays here (not data/raw/),
-                                            # because it is still being written during the
-                                            # commit step. Do not read or stage it.
 ```
+
+> **Note:** `{TARGET}_kb-cron-wrapup.log` does not exist inside `data/` while the session is running.
+> The shell wrapper commits it to `data/raw/ops/cron/` in a follow-up commit after the session exits.
+> Do not read or stage it during the session.
 
 `sources:` frontmatter paths are **relative to `data/`** (e.g. `wiki/summaries/...`, NOT `data/wiki/summaries/...`).
 
 Every wrapper uses `TARGET_DATE` (= yesterday in KST) as the filename prefix, even when its workflow target is a week or month — so the daily wrap-up's glob `{TARGET}_*.log` matches every wrapper that ran in last night's pipeline. The actual weekly/monthly period stays in the log body and the produced wiki page.
 
-Per-run log files replace the legacy append-only `.cron/logs/<job>.log`. Each run writes its own immutable file, so the wrap-up reads exactly one file per job per target — no time-window grep required.
+Each run writes its own immutable log file, so the wrap-up reads exactly one file per job per target — no time-window grep required.
 
 ## Wiki Summary Schema (the only thing lint ERRORs you for)
 
@@ -258,7 +259,7 @@ This skill specifies only:
 2. Locate inputs: 3 usage pages, memory page, daily handoff, promote handoff (optional),
    per-run cron logs at `raw/ops/cron/{Y}/{M}/{TARGET}_*.log`. Note any MISSING required input → Status: FAILED later.
 3. Extract per-input metrics (see Inputs table). Compute Counters.
-4. Read every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` (the wrap-up's own log lives at `.cron/logs/cron-wrapup.log`, outside this folder — do not read it)
+4. Read every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` except `{TARGET}_kb-cron-wrapup.log` — that file does not exist during the session (the shell wrapper writes and commits it after the session exits, so it is never available to read here)
    for non-zero exits, ERRORs, lock skips. Collect into Anomalies.
 5. Compute Status verdict (FAILED > DEGRADED > OK, first match wins).
 6. Copy reference/templates/cron-wrapup-summary.md → write
@@ -277,7 +278,7 @@ This skill specifies only:
 Rules:
 
 - Commit only inside `data/` with `git -C data ...`.
-- Include the wrap-up summary, run handoff, `data/log.md`, regenerated `wiki/INDEX.md`, any same-run report/memory artefacts that are still uncommitted and are required by the wrap-up sources, and every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` for the target. The wrap-up's own log lives at `.cron/logs/cron-wrapup.log` (outside `data/`) — it is never staged.
+- Include the wrap-up summary, run handoff, `data/log.md`, regenerated `wiki/INDEX.md`, any same-run report/memory artefacts that are still uncommitted and are required by the wrap-up sources, and every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` for the target — **excluding** `{TARGET}_kb-cron-wrapup.log`, which does not exist yet during the session and is committed by the shell wrapper in a follow-up commit after the session exits.
 - Commit only after `kb-wiki-index`, `kb-lint-wiki --check-immutability`, and `kb-lint-handoff` all exit 0.
 - Use commit message `cron-wrapup: {TARGET}`.
 - Never push.
@@ -309,7 +310,7 @@ If a required input is missing (e.g. memory page never wrote):
 
 ## Red Flags — STOP and re-check
 
-- About to read any cron log other than `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` → STOP. The wrap-up summarizes exactly this target's per-run files; no time-window scan. (`.cron/logs/cron-wrapup.log` is the wrap-up's own runtime log — never read it.)
+- About to read any cron log other than `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` → STOP. The wrap-up summarizes exactly this target's per-run files; no time-window scan. (`{TARGET}_kb-cron-wrapup.log` does not exist during the session — the shell wrapper creates and commits it after the session exits; never read or stage it.)
 - About to `git add` something under `raw/ops/cron/` for a TARGET other than the one you are wrapping up → STOP. Stage only this target's per-run logs.
 - About to re-render the full memory page into the wrap-up → STOP. Extract only concise insights and action items.
 - About to rename or reorder one of the seven H2 sections → STOP. The Slack digest will break.

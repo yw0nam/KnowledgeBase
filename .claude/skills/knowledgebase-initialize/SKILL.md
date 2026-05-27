@@ -168,7 +168,7 @@ Only after approval:
 
 1. Create or update wrapper scripts under `scripts/cron/`.
 2. Make wrappers executable.
-3. Each wrapper writes its run log to `data/raw/ops/cron/{YYYY}/{MM}/{TARGET}_kb-<job>.log` (where YYYY/MM derives from TARGET_DATE). The `kb-cron-wrapup` wrapper is the exception — it logs to `.cron/logs/cron-wrapup.log` because its log is still being written during the wrap-up's own commit step.
+3. Each wrapper writes its run log to `data/raw/ops/cron/{YYYY}/{MM}/{TARGET}_kb-<job>.log` (where YYYY/MM derives from TARGET_DATE). The `kb-cron-wrapup` wrapper writes to `.cron/logs/cron-wrapup.log` during the session, then commits it to `data/raw/ops/cron/` in a follow-up commit after the session exits.
 4. Keep locks in `.cron/locks/`.
 5. Show scheduler entries for the selected backend, or install/register them only if the user explicitly asks.
 
