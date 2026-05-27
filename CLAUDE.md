@@ -27,7 +27,7 @@ KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 ├── scripts/
 │   ├── ingest-github.sh          # GitHub source collection
 │   └── dev-web.sh                # Start FastAPI + Vite together
-├── templates/raw/                # Raw source frontmatter templates
+├── docs/raw/                # Raw source frontmatter templates
 ├── .claude/skills/               # Runtime workflow contracts + bundled templates
 ├── pyproject.toml
 ├── CLAUDE.md                     # This file

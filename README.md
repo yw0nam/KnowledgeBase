@@ -19,7 +19,7 @@ KnowledgeBase/
 │   ├── wiki-approval/              review_status lifecycle workflow
 │   ├── knowledgebase-initialize/   Setup workflow
 │   └── usage-report-setup/         Usage report mode workflow
-├── templates/raw/                Raw source frontmatter templates
+├── docs/raw/                Raw source frontmatter templates
 ├── CLAUDE.md                     LLM entry point and project skill map
 ├── README.md                     This file
 └── .gitignore                    Excludes data/

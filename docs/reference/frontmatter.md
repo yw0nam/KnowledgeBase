@@ -22,7 +22,7 @@ tags: []
 ---
 ```
 
-Use `templates/raw/` for raw frontmatter skeletons.
+Use `docs/raw/` for raw frontmatter skeletons.
 
 ## 3. Runtime Schemas
 
