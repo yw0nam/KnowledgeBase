@@ -52,9 +52,12 @@ export function useUrlFilters(): UrlFilters {
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
 
   const tab = parseTab(params.get('tab'));
-  const type = readMulti(params, 'type');
-  const category = readMulti(params, 'category');
-  const source = readMulti(params, 'source');
+  // Memo the arrays on the raw URL search string. Without this every
+  // render returns fresh array identities, and consumers that list
+  // them in useEffect deps (DecisionsPage) refetch on every render.
+  const type = useMemo(() => readMulti(params, 'type'), [params]);
+  const category = useMemo(() => readMulti(params, 'category'), [params]);
+  const source = useMemo(() => readMulti(params, 'source'), [params]);
   const editedSince = params.get('edited_since');
   const stem = params.get('stem');
 
@@ -81,10 +84,6 @@ export function useUrlFilters(): UrlFilters {
     [replace],
   );
 
-  // setType / setCategory / setSource are memoized over `replace`
-  // so consumers that read filters.setType from useEffect deps don't
-  // re-fire on every parent render. The whole `filters` object still
-  // re-renders fresh, but the inner callbacks are stable.
   const setType = useCallback(
     (next: string[]) => {
       replace((p) => {
