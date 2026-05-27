@@ -40,9 +40,36 @@ def test_import_all_populates_db_and_is_idempotent(wiki, capsys):
 
 
 def test_import_dry_run_writes_nothing(wiki):
+    page = wiki / "wiki" / "concepts" / "a.md"
+    before = page.read_bytes()
     rc = main(["import", "--all", "--dry-run"])
     assert rc == 0
     factory = make_session_factory(make_engine(wiki))
     s = factory()
     assert page_repo.get_by_stem(s, "a") is None  # dry-run: no DB write
+    s.close()
+    assert page.read_bytes() == before  # dry-run: no file write
+
+
+def test_import_gate_blocks_real_write_on_bad_frontmatter(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("KB_DATA_DIR", str(tmp_path))
+    cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    command.upgrade(cfg, "head")
+    w = tmp_path / "wiki" / "concepts"
+    w.mkdir(parents=True)
+    # good page
+    (w / "ok.md").write_text(
+        "---\ntype: concept\nreview_status: approved\n"
+        "created: 2026-05-01\nupdated: 2026-05-01\n---\n\n# OK\n\nbody\n"
+    )
+    # malformed: frontmatter is a YAML list, not a mapping
+    (w / "bad.md").write_text("---\n- a\n- b\n---\n\n# Bad\n\nbody\n")
+
+    rc = main(["import", "--all"])  # NOT dry-run — gate must still block
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "DRY-RUN GATE FAILED" in err
+    # gate ran before any DB write: nothing imported, not even the good page
+    s = make_session_factory(make_engine(tmp_path))()
+    assert page_repo.get_by_stem(s, "ok") is None
     s.close()

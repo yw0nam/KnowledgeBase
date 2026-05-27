@@ -8,11 +8,13 @@ import sys
 from pathlib import Path
 
 import yaml
+from sqlalchemy import select
 
 from kb import REPO_ROOT
 from kb.cli.page._core import _read_split, ingest_file, render_page_file
 from kb.cli.page._serialize import parse_frontmatter, render_block
 from kb.db import make_engine, make_session_factory
+from kb.db.models import Page
 
 
 def _data_dir() -> Path:
@@ -32,7 +34,7 @@ def _iter_wiki_files(wiki_dir: Path) -> list[Path]:
 
 
 def _roundtrip_ok(path: Path) -> bool:
-    """True if re-rendering the file's parsed frontmatter is YAML-equal."""
+    """True if parsing the file, rendering, and re-parsing yields an equal ParsedPage (the zero-loss roundtrip gate)."""
     fm, _ = _read_split(path)
     parsed = parse_frontmatter(fm)
     rendered = render_block(parsed)
@@ -87,9 +89,6 @@ def _cmd_render(args: argparse.Namespace) -> int:
     session = factory()
     try:
         if args.all:
-            from kb.db.models import Page
-            from sqlalchemy import select
-
             stems = list(session.execute(select(Page.stem)).scalars().all())
         else:
             stems = [args.stem]
