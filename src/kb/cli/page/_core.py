@@ -17,29 +17,24 @@ from kb.cli.page._serialize import parse_frontmatter, render_block
 from kb.cli.wiki_review._store import _split_frontmatter, resolve_stem
 from kb.db.repos import page_repo
 
-# Date-typed columns stored as ISO strings in the DB.
-_DATE_COLUMNS: frozenset[str] = frozenset(
-    {"period_start", "period_end", "created", "updated"}
-)
+def _stringify_dates(value: object) -> object:
+    """Recursively convert date/datetime objects to ISO strings.
 
-
-def _coerce_dates(fm: dict) -> dict:
-    """Convert ISO date strings in date-typed slots back to datetime.date.
-
-    The DB stores dates as strings; yaml.safe_dump renders them with quotes
-    unless they are proper date objects. This coercion makes render_page_file
-    produce the same unquoted ``YYYY-MM-DD`` output as a fresh ingest would.
+    Frontmatter is text and the DB columns are TEXT/JSON, but yaml.safe_load
+    auto-parses bare ``YYYY-MM-DD`` scalars into date objects. Normalizing to
+    strings at the read boundary keeps the pipeline string-canonical so the
+    ingest and render write paths agree, and keeps the JSON ``extra`` column
+    serializable. (datetime is a subclass of date — check it first.)
     """
-    out = {}
-    for k, v in fm.items():
-        if k in _DATE_COLUMNS and isinstance(v, str):
-            try:
-                out[k] = datetime.date.fromisoformat(v)
-            except ValueError:
-                out[k] = v
-        else:
-            out[k] = v
-    return out
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _stringify_dates(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_stringify_dates(v) for v in value]
+    return value
 
 
 def _read_split(path: Path) -> tuple[dict, str]:
@@ -51,6 +46,7 @@ def _read_split(path: Path) -> tuple[dict, str]:
     fm = yaml.safe_load(parts[0]) or {}
     if not isinstance(fm, dict):
         raise ValueError(f"{path}: frontmatter is not a mapping")
+    fm = _stringify_dates(fm)
     return fm, parts[1]
 
 
@@ -86,8 +82,8 @@ def render_page_file(session: Session, *, wiki_dir: Path, stem: str) -> None:
     path = resolve_stem(wiki_dir, stem)
     _, body = _read_split(path)
     # parse_frontmatter drops None typed values, so no post-filter is needed.
-    # _coerce_dates converts ISO string dates back to datetime.date so that
-    # yaml.safe_dump renders them unquoted (matching what yaml.safe_load sees).
+    # The DB already returns string dates (stringified at the read boundary),
+    # so no coercion is needed here.
     raw_fm = {
         "type": row.type,
         "subtype": row.subtype,
@@ -102,7 +98,7 @@ def render_page_file(session: Session, *, wiki_dir: Path, stem: str) -> None:
         "aliases": page_repo.get_aliases(session, row.id),
         **(row.extra or {}),
     }
-    parsed = parse_frontmatter(_coerce_dates(raw_fm))
+    parsed = parse_frontmatter(raw_fm)
     _write_with_block(path, render_block(parsed), body)
 
 
