@@ -17,11 +17,23 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from kb.db.models import Base, Dispatch, WikiEdit
+from kb.db.models import (
+    Base,
+    Dispatch,
+    Page,
+    PageAlias,
+    PageSource,
+    PageTag,
+    WikiEdit,
+)
 
 __all__ = [
     "Base",
     "Dispatch",
+    "Page",
+    "PageAlias",
+    "PageSource",
+    "PageTag",
     "WikiEdit",
     "db_path",
     "make_engine",
