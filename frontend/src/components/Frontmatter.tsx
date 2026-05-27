@@ -41,12 +41,30 @@ const PRIMARY_ORDER = [
 // regression — the user sees pre-backfill state for what it is.
 const SKIP_KEYS: ReadonlySet<string> = new Set();
 
-function formatValue(value: unknown): string {
-  if (Array.isArray(value)) {
-    return value.join(', ');
-  }
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function formatScalar(value: unknown): string {
   if (value === null || value === undefined) return '—';
   return String(value);
+}
+
+function formatObject(value: Record<string, unknown>): string {
+  const entries = Object.entries(value);
+  if (entries.length === 0) return '—';
+  return entries.map(([k, v]) => `${k}=${formatScalar(v)}`).join(' · ');
+}
+
+function formatValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '—';
+    return value
+      .map((item) => (isPlainObject(item) ? formatObject(item) : formatScalar(item)))
+      .join(', ');
+  }
+  if (isPlainObject(value)) return formatObject(value);
+  return formatScalar(value);
 }
 
 export function Frontmatter({ fm }: Props) {
