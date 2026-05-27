@@ -17,6 +17,7 @@ from kb.cli.page._serialize import parse_frontmatter, render_block
 from kb.cli.wiki_review._store import _split_frontmatter, resolve_stem
 from kb.db.repos import page_repo
 
+
 def _stringify_dates(value: object) -> object:
     """Recursively convert date/datetime objects to ISO strings.
 

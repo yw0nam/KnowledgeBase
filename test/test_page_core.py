@@ -58,7 +58,7 @@ def test_ingest_and_render_converge_for_quoted_dates(env):
     data_dir, wiki, factory = env
     page = wiki / "concepts" / "q.md"
     page.write_text(
-        '---\ntype: concept\nreview_status: approved\n'
+        "---\ntype: concept\nreview_status: approved\n"
         'created: "2026-05-25"\nupdated: "2026-05-25"\n---\n\n# Q\n\nbody\n'
     )
     s = factory()

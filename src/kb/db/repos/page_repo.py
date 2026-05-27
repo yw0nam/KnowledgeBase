@@ -16,16 +16,20 @@ from sqlalchemy.orm import Session
 from kb.db.models import Page, PageAlias, PageSource, PageTag
 
 _JOIN = {"tags": PageTag, "sources": PageSource, "aliases": PageAlias}
-_JOIN_COL = {"tags": PageTag.tag, "sources": PageSource.source, "aliases": PageAlias.alias}
+_JOIN_COL = {
+    "tags": PageTag.tag,
+    "sources": PageSource.source,
+    "aliases": PageAlias.alias,
+}
 
 
 def get_by_stem(session: Session, stem: str) -> Page | None:
-    return session.execute(
-        select(Page).where(Page.stem == stem)
-    ).scalar_one_or_none()
+    return session.execute(select(Page).where(Page.stem == stem)).scalar_one_or_none()
 
 
-def _replace_join(session: Session, page_id: int, kind: str, values: Sequence[str]) -> None:
+def _replace_join(
+    session: Session, page_id: int, kind: str, values: Sequence[str]
+) -> None:
     model = _JOIN[kind]
     session.execute(delete(model).where(model.page_id == page_id))
     seen: set[str] = set()
@@ -43,9 +47,11 @@ def _field(kind: str) -> str:
 def _get_join(session: Session, page_id: int, kind: str) -> list[str]:
     col = _JOIN_COL[kind]
     model = _JOIN[kind]
-    rows = session.execute(
-        select(col).where(model.page_id == page_id).order_by(col)
-    ).scalars().all()
+    rows = (
+        session.execute(select(col).where(model.page_id == page_id).order_by(col))
+        .scalars()
+        .all()
+    )
     return list(rows)
 
 
@@ -78,8 +84,16 @@ def upsert_page(
         row = Page(stem=stem, rel_path=rel_path)
         session.add(row)
     row.rel_path = rel_path
-    for col in ("type", "subtype", "category", "review_status",
-                "period_start", "period_end", "created", "updated"):
+    for col in (
+        "type",
+        "subtype",
+        "category",
+        "review_status",
+        "period_start",
+        "period_end",
+        "created",
+        "updated",
+    ):
         setattr(row, col, typed.get(col))
     row.extra = extra or None
     session.flush()  # assigns row.id for the join writes

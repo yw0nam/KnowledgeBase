@@ -35,6 +35,7 @@ def test_import_all_populates_db_and_is_idempotent(wiki, capsys):
     s2 = make_session_factory(make_engine(wiki))()
     from sqlalchemy import func, select
     from kb.db.models import Page
+
     assert s2.execute(select(func.count(Page.id))).scalar_one() == 1
     s2.close()
 
@@ -51,7 +52,9 @@ def test_import_dry_run_writes_nothing(wiki):
     assert page.read_bytes() == before  # dry-run: no file write
 
 
-def test_import_gate_blocks_real_write_on_bad_frontmatter(tmp_path, monkeypatch, capsys):
+def test_import_gate_blocks_real_write_on_bad_frontmatter(
+    tmp_path, monkeypatch, capsys
+):
     monkeypatch.setenv("KB_DATA_DIR", str(tmp_path))
     cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
     command.upgrade(cfg, "head")

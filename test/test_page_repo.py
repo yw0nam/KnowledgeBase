@@ -24,18 +24,32 @@ def test_upsert_inserts_then_updates_same_stem(session):
         session,
         stem="foo",
         rel_path="concepts/foo.md",
-        typed={"type": "concept", "review_status": "approved",
-               "created": "2026-05-01", "updated": "2026-05-01"},
-        tags=["a"], sources=[], aliases=["F"], extra={"k": "v"},
+        typed={
+            "type": "concept",
+            "review_status": "approved",
+            "created": "2026-05-01",
+            "updated": "2026-05-01",
+        },
+        tags=["a"],
+        sources=[],
+        aliases=["F"],
+        extra={"k": "v"},
     )
     assert row.id > 0
     again = page_repo.upsert_page(
         session,
         stem="foo",
         rel_path="concepts/foo.md",
-        typed={"type": "concept", "review_status": "approved",
-               "created": "2026-05-01", "updated": "2026-05-02"},
-        tags=["a", "b"], sources=[], aliases=[], extra={},
+        typed={
+            "type": "concept",
+            "review_status": "approved",
+            "created": "2026-05-01",
+            "updated": "2026-05-02",
+        },
+        tags=["a", "b"],
+        sources=[],
+        aliases=[],
+        extra={},
     )
     assert again.id == row.id  # same row, not a duplicate
     assert again.updated == "2026-05-02"
@@ -46,10 +60,19 @@ def test_upsert_inserts_then_updates_same_stem(session):
 
 def test_get_and_delete_by_stem(session):
     page_repo.upsert_page(
-        session, stem="bar", rel_path="concepts/bar.md",
-        typed={"type": "concept", "review_status": "approved",
-               "created": "2026-05-01", "updated": "2026-05-01"},
-        tags=["t"], sources=[], aliases=[], extra={},
+        session,
+        stem="bar",
+        rel_path="concepts/bar.md",
+        typed={
+            "type": "concept",
+            "review_status": "approved",
+            "created": "2026-05-01",
+            "updated": "2026-05-01",
+        },
+        tags=["t"],
+        sources=[],
+        aliases=[],
+        extra={},
     )
     assert page_repo.get_by_stem(session, "bar") is not None
     page_repo.delete_by_stem(session, "bar")
