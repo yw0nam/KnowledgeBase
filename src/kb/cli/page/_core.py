@@ -57,8 +57,14 @@ def _write_with_block(path: Path, block: str, body: str) -> None:
 
 
 def ingest_file(session: Session, *, wiki_dir: Path, path: Path) -> None:
-    """Parse ``path``, upsert into the DB, then re-render its block."""
-    fm, body = _read_split(path)
+    """Parse ``path``, upsert into the DB, then re-render its block FROM the DB.
+
+    Rendering from the DB read-back (not the in-memory parse) makes ingest and
+    render_page_file produce identical bytes — join lists come back in canonical
+    sorted order, since the join tables have no ordinal column to preserve
+    insertion order.
+    """
+    fm, _ = _read_split(path)
     parsed = parse_frontmatter(fm)
     stem = path.stem
     rel_path = str(path.relative_to(wiki_dir))
@@ -72,7 +78,7 @@ def ingest_file(session: Session, *, wiki_dir: Path, path: Path) -> None:
         aliases=parsed.aliases,
         extra=parsed.extra,
     )
-    _write_with_block(path, render_block(parsed), body)
+    render_page_file(session, wiki_dir=wiki_dir, stem=stem)
 
 
 def render_page_file(session: Session, *, wiki_dir: Path, stem: str) -> None:

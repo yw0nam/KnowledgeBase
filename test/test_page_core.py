@@ -84,3 +84,27 @@ def test_unquoted_date_in_extra_does_not_crash(env):
     row = page_repo.get_by_stem(s, "imp")
     assert row.extra["observed_at"] == "2026-05-25"  # stored as string
     s.close()
+
+
+def test_ingest_and_render_converge_for_unsorted_lists(env):
+    # join tables have no ordinal column, so the canonical form is sorted;
+    # ingest and render must produce identical bytes for a non-sorted input.
+    data_dir, wiki, factory = env
+    page = wiki / "concepts" / "ml.md"
+    page.write_text(
+        "---\ntype: concept\nreview_status: approved\n"
+        "tags:\n- zebra\n- apple\n- mango\n"
+        "created: 2026-05-01\nupdated: 2026-05-01\n---\n\n# ML\n\nbody [[x]].\n"
+    )
+    s = factory()
+    ingest_file(s, wiki_dir=wiki, path=page)
+    after_ingest = page.read_text()
+    render_page_file(s, wiki_dir=wiki, stem="ml")
+    after_render = page.read_text()
+    assert after_ingest == after_render  # cross-path convergence
+    assert (
+        after_ingest.index("apple")
+        < after_ingest.index("mango")
+        < after_ingest.index("zebra")
+    )  # canonical = sorted
+    s.close()
