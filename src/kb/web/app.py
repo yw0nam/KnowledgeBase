@@ -8,12 +8,30 @@ second round-trip. Approve/reject endpoints land in Phase B.
 
 from __future__ import annotations
 
+import logging
+import os
+
+from alembic import command
+from alembic.config import Config as AlembicConfig
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from kb import REPO_ROOT
 from kb.db import make_engine, make_session_factory
 from kb.web import config
 from kb.web.routes import dashboard, decisions, dispatches, kanban, pages, queue
+
+logger = logging.getLogger(__name__)
+
+
+def _run_migrations(data_dir: os.PathLike[str]) -> None:
+    # alembic/env.py resolves the DB URL from KB_DATA_DIR, so set it here to
+    # guarantee migrations run against the same dir the app will open.
+    os.environ["KB_DATA_DIR"] = str(data_dir)
+    cfg = AlembicConfig(str(REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
+    command.upgrade(cfg, "head")
+    logger.info("alembic upgrade head complete (data_dir=%s)", data_dir)
 
 
 def create_app() -> FastAPI:
@@ -34,6 +52,7 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type"],
     )
     app.state.config = cfg
+    _run_migrations(cfg.data_dir)
     app.state.engine = make_engine(cfg.data_dir)
     app.state.session_factory = make_session_factory(app.state.engine)
     app.include_router(queue.router, prefix="/api")
