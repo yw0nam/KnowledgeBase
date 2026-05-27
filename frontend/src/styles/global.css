@@ -55,3 +55,18 @@ a:hover {
   background: var(--color-signal-bg);
   color: var(--color-ink);
 }
+
+/* Canonical kbd treatment for shortcut hints in cheat strips,
+ * shortcut overlays, and inline Save hints. Hairline-bordered mono
+ * glyph on the secondary surface. Single global rule so the inspector
+ * footer, keyboard overlay, and FrontmatterEditor's Save hint stay
+ * aligned without three near-duplicate module-CSS blocks. */
+kbd {
+  font: var(--type-body-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-muted);
+  background: var(--color-rail);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-xs);
+  padding: 0 var(--space-1);
+}

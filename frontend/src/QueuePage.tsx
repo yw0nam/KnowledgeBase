@@ -28,7 +28,11 @@ function errorMessage(err: unknown): string {
   return 'Unknown error';
 }
 
-export function QueuePage() {
+interface QueuePageProps {
+  onCountChange?: () => void;
+}
+
+export function QueuePage({ onCountChange }: QueuePageProps = {}) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selectedStem, setSelectedStem] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -87,6 +91,7 @@ export function QueuePage() {
           nextStem && data.pages.some((p) => p.stem === nextStem) ? nextStem : fallback,
         );
         setMode('idle');
+        onCountChange?.();
       } catch (err) {
         setActionError(errorMessage(err));
         // Reject: return to confirm so the user can retry without
@@ -94,7 +99,7 @@ export function QueuePage() {
         setMode(action === 'reject' ? 'reject-confirm' : 'idle');
       }
     },
-    [pages],
+    [pages, onCountChange],
   );
 
   const handleApprove = useCallback(() => {

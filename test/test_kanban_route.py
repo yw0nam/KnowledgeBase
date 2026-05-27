@@ -1,11 +1,14 @@
 """Route tests for kanban dispatch endpoints.
 
-Covers GET /api/kanban/boards (success, cache hit, 503) and
-POST /api/pages/{stem}/send-to-kanban (success, 404, 409, 400, 503,
-rollback success path, rollback-failure body shape).
+Covers GET /api/kanban/boards (success, cache hit, 502) and
+POST /api/pages/{stem}/send-to-kanban (success, 404, 409, 400, 502).
 
 Helpers in ``_kanban`` are monkeypatched so no real subprocess runs.
-The page fixture mirrors the spec's improvement-page shape.
+The page fixture mirrors the spec's improvement-page shape. The
+Phase 1 rollback tests are gone in Phase 2 — send-to-kanban no
+longer writes the page's frontmatter (§6.2), so there is nothing to
+roll back when the DB insert succeeds and the card creation is the
+last fallible step.
 """
 
 from __future__ import annotations
@@ -14,9 +17,19 @@ from pathlib import Path
 
 import pytest
 import yaml
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 
+from kb import REPO_ROOT
 from kb.cli.wiki_review import _kanban
+
+
+def _alembic_cfg() -> Config:
+    cfg = Config(str(REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
+    return cfg
+
 
 # ---------------------------------------------------------------------------
 # Corpus + client fixtures
@@ -65,6 +78,7 @@ def data_dir(tmp_path: Path) -> Path:
 @pytest.fixture()
 def client(data_dir: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("KB_DATA_DIR", str(data_dir))
+    command.upgrade(_alembic_cfg(), "head")
     # Always start with an empty boards cache so cache-hit tests are
     # deterministic across the whole module.
     from kb.web.routes import kanban as kanban_route
@@ -128,7 +142,7 @@ def test_get_boards_uses_cache_on_second_call(
     assert state["calls"] == 1
 
 
-def test_get_boards_503_on_hermes_unavailable(
+def test_get_boards_502_on_hermes_unavailable(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def boom():
@@ -136,7 +150,7 @@ def test_get_boards_503_on_hermes_unavailable(
 
     monkeypatch.setattr(_kanban, "list_boards", boom)
     resp = client.get("/api/kanban/boards")
-    assert resp.status_code == 503
+    assert resp.status_code == 502
     assert "Hermes" in resp.json()["detail"]
 
 
@@ -145,7 +159,7 @@ def test_get_boards_503_on_hermes_unavailable(
 # ---------------------------------------------------------------------------
 
 
-def test_send_to_kanban_success_writes_frontmatter(
+def test_send_to_kanban_success_inserts_db_row(
     client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     page = _write_improvement_page(data_dir, "Foo")
@@ -168,16 +182,31 @@ def test_send_to_kanban_success_writes_frontmatter(
     )
     assert resp.status_code == 200, resp.text
     payload = resp.json()
-    assert payload["task_id"] == "t_abc"
-    assert payload["board_slug"] == "kb-main"
+    assert payload["external_task_id"] == "t_abc"
+    assert payload["external_board_id"] == "kb-main"
+    assert isinstance(payload["id"], int)
     assert "dispatched_at" in payload
     assert payload["dispatched_at"].endswith("+09:00")
 
-    # Frontmatter updated with the dispatch entry.
+    # Phase 2: no frontmatter write. Page must NOT carry a
+    # kanban_dispatches list, and the row lives in the DB.
     fm = yaml.safe_load(page.read_text().split("---")[1])
-    assert fm["kanban_dispatches"][-1]["task_id"] == "t_abc"
-    assert fm["kanban_dispatches"][-1]["board"] == "kb-main"
-    assert fm["kanban_dispatches"][-1]["direction"] == "Investigate X"
+    assert "kanban_dispatches" not in fm
+
+    from kb.db import make_engine, make_session_factory
+    from kb.db.models import Dispatch
+
+    engine = make_engine(data_dir)
+    sess = make_session_factory(engine)()
+    try:
+        rows = sess.query(Dispatch).all()
+        assert len(rows) == 1
+        assert rows[0].external_task_id == "t_abc"
+        assert rows[0].external_board_id == "kb-main"
+        assert rows[0].direction == "Investigate X"
+    finally:
+        sess.close()
+        engine.dispose()
 
     # Card body carries the kb-meta fallback line.
     assert created_bodies, "create_card was not invoked"
@@ -221,7 +250,7 @@ def test_send_to_kanban_400_when_board_unknown(
     assert resp.status_code == 400
 
 
-def test_send_to_kanban_503_when_hermes_down(
+def test_send_to_kanban_502_when_hermes_down(
     client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write_improvement_page(data_dir, "Foo")
@@ -231,71 +260,7 @@ def test_send_to_kanban_503_when_hermes_down(
 
     monkeypatch.setattr(_kanban, "list_boards", boom)
     resp = client.post("/api/pages/Foo/send-to-kanban", json={"board_slug": "kb-main"})
-    assert resp.status_code == 503
-
-
-def test_send_to_kanban_rollback_success_returns_500(
-    client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Frontmatter write fails, archive succeeds → 500 with detail-only body."""
-    _write_improvement_page(data_dir, "Foo")
-    _patch_list_boards(
-        monkeypatch, [_kanban.Board(slug="kb-main", name="KB Main", counts={})]
-    )
-    monkeypatch.setattr(
-        _kanban,
-        "create_card",
-        lambda **kwargs: _kanban.Card(task_id="t_orphan", board=kwargs["board_slug"]),
-    )
-
-    def fail_append(page_path, dispatch_entry):
-        raise OSError("disk full")
-
-    archived: list[str] = []
-
-    def ok_archive(task_id):
-        archived.append(task_id)
-
-    monkeypatch.setattr(_kanban, "append_dispatch", fail_append)
-    monkeypatch.setattr(_kanban, "archive_card", ok_archive)
-
-    resp = client.post("/api/pages/Foo/send-to-kanban", json={"board_slug": "kb-main"})
-    assert resp.status_code == 500
-    assert archived == ["t_orphan"]
-    body = resp.json()
-    assert body["detail"] == "frontmatter write failed, kanban card rolled back"
-    assert "orphan_task_id" not in body
-
-
-def test_send_to_kanban_rollback_failure_includes_orphan_task_id(
-    client: TestClient, data_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Both frontmatter write and archive fail → 500 with orphan_task_id."""
-    _write_improvement_page(data_dir, "Foo")
-    _patch_list_boards(
-        monkeypatch, [_kanban.Board(slug="kb-main", name="KB Main", counts={})]
-    )
-    monkeypatch.setattr(
-        _kanban,
-        "create_card",
-        lambda **kwargs: _kanban.Card(task_id="t_orphan", board=kwargs["board_slug"]),
-    )
-
-    def fail_append(page_path, dispatch_entry):
-        raise OSError("disk full")
-
-    def fail_archive(task_id):
-        raise _kanban.HermesRejected("archive refused")
-
-    monkeypatch.setattr(_kanban, "append_dispatch", fail_append)
-    monkeypatch.setattr(_kanban, "archive_card", fail_archive)
-
-    resp = client.post("/api/pages/Foo/send-to-kanban", json={"board_slug": "kb-main"})
-    assert resp.status_code == 500
-    body = resp.json()
-    assert body["orphan_task_id"] == "t_orphan"
-    assert "t_orphan" in body["detail"]
-    assert "hermes kanban archive" in body["detail"]
+    assert resp.status_code == 502
 
 
 def test_send_to_kanban_invalidates_cache_on_success(

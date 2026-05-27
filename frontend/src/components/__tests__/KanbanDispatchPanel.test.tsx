@@ -100,9 +100,7 @@ describe('KanbanDispatchPanel', () => {
     render(<KanbanDispatchPanel page={page} />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/sending again creates a new task/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/sending again creates a new task/i)).toBeInTheDocument();
     });
     expect(
       screen.getByRole('button', { name: /send again to kanban/i }),
@@ -119,8 +117,9 @@ describe('KanbanDispatchPanel', () => {
     fetchMock.mockResolvedValueOnce(
       mockResponse({
         body: {
-          task_id: 'task-new-7',
-          board_slug: 'ops',
+          id: 7,
+          external_task_id: 'task-new-7',
+          external_board_id: 'ops',
           dispatched_at: '2026-05-26T11:00:00Z',
         },
       }),
@@ -163,8 +162,9 @@ describe('KanbanDispatchPanel', () => {
     fetchMock.mockResolvedValueOnce(
       mockResponse({
         body: {
-          task_id: 'task-empty-1',
-          board_slug: 'ops',
+          id: 8,
+          external_task_id: 'task-empty-1',
+          external_board_id: 'ops',
           dispatched_at: '2026-05-26T11:30:00Z',
         },
       }),

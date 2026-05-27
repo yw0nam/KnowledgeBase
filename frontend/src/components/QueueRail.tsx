@@ -17,9 +17,9 @@ export function QueueRail({ pages, selectedStem, onSelect }: Props) {
   return (
     <aside className={styles.rail} aria-label="Review queue">
       <header className={styles.header}>
-        <h1 className={styles.heading}>Review</h1>
+        <h1 className={styles.heading}>Pending</h1>
         <span className={styles.count}>
-          {pages.length} {pages.length === 1 ? 'pending' : 'pending'}
+          {pages.length} {pages.length === 1 ? 'page' : 'pages'}
         </span>
       </header>
       <ol className={styles.list} role="listbox" aria-label="Pending pages">

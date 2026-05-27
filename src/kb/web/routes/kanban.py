@@ -6,23 +6,25 @@ Exposes:
 - ``POST /api/pages/{stem}/send-to-kanban`` — dispatch a
   ``pending_for_approve`` improvement page to a chosen Hermes board.
 
-The route layer translates ``_kanban`` and ``_store`` exceptions into
-HTTP status codes per the spec's error taxonomy (§6.5). The rollback
-path on a frontmatter-write failure is the single endpoint that may
-return a body shape other than ``{detail: ...}`` — see step 6.
+Phase 2 (§6.2): dispatch records live in the ``dispatches`` SQL table,
+not in page frontmatter. The route creates the Hermes card first, then
+inserts the dispatch row. A DB insert failure after a successful card
+creation does NOT roll back the card — the route returns 500 with the
+orphan ``external_task_id`` so the operator can reclaim it manually.
+The Phase 1 rollback path is intentionally gone (spec §6.2).
 """
 
 from __future__ import annotations
 
-import datetime
 import json
 import time
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+import yaml
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
 
 from kb.cli.wiki_review import _kanban
 from kb.cli.wiki_review._store import (
@@ -31,20 +33,17 @@ from kb.cli.wiki_review._store import (
     _split_frontmatter,
     resolve_stem,
 )
+from kb.db import get_session
+from kb.db.repos import dispatch_repo
+from kb.web._time import now_iso_kst
 
 router = APIRouter(tags=["kanban"])
-
-KST = ZoneInfo("Asia/Seoul")
 
 # Module-level 30s TTL cache for the boards listing. A single key keeps
 # this simple — there is only one Hermes per host. Set by the GET
 # endpoint, invalidated on a successful POST dispatch.
 _BOARDS_CACHE: dict[str, tuple[float, list[dict]]] = {}
 _BOARDS_TTL = 30.0
-
-
-def _now_iso_kst() -> str:
-    return datetime.datetime.now(KST).isoformat(timespec="seconds")
 
 
 def _board_to_dict(board: _kanban.Board) -> dict:
@@ -76,7 +75,7 @@ def get_kanban_boards() -> dict:
         boards = _fetch_boards_cached()
     except _kanban.HermesUnavailable:
         raise HTTPException(
-            status_code=503,
+            status_code=502,
             detail="Hermes kanban is not reachable. Is the daemon running?",
         )
     except _kanban.HermesRejected as exc:
@@ -84,20 +83,8 @@ def get_kanban_boards() -> dict:
     return {"boards": boards}
 
 
-def _read_body(path: Path) -> str:
-    text = path.read_text()
-    parts = _split_frontmatter(text)
-    if parts is None:
-        return text
-    return parts[1].lstrip("\n")
-
-
 def _extract_title(path: Path, body: str) -> str:
-    """Return the first H1 if present, else the page stem.
-
-    Matches the spec's intent in §6.4: cards are titled by the page's
-    own H1. Falling back to the stem keeps malformed pages dispatchable.
-    """
+    """Return the first H1 if present, else the page stem."""
     for line in body.splitlines():
         stripped = line.lstrip()
         if stripped.startswith("# "):
@@ -112,11 +99,7 @@ def _compose_card_body(
     page_body: str,
     metadata: dict,
 ) -> str:
-    """Render the card body per §6.4, with the metadata fallback.
-
-    The trailing ``<!-- kb-meta: {...} -->`` line replaces the
-    unsupported ``--metadata`` flag (see _kanban module docstring).
-    """
+    """Render the card body per §6.4, with the metadata fallback."""
     direction = (
         direction_note
         if (direction_note and direction_note.strip())
@@ -136,7 +119,13 @@ def _compose_card_body(
 
 
 @router.post("/pages/{stem}/send-to-kanban")
-def send_page_to_kanban(stem: str, body: SendToKanbanRequest, request: Request):
+def send_page_to_kanban(
+    stem: str,
+    body: SendToKanbanRequest,
+    request: Request,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    session: Session = Depends(get_session),
+):
     cfg = request.app.state.config
     wiki_dir: Path = cfg.wiki_dir
 
@@ -156,8 +145,6 @@ def send_page_to_kanban(stem: str, body: SendToKanbanRequest, request: Request):
             status_code=409,
             detail=f"page {stem!r} has no parseable frontmatter",
         )
-    import yaml
-
     try:
         fm = yaml.safe_load(parts[0]) or {}
     except yaml.YAMLError as exc:
@@ -179,7 +166,7 @@ def send_page_to_kanban(stem: str, body: SendToKanbanRequest, request: Request):
         boards = _fetch_boards_cached()
     except _kanban.HermesUnavailable:
         raise HTTPException(
-            status_code=503,
+            status_code=502,
             detail="Hermes kanban is not reachable. Is the daemon running?",
         )
     except _kanban.HermesRejected as exc:
@@ -211,48 +198,50 @@ def send_page_to_kanban(stem: str, body: SendToKanbanRequest, request: Request):
         )
     except _kanban.HermesUnavailable:
         raise HTTPException(
-            status_code=503,
+            status_code=502,
             detail="Hermes kanban is not reachable. Is the daemon running?",
         )
     except _kanban.HermesRejected as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    # Step 6: write frontmatter; on failure, attempt rollback.
-    dispatched_at = _now_iso_kst()
-    dispatch_entry = {
-        "task_id": card.task_id,
-        "board": body.board_slug,
-        "dispatched_at": dispatched_at,
-        "direction": body.direction_note if body.direction_note else None,
-    }
+    # Step 6: persist the dispatch row. No frontmatter write. The only
+    # realistic non-success path is a UNIQUE collision on
+    # (external_board_id, external_task_id), which surfaces here as
+    # IntegrityError; on that path the card is orphaned and we report
+    # its id so the operator can `hermes kanban archive` it manually.
+    # Anything else (programming bug, DB outage) bubbles to FastAPI's
+    # default 500 handler with the real traceback — deliberately not
+    # swallowed.
+    dispatched_at = now_iso_kst()
     try:
-        _kanban.append_dispatch(page_path, dispatch_entry)
-    except Exception:
-        try:
-            _kanban.archive_card(card.task_id)
-        except Exception:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "detail": (
-                        f"Card exists on board {body.board_slug} but the page "
-                        f"frontmatter could not be updated. Archive it manually: "
-                        f"hermes kanban archive {card.task_id}"
-                    ),
-                    "orphan_task_id": card.task_id,
-                },
-            )
+        row = dispatch_repo.create_dispatch(
+            session,
+            page_stem=stem,
+            page_path_at_dispatch=str(rel_path),
+            external_board_id=body.board_slug,
+            external_task_id=card.task_id,
+            direction=body.direction_note if body.direction_note else None,
+            idempotency_key=idempotency_key,
+            created_at=dispatched_at,
+            dispatched_at=dispatched_at,
+        )
+    except IntegrityError:
         raise HTTPException(
             status_code=500,
-            detail="frontmatter write failed, kanban card rolled back",
+            detail={
+                "detail": "DB insert failed after card creation",
+                "external_task_id": card.task_id,
+            },
         )
 
-    # Step 7: invalidate cache.
+    # Step 7: invalidate boards cache so a subsequent GET reflects the
+    # new card count.
     _invalidate_boards_cache()
 
-    # Step 8: success.
+    # Step 8: success — new §6.2 response shape.
     return {
-        "task_id": card.task_id,
-        "board_slug": body.board_slug,
-        "dispatched_at": dispatched_at,
+        "id": row.id,
+        "external_task_id": row.external_task_id,
+        "external_board_id": row.external_board_id,
+        "dispatched_at": row.dispatched_at,
     }

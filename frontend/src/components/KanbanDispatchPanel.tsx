@@ -263,7 +263,8 @@ export function KanbanDispatchPanel({ page, onDispatched }: Props) {
           {submitError.orphan_task_id ? (
             <code className={styles.errorOrphan}>
               Orphan task: {submitError.orphan_task_id}. Run{' '}
-              <code>hermes kanban archive {submitError.orphan_task_id}</code> to clean up.
+              <code>hermes kanban archive {submitError.orphan_task_id}</code> to clean
+              up.
             </code>
           ) : null}
         </p>
@@ -273,7 +274,8 @@ export function KanbanDispatchPanel({ page, onDispatched }: Props) {
         <p className={styles.banner} role="status">
           <span className={styles.bannerLabel}>Dispatched</span>
           <span className={styles.bannerDetail}>
-            {banner.task_id} → {banner.board_slug} · {formatKst(banner.dispatched_at)}
+            {banner.external_task_id} → {banner.external_board_id} ·{' '}
+            {formatKst(banner.dispatched_at)}
           </span>
         </p>
       ) : null}

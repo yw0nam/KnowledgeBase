@@ -1,6 +1,6 @@
-// Top nav: two segments (Queue / Dashboard). On /dashboard the right
-// edge shows a tiny mono freshness line driven by /api/dashboard's
-// meta.log_last_entry. Empty on /.
+// Top nav: three segments (Pending / Decisions / Dashboard). Spec
+// §7.1. "Pending (n)" shows the live pending count when known. On
+// /dashboard the right edge keeps the freshness line.
 
 import { NavLink, useLocation } from 'react-router-dom';
 import type { DashboardMeta } from '../dashboardTypes';
@@ -9,9 +9,10 @@ import styles from './Nav.module.css';
 
 interface Props {
   meta: DashboardMeta | null;
+  pendingCount: number | null;
 }
 
-export function Nav({ meta }: Props) {
+export function Nav({ meta, pendingCount }: Props) {
   const location = useLocation();
   const onDashboard = location.pathname === '/dashboard';
 
@@ -25,7 +26,18 @@ export function Nav({ meta }: Props) {
             isActive ? `${styles.link} ${styles.linkActive}` : styles.link
           }
         >
-          Queue
+          Pending
+          {pendingCount !== null ? (
+            <span className={styles.count}> ({pendingCount})</span>
+          ) : null}
+        </NavLink>
+        <NavLink
+          to="/decisions"
+          className={({ isActive }) =>
+            isActive ? `${styles.link} ${styles.linkActive}` : styles.link
+          }
+        >
+          Decisions
         </NavLink>
         <NavLink
           to="/dashboard"

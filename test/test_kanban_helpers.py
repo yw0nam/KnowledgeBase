@@ -5,22 +5,22 @@ Covers:
 - ``create_card``: success, non-zero exit, timeout, ``id``→``task_id``
   normalisation, sparse ``counts``.
 - ``archive_card``: passthrough.
-- ``append_dispatch``: creates list when absent, appends when present,
-  preserves body verbatim and other frontmatter keys.
 
 Subprocess is mocked via ``monkeypatch`` on ``subprocess.run`` inside
 the ``_kanban`` module — the patch must shadow the bound reference, not
 the global, since the helper imports ``subprocess`` at module top.
+
+The Phase 1 ``append_dispatch`` helper is gone in Phase 2; its
+behaviour (dispatch records) lives in the ``dispatches`` SQL table
+now (see ``test_route_dispatches.py``).
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
-from pathlib import Path
 
 import pytest
-import yaml
 
 from kb.cli.wiki_review import _kanban
 
@@ -173,111 +173,3 @@ def test_archive_card_propagates_failure(monkeypatch: pytest.MonkeyPatch) -> Non
     _patch_run(monkeypatch, _FakeCompleted(returncode=1, stderr="no such task"))
     with pytest.raises(_kanban.HermesRejected, match="no such task"):
         _kanban.archive_card("t_bad")
-
-
-# ---------------------------------------------------------------------------
-# append_dispatch
-# ---------------------------------------------------------------------------
-
-
-def _write_page(path: Path, fm: dict, body: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fm_block = yaml.safe_dump(fm, sort_keys=False)
-    path.write_text(f"---\n{fm_block}---\n{body}")
-
-
-def test_append_dispatch_creates_list_when_absent(tmp_path: Path) -> None:
-    page = tmp_path / "Foo.md"
-    _write_page(
-        page,
-        {
-            "type": "improvement",
-            "review_status": "pending_for_approve",
-            "tags": ["x"],
-        },
-        "\n# Foo\n\nBody.\n",
-    )
-    entry = {
-        "task_id": "t_1",
-        "board": "kb-main",
-        "dispatched_at": "2026-05-26T10:23:00+09:00",
-        "direction": None,
-    }
-    _kanban.append_dispatch(page, entry)
-
-    fm = yaml.safe_load(page.read_text().split("---")[1])
-    assert fm["kanban_dispatches"] == [entry]
-    # Untouched keys remain.
-    assert fm["type"] == "improvement"
-    assert fm["review_status"] == "pending_for_approve"
-    assert fm["tags"] == ["x"]
-    # Body preserved.
-    assert "# Foo" in page.read_text()
-    assert "Body." in page.read_text()
-
-
-def test_append_dispatch_appends_when_present(tmp_path: Path) -> None:
-    page = tmp_path / "Foo.md"
-    existing = {
-        "task_id": "t_old",
-        "board": "kb-main",
-        "dispatched_at": "2026-05-20T10:00:00+09:00",
-        "direction": "first pass",
-    }
-    _write_page(
-        page,
-        {
-            "type": "improvement",
-            "review_status": "pending_for_approve",
-            "kanban_dispatches": [existing],
-        },
-        "\n# Foo\n",
-    )
-    new = {
-        "task_id": "t_new",
-        "board": "kb-main",
-        "dispatched_at": "2026-05-26T10:23:00+09:00",
-        "direction": None,
-    }
-    _kanban.append_dispatch(page, new)
-
-    fm = yaml.safe_load(page.read_text().split("---")[1])
-    assert fm["kanban_dispatches"] == [existing, new]
-
-
-def test_append_dispatch_atomic_write_no_leftover_tmp(tmp_path: Path) -> None:
-    page = tmp_path / "Foo.md"
-    _write_page(
-        page,
-        {"type": "improvement", "review_status": "pending_for_approve"},
-        "\n# Foo\n",
-    )
-    _kanban.append_dispatch(
-        page,
-        {
-            "task_id": "t_x",
-            "board": "kb-main",
-            "dispatched_at": "2026-05-26T10:23:00+09:00",
-            "direction": None,
-        },
-    )
-    # No stale tempfile siblings.
-    leftovers = [
-        p for p in tmp_path.iterdir() if p.name.startswith(".Foo.md.") and p.is_file()
-    ]
-    assert leftovers == []
-
-
-def test_append_dispatch_errors_on_missing_frontmatter(tmp_path: Path) -> None:
-    page = tmp_path / "Foo.md"
-    page.write_text("no frontmatter here\n")
-    with pytest.raises(ValueError):
-        _kanban.append_dispatch(
-            page,
-            {
-                "task_id": "t_x",
-                "board": "kb-main",
-                "dispatched_at": "2026-05-26T10:23:00+09:00",
-                "direction": None,
-            },
-        )

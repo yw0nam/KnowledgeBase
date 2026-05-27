@@ -57,11 +57,12 @@ export interface SendToKanbanRequest {
 }
 
 export interface SendToKanbanResponse {
-  // Response body still uses `board_slug` (spec §7.2 response model).
-  // Do not confuse this with the persisted frontmatter entry, which
-  // uses `board` (see KanbanDispatchRecord below).
-  task_id: string;
-  board_slug: string;
+  // Phase 2 (spec §6.2): dispatch is persisted to the operational DB,
+  // not frontmatter. Response carries the row's id and the same
+  // task/board IDs under generic names.
+  id: number;
+  external_task_id: string;
+  external_board_id: string;
   dispatched_at: string;
 }
 
@@ -77,7 +78,148 @@ export interface KanbanDispatchRecord {
 
 // Optional shape we read off Frontmatter when present. The page's
 // frontmatter is still typed broadly as Frontmatter (an open dict);
-// this type just documents the kanban_dispatches subfield.
+// this type just documents the kanban_dispatches subfield. Phase 2
+// removed this field from new pages; the type stays here only so the
+// migration smoke-test page (pre-backfill) still parses cleanly.
 export interface PageFrontmatter extends Frontmatter {
   kanban_dispatches?: KanbanDispatchRecord[];
+}
+
+// ── Phase 2 decision browser. ─────────────────────────────────────
+
+// One row in GET /api/decisions (see src/kb/web/routes/decisions.py).
+// `category` is an open string per spec §6.4 — never a typed enum.
+export interface Decision {
+  stem: string;
+  path: string;
+  type: string | null;
+  category: string | null;
+  tags: string[];
+  review_status: string | null;
+  sources: string[];
+  captured_at: string | null;
+  last_edited_at: string | null;
+  dispatch_summary: { count: number; last_status: string } | null;
+}
+
+export interface DecisionsResponse {
+  items: Decision[];
+  total: number;
+  page: number;
+  per_page: number;
+}
+
+// PATCH /api/pages/{stem}/frontmatter merge patch body. Absent =
+// unchanged, [] for tags = clear all tags. `type` is constrained;
+// `category` is open string; `tags` is a full replacement.
+export interface FrontmatterPatch {
+  review_status?: 'pending_for_approve' | 'approved' | 'rejected' | 'not_processed';
+  type?:
+    | 'entity'
+    | 'concept'
+    | 'decision'
+    | 'question'
+    | 'improvement'
+    | 'checklist'
+    | 'summary';
+  category?: string | null;
+  tags?: string[];
+}
+
+export interface FrontmatterPatchResponse {
+  stem: string;
+  frontmatter: Frontmatter;
+  edits: { field: string; edited_at: string }[];
+}
+
+// 409 body when lint fails inside PATCH (spec §6.4). FE renders the
+// linter's errors inline under the offending field.
+export interface FrontmatterPatchLintError {
+  detail: string;
+  lint_errors: string[];
+}
+
+// GET /api/pages/{stem}/edits row (audit log, append-only).
+export interface WikiEdit {
+  id: number;
+  page_stem: string;
+  field: string;
+  old_value: unknown;
+  new_value: unknown;
+  edited_at: string;
+  source: string;
+}
+
+export interface WikiEditsResponse {
+  items: WikiEdit[];
+  total: number;
+}
+
+// GET /api/pages/{stem}/timeline event. The backend's `kind` value
+// is either 'edit', 'dispatched', or 'status:<status>' (e.g.
+// 'status:done'). The status:* form keeps the FE from caring about
+// the specific transition vocabulary — render anything after the
+// colon as the new state.
+export interface TimelineEditEvent {
+  kind: 'edit';
+  at: string;
+  field: string;
+  old_value: unknown;
+  new_value: unknown;
+  source: string;
+}
+
+export interface TimelineDispatchEvent {
+  kind: 'dispatched';
+  at: string;
+  dispatch_id: number;
+  external_task_id: string;
+}
+
+export interface TimelineStatusEvent {
+  // Literally `status:<status>` (the backend never returns bare
+  // 'status'). The FE strips the prefix at render time. Typed as a
+  // template literal so the union discriminator stays clean against
+  // the 'edit'/'dispatched' variants.
+  kind: `status:${string}`;
+  at: string;
+  dispatch_id: number;
+  external_task_id: string;
+}
+
+export type TimelineEvent =
+  | TimelineEditEvent
+  | TimelineDispatchEvent
+  | TimelineStatusEvent;
+
+export interface TimelineResponse {
+  items: TimelineEvent[];
+  total: number;
+}
+
+// GET /api/dispatches row payload. Matches src/kb/web/routes/dispatches.py
+// `_row_payload` exactly.
+export interface DispatchRecord {
+  id: number;
+  page_stem: string;
+  page_path_at_dispatch: string;
+  external_board_id: string;
+  external_task_id: string;
+  direction: string | null;
+  status: string;
+  idempotency_key: string | null;
+  created_at: string;
+  dispatched_at: string;
+  last_status_at: string | null;
+  result_payload: unknown;
+}
+
+export interface DispatchesResponse {
+  items: DispatchRecord[];
+  total: number;
+}
+
+// GET /api/enums/categories — open string list, may be empty.
+export interface CategoryEnumsResponse {
+  categories: string[];
 }

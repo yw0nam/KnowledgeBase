@@ -1,11 +1,12 @@
-"""Hermes kanban CLI bridges + improvement-page dispatch frontmatter edit.
+"""Hermes kanban CLI bridges.
 
-Pure helpers consumed by ``kb.web.routes.kanban``. Subprocess shells
-out to ``hermes kanban`` and parses JSON; no FastAPI awareness lives
-here. The route layer is responsible for translating these exceptions
-into HTTP responses.
+Pure helpers consumed by ``kb.web.routes.kanban`` and
+``kb.web.routes.dispatches``. Subprocess shells out to
+``hermes kanban`` and parses JSON; no FastAPI awareness lives here.
+The route layer is responsible for translating these exceptions into
+HTTP responses.
 
-Deviations from spec §6.2:
+Deviations from spec:
 - ``hermes kanban create`` does not accept ``--metadata``. The metadata
   pair is embedded in the card body as a trailing
   ``<!-- kb-meta: {...} -->`` line (Appendix A item 2 fallback).
@@ -21,15 +22,8 @@ Deviations from spec §6.2:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
-import tempfile
 from dataclasses import dataclass
-from pathlib import Path
-
-import yaml
-
-from kb.cli.wiki_review._store import _split_frontmatter
 
 # Subprocess timeout for hermes calls (seconds). Hermes is local; if it
 # hasn't responded in 10s the daemon is effectively unavailable.
@@ -155,68 +149,10 @@ def create_card(board_slug: str, title: str, body: str) -> Card:
 
 
 def archive_card(task_id: str) -> None:
-    """Archive a previously created card (used as rollback).
+    """Archive a previously created card.
 
-    Output is plaintext ("Archived <id>"); we don't parse it. Any
-    non-zero exit propagates as ``HermesRejected`` so the route can
-    distinguish "rollback succeeded" from "rollback failed".
+    Used by the dispatch cancel route's two-state machine. Output is
+    plaintext ("Archived <id>"); we don't parse it. Any non-zero exit
+    propagates as ``HermesRejected``.
     """
     _run_hermes(["kanban", "archive", task_id])
-
-
-def append_dispatch(page_path: Path, dispatch_entry: dict) -> None:
-    """Append ``dispatch_entry`` to the page's ``kanban_dispatches`` list.
-
-    Reads the page, splits frontmatter, parses the YAML block, appends
-    the entry to the list (creating it if missing), then re-serialises
-    YAML and writes atomically via a same-directory temp file +
-    ``os.replace``. Body bytes are preserved verbatim, including the
-    final newline state.
-
-    YAML re-serialisation here is intentional — the new entry is a
-    multi-key mapping inside a list, so the targeted regex helpers in
-    ``_store`` can't express it cleanly. Other frontmatter keys round-
-    trip through ``yaml.safe_load`` / ``yaml.safe_dump`` and retain
-    their values (though not necessarily exact spacing/quoting).
-    """
-    text = page_path.read_text()
-    parts = _split_frontmatter(text)
-    if parts is None:
-        raise ValueError(f"{page_path}: missing or malformed frontmatter")
-    fm_block, body = parts
-
-    try:
-        fm = yaml.safe_load(fm_block) or {}
-    except yaml.YAMLError as exc:
-        raise ValueError(f"{page_path}: malformed YAML frontmatter") from exc
-    if not isinstance(fm, dict):
-        raise ValueError(f"{page_path}: frontmatter is not a mapping")
-
-    dispatches = fm.get("kanban_dispatches")
-    if not isinstance(dispatches, list):
-        dispatches = []
-    dispatches.append(dispatch_entry)
-    fm["kanban_dispatches"] = dispatches
-
-    new_fm_block = yaml.safe_dump(
-        fm, sort_keys=False, allow_unicode=True, default_flow_style=False
-    )
-
-    new_text = f"---\n{new_fm_block}---{body}"
-
-    # Atomic write: write to temp in same dir, then os.replace.
-    parent = page_path.parent
-    fd, tmp_path = tempfile.mkstemp(
-        prefix=f".{page_path.name}.", suffix=".tmp", dir=str(parent)
-    )
-    try:
-        with os.fdopen(fd, "w") as fh:
-            fh.write(new_text)
-        os.replace(tmp_path, page_path)
-    except Exception:
-        # Clean up the temp file on any failure before re-raising.
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise

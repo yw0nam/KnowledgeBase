@@ -1,0 +1,93 @@
+/* Decisions tab shell. 3 columns:
+ *   - List column (filters + grid + pagination) on the left.
+ *   - Body panel (markdown of the selected page) in the dominant center.
+ *   - PageInspector pushed in from the right at its persisted width
+ *     (overlay <1100px, handled inside PageInspector itself).
+ *
+ * The grid is the alignment surface; tonal layering between bench
+ * (page) and panel (column surfaces) plus hairline borders carry the
+ * separation. No shadows, no rounded outer corners — DESIGN.md
+ * Hairline-Not-Shadow rule.
+ */
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(0, 2fr) auto;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  background: var(--color-bench);
+  color: var(--color-ink);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--color-panel);
+  border-right: 1px solid var(--color-hairline);
+  overflow: hidden;
+}
+
+.center {
+  background: var(--color-panel);
+  border-right: 1px solid var(--color-hairline);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.centerInner {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* System lines for loading / empty / not-found / error states.
+ * Match the QueuePage convention: short factual one-liner in muted ink,
+ * no skeleton, no illustration. DESIGN.md "lint-grade honesty". */
+.systemLine {
+  padding: var(--space-10) var(--space-8);
+  font: var(--type-body);
+  color: var(--color-ink-muted);
+  margin: 0;
+  max-width: var(--prose-max);
+}
+
+.systemLineSub {
+  display: block;
+  margin-top: var(--space-2);
+  font: var(--type-body-mono);
+  color: var(--color-ink-dim);
+}
+
+.error {
+  padding: var(--space-5);
+  font: var(--type-body);
+  color: var(--color-danger);
+  margin: 0;
+}
+
+.error code {
+  font: var(--type-body-mono);
+  color: var(--color-ink);
+}
+
+/* Below the 3-column comfort zone the body panel hides; the list
+ * column carries the page and the inspector flips to overlay. Below
+ * ~720px the layout is not a Phase 2 target (PRODUCT.md: desktop
+ * only), but the hide-keeps the page usable on narrow windows. */
+@media (max-width: 1100px) {
+  .shell {
+    grid-template-columns: minmax(320px, 1fr) auto;
+  }
+
+  .center {
+    display: none;
+  }
+}
