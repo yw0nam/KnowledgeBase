@@ -15,29 +15,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request
 
-from kb.cli.wiki_review._store import _split_frontmatter, iter_pages
+from kb.cli.wiki_review._store import iter_pages
+from kb.web._pages import _serialize_page
 
 router = APIRouter(tags=["queue"])
 
 PENDING = "pending_for_approve"
-
-
-def _read_body(path: Path) -> str:
-    text = path.read_text()
-    parts = _split_frontmatter(text)
-    if parts is None:
-        return text
-    return parts[1].lstrip("\n")
-
-
-def _serialize_page(wiki_dir: Path, page) -> dict:
-    return {
-        "stem": page.stem,
-        "rel_path": str(page.rel),
-        "abs_path": str(page.path),
-        "frontmatter": page.fm,
-        "body": _read_body(page.path),
-    }
 
 
 def _tracked_wiki_files(data_dir: Path) -> set[str] | None:

@@ -42,10 +42,12 @@ from kb.cli.wiki_review._store import (
     PageNotFound,
     StemCollision,
     _split_frontmatter,
+    iter_pages,
     resolve_stem,
 )
 from kb.db import get_session
 from kb.db.repos import dispatch_repo, wiki_edit_repo
+from kb.web._pages import _serialize_page
 from kb.web._time import now_iso_kst, today_kst
 
 router = APIRouter(tags=["pages"])
@@ -129,6 +131,22 @@ def reject_page(stem: str, body: DecisionBody, request: Request) -> DecisionResp
     if rc != 0:
         raise HTTPException(status_code=400, detail=err or "reject failed")
     return DecisionResponse(stem=stem, status="rejected")
+
+
+# ---------------------------------------------------------------------------
+# GET /api/pages/{stem}
+# ---------------------------------------------------------------------------
+
+
+@router.get("/pages/{stem}")
+def get_page(stem: str, request: Request) -> dict:
+    cfg = request.app.state.config
+    wiki_dir: Path = cfg.wiki_dir
+    # Lookup via iteration — never path-join the user-supplied stem.
+    for page in iter_pages(wiki_dir):
+        if page.stem == stem:
+            return _serialize_page(wiki_dir, page)
+    raise HTTPException(status_code=404, detail=f"no page with stem {stem!r}")
 
 
 # ---------------------------------------------------------------------------
