@@ -338,11 +338,19 @@ def lint(
     # so they cannot accumulate inbound links and must be excluded from
     # orphan detection. Non-approved pages are also excluded because they are
     # not yet "official wiki" — they are awaiting review/promotion.
+    # Summary pages (daily usage, memory, cron-wrapup, weekly) are cron-generated
+    # operational leaf nodes: they are never linked to by other wiki pages because
+    # they are archival records, not knowledge-graph citizens. Their sources: field
+    # records provenance but does not create wikilinks, so they structurally cannot
+    # receive inbound links and are exempt from orphan detection.
     for stem in all_stems:
         if stem in ("index", "_index", INDEX_STEM):
             continue
         page_content = pages.get(stem, "")
         page_fm = parse_frontmatter(page_content) or {}
+        if page_fm.get("type") == "summary":
+            # Operational leaf nodes — not expected to receive inbound wikilinks
+            continue
         if page_fm.get("review_status") not in (None, "approved"):
             # not_processed or pending_for_approve — not yet a wiki citizen
             continue
