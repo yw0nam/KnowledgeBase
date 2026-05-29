@@ -9,15 +9,11 @@ from __future__ import annotations
 
 import sys
 
-from kb import REPO_ROOT as BASEDIR
+from kb import data_dir
 from kb.cli.wiki.index import INDEX_FILENAME, build_index
-
-WIKI_DIR = BASEDIR / "data" / "wiki"
 
 
 def main() -> None:
-    from kb import data_dir
-
     wiki_dir = data_dir() / "wiki"
     if not wiki_dir.exists():
         print(f"ERROR: {wiki_dir} does not exist", file=sys.stderr)

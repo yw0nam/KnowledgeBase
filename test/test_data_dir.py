@@ -1,9 +1,5 @@
 """Tests for kb.data_dir() — KB_DATA_DIR resolution."""
 
-from __future__ import annotations
-
-from pathlib import Path
-
 import kb
 
 

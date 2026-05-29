@@ -25,7 +25,7 @@ from pathlib import Path
 
 import yaml
 
-from kb import REPO_ROOT as BASEDIR
+from kb import REPO_ROOT as BASEDIR, data_dir
 from kb.cli.handoff.validators import (
     CANONICAL_BODY_SECTIONS as CANONICAL_BODY_SECTIONS,
     FINAL_FILENAME_RE,
@@ -190,8 +190,6 @@ def lint(result: LintResult, handoffs_dir: Path | None = None) -> None:
 
 
 def main() -> None:
-    from kb import data_dir
-
     parser = argparse.ArgumentParser(prog="kb-lint-handoff", description=__doc__)
     parser.add_argument(
         "--strict",
