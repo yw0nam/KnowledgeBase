@@ -190,6 +190,8 @@ def lint(result: LintResult, handoffs_dir: Path | None = None) -> None:
 
 
 def main() -> None:
+    from kb import data_dir
+
     parser = argparse.ArgumentParser(prog="kb-lint-handoff", description=__doc__)
     parser.add_argument(
         "--strict",
@@ -198,10 +200,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print("Linting data/handoffs/...\n")
+    handoffs_dir = data_dir() / "handoffs"
+    print(f"Linting {handoffs_dir}/...\n")
 
     result = LintResult()
-    lint(result)
+    lint(result, handoffs_dir=handoffs_dir)
     result.print_report()
 
     if not result.ok:

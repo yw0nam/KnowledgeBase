@@ -19,8 +19,15 @@ def _run(module: str, data_dir: Path) -> subprocess.CompletedProcess:
 
 
 def _make_wiki(root: Path) -> None:
-    for sub in ("entities", "concepts", "decisions", "questions",
-                "improvements", "checklists", "summaries"):
+    for sub in (
+        "entities",
+        "concepts",
+        "decisions",
+        "questions",
+        "improvements",
+        "checklists",
+        "summaries",
+    ):
         (root / "wiki" / sub).mkdir(parents=True, exist_ok=True)
     (root / "raw").mkdir(parents=True, exist_ok=True)
 
@@ -31,7 +38,7 @@ def test_lint_wiki_lints_kb_data_dir(tmp_path):
     # read THIS tree (not the repo's real data/).
     page = tmp_path / "wiki" / "concepts" / "Bad.md"
     page.write_text(
-        '---\ntype: concept\nreview_status: approved\n'
+        "---\ntype: concept\nreview_status: approved\n"
         'created: "2026-05-01"\nupdated: "2026-05-01"\nsources: []\ntags: []\n---\n\n'
         "Body links to [[NonexistentTarget]].\n"
     )
@@ -45,3 +52,13 @@ def test_wiki_index_writes_into_kb_data_dir(tmp_path):
     proc = _run("kb.cli.wiki_index", tmp_path)
     assert proc.returncode == 0
     assert (tmp_path / "wiki" / "INDEX.md").exists()
+
+
+def test_lint_handoff_targets_kb_data_dir(tmp_path):
+    # An empty handoffs/ dir lints clean; this proves the CLI resolved
+    # KB_DATA_DIR without touching the repo default.
+    (tmp_path / "handoffs").mkdir(parents=True, exist_ok=True)
+    proc = _run("kb.cli.lint_handoff", tmp_path)
+    assert proc.returncode == 0
+    assert "PASSED" in proc.stdout
+    assert str(tmp_path) in proc.stdout  # the printed "Linting <dir>/..." line
