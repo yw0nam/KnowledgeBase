@@ -85,19 +85,20 @@ Use two separate records because this repository has two git histories:
 - If one task changes both layers, update both records with layer-appropriate details. `CHANGELOG.md` says what changed in the product/workflow; `data/log.md` says what data artefacts were created or updated.
 - Do not duplicate full changelog entries into `data/log.md`.
 - Do not commit the nested `data/` repo unless the user explicitly asks for a data commit. Cron jobs and memory/approval workflows normally create and manage data changes for later user review.
-- Exception: the `kb-cron-wrapup` workflow is expected to commit its own nested `data/` repo outputs after successful lint. The separate global morning digest is read-only: it reads the committed cron-wrapup artefact and sends a report, but does not create, edit, or commit KB data. `kb-cron-wrapup` must never push and must never commit the outer repo.
+- Exception: the `kb-cron-wrapup` workflow is expected to commit its own nested `data/` repo outputs after successful lint. The separate global morning digest is read-only: it reads the committed cron-wrapup artefact and sends a report, but does not create, edit, or commit KB data. `kb-cron-wrapup` must not push from within its AI session and must never commit the outer repo.
 - If outer-repo work produces or adjusts `data/` artefacts for verification, leave those `data/` changes uncommitted unless the user specifically asks to handle them.
 
 ## Privacy
 
-`data/` is a local-only nested git repository. It is never pushed to remote.
+`data/` is a nested git repository scoped to private storage. It is never pushed to the outer repo's remote. It may be pushed to a dedicated private remote scoped to `data/` only — see `docs/data-sync.md`.
 
 - Outer `.gitignore` excludes `data/`
 - `data/.git` is independent from outer repo
-- All raw sources and wiki pages stay local
-- Handoff documents (which may contain sensitive decisions) stay local
+- All raw sources and wiki pages stay private
+- Handoff documents (which may contain sensitive decisions) stay private
+- AI sessions and cron-wrapup commits do not push; push is a user/setup action (or, in a future Phase 3, a shell wrapper running outside the AI session)
 
-Never commit `data/` contents to the outer repository.
+Never commit `data/` contents to the outer repository. Never set `data/`'s remote to the outer repo's URL or any public host.
 
 ## Skills
 

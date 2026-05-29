@@ -268,7 +268,7 @@ This skill specifies only:
    (subject = TARGET, role = invoker, status: ready).
 8. Append to data/log.md. Run Lint Order (kb-wiki-index → kb-lint-wiki --check-immutability → kb-lint-handoff).
 9. If lint exits 0, commit only the nested `data/` repo with message `cron-wrapup: {TARGET}`.
-10. STOP. Do NOT commit the outer repo. Do NOT push.
+10. STOP. Do NOT commit the outer repo. Do NOT push — push (if any) is handled by the shell wrapper outside the AI session.
 ```
 
 ## Data Commit Policy
@@ -281,7 +281,7 @@ Rules:
 - Include the wrap-up summary, run handoff, `data/log.md`, regenerated `wiki/INDEX.md`, any same-run report/memory artefacts that are still uncommitted and are required by the wrap-up sources, and every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` for the target — **excluding** `{TARGET}_kb-cron-wrapup.log`, which does not exist yet during the session and is committed by the shell wrapper in a follow-up commit after the session exits.
 - Commit only after `kb-wiki-index`, `kb-lint-wiki --check-immutability`, and `kb-lint-handoff` all exit 0.
 - Use commit message `cron-wrapup: {TARGET}`.
-- Never push.
+- Do not push from this skill. Push to the private `data/` remote (if configured — see `docs/data-sync.md`) is the shell wrapper's responsibility outside the AI session.
 - Never stage or commit outer repo files.
 
 ## Idempotency
@@ -305,7 +305,7 @@ If a required input is missing (e.g. memory page never wrote):
 - **Replay caveat.** A wrapper rerunning for an already-committed TARGET will append to a tracked raw log and trip `check_raw_immutability` on the next wrap-up. If you must replay a job for a committed TARGET, first `git -C data rm` the existing log file (or move it aside) before the wrapper runs.
 - **Do not auto-promote** anything — wiki promotion is `wiki-approval`'s job.
 - **Do not use lint as analysis input** — run only the required final gate: `kb-wiki-index`, `kb-lint-wiki --check-immutability`, `kb-lint-handoff` once each.
-- **Commit only nested data outputs after lint passes.** Never commit outer repo files and never push.
+- **Commit only nested data outputs after lint passes.** Never commit outer repo files. Do not push from this skill — push is the shell wrapper's job (see `docs/data-sync.md`).
 - **If blocked**, write the handoff with `status: ready` and the wrap-up with `Status: FAILED`, then exit non-zero.
 
 ## Red Flags — STOP and re-check
