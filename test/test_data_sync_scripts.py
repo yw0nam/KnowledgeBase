@@ -204,14 +204,18 @@ def test_ci_raw_immutability_filter_allows_adds_blocks_modify(tmp_path):
 
 
 def test_sync_refuses_on_master(tmp_path):
-    data = _make_data_repo(tmp_path, origin_url="git@github.com:yw0nam/PrivateKnowledgeBase.git")
+    data = _make_data_repo(
+        tmp_path, origin_url="git@github.com:yw0nam/PrivateKnowledgeBase.git"
+    )
     proc = _run("sync-data.sh", data)
     assert proc.returncode != 0
     assert "work branch" in (proc.stdout + proc.stderr).lower()
 
 
 def test_sync_refuses_non_private_origin(tmp_path):
-    data = _make_data_repo(tmp_path, origin_url="https://github.com/yw0nam/KnowledgeBase.git")
+    data = _make_data_repo(
+        tmp_path, origin_url="https://github.com/yw0nam/KnowledgeBase.git"
+    )
     _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
     proc = _run("sync-data.sh", data)
     assert proc.returncode != 0
@@ -220,14 +224,18 @@ def test_sync_refuses_non_private_origin(tmp_path):
 
 def test_sync_dry_run_plans_push_and_pr(tmp_path):
     bare = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True)
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
     data = _make_data_repo(tmp_path)
     _git(data, "remote", "add", "origin", str(bare))
     _git(data, "push", "-q", "-u", "origin", "master")
     _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
     (data / "log.md").write_text("# log\nmore\n")
     _git(data, "commit", "-qam", "more")
-    proc = _run("sync-data.sh", data, "--dry-run", KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="true")
+    proc = _run(
+        "sync-data.sh", data, "--dry-run", KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="true"
+    )
     assert proc.returncode == 0, proc.stderr
     out = proc.stdout
     assert "git" in out and "push" in out
@@ -237,7 +245,9 @@ def test_sync_dry_run_plans_push_and_pr(tmp_path):
 def test_sync_blocks_push_when_local_lint_fails(tmp_path):
     """Mandatory local lint gate: a failing lint must abort BEFORE push/PR."""
     bare = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True)
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
     data = _make_data_repo(tmp_path)
     _git(data, "remote", "add", "origin", str(bare))
     _git(data, "push", "-q", "-u", "origin", "master")
@@ -247,7 +257,45 @@ def test_sync_blocks_push_when_local_lint_fails(tmp_path):
     proc = _run("sync-data.sh", data, KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="false")
     assert proc.returncode != 0
     assert "lint" in (proc.stdout + proc.stderr).lower()
-    assert "push" not in proc.stdout          # never reached the push step
-    remote_heads = subprocess.run(["git", "-C", str(data), "ls-remote", "--heads", "origin"],
-                                  capture_output=True, text=True).stdout
+    assert "push" not in proc.stdout  # never reached the push step
+    remote_heads = subprocess.run(
+        ["git", "-C", str(data), "ls-remote", "--heads", "origin"],
+        capture_output=True,
+        text=True,
+    ).stdout
     assert "sync/host-2026-05-29-abcd" not in remote_heads
+
+
+def test_sync_reconcile_prunes_merged_branch(tmp_path):
+    """Simulate: work branch's commits are already in origin/master (merged),
+    leftover empty → sync cuts a fresh work branch and deletes the merged one."""
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    wb = "sync/host-2026-05-29-abcd"
+    _git(data, "checkout", "-q", "-b", wb)
+    (data / "log.md").write_text("# log\nx\n")
+    _git(data, "commit", "-qam", "x")
+    _git(data, "push", "-q", "-u", "origin", wb)
+    # Merge wb into origin/master via a real merge-commit on the bare remote's master:
+    _git(data, "checkout", "-q", "master")
+    _git(data, "merge", "--no-ff", "-q", wb, "-m", f"Merge {wb}")
+    _git(data, "push", "-q", "origin", "master")
+    _git(data, "checkout", "-q", wb)
+    # PR state is read from KB_SYNC_FAKE_PR_STATE in test mode (no gh call).
+    proc = _run("sync-data.sh", data, KB_SYNC_TEST="1", KB_SYNC_FAKE_PR_STATE="MERGED")
+    assert proc.returncode == 0, proc.stderr
+    head = subprocess.run(
+        ["git", "-C", str(data), "symbolic-ref", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert head.startswith("sync/") and head != wb  # fresh branch cut
+    branches = subprocess.run(
+        ["git", "-C", str(data), "branch", "--list", wb], capture_output=True, text=True
+    ).stdout
+    assert wb not in branches  # merged branch pruned (local)
