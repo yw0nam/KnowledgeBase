@@ -1,105 +1,124 @@
 # data/ Private Remote Sync
 
-Updated: 2026-05-28
+Updated: 2026-05-29
 
 ## 1. Synopsis
 
 - **Purpose**: Sync the nested `data/` git repo across machines via a private git remote, without ever exposing it to the outer repo's remote.
-- **I/O**: One private remote URL → `data/` pushable/pullable from any machine that runs `scripts/setup-data-remote.sh`.
+- **I/O**: `data/` rides a work branch `sync/<machine>-<date>-<rand>`; AI/cron commits land there; `sync-data.sh` runs a mandatory local lint gate then pushes and opens a PR against `master`; remote CI re-lints; user merges (merge-commit); next sync prunes the merged branch and cuts a fresh one.
+- **Runtime contract**: the `data-sync` skill (`.claude/skills/data-sync/SKILL.md`). This document is the design reference.
 
 ## 2. Core Logic
 
-### Why a private git remote
+### Why work-branch + merge-commit
 
-`data/` is already a nested git repo. Cron jobs (`kb-cron-wrapup`, `kb-wiki-promote`) and the `wiki-approval` skill commit to it. Git semantics — atomic commits, history, conflict resolution — match this workflow. File-sync products (Google Drive, Dropbox) race against `.git/` and corrupt it.
+`master` is never hand-committed — it only advances via merge-commits from the remote. This keeps the branch graph legible and makes pruning safe (a merged work branch is always a proper ancestor of `master` after merge-commit, so `git branch -D` loses nothing). Repo-level merge-commit enforcement is set by `setup-data-remote.sh` via the GitHub API.
 
-The outer repo's `.gitignore` excludes `data/`, so a private remote scoped to `data/` only is the safe sync surface. The outer repo's own remote must never see `data/` content.
+### Setup (per machine, in order)
 
-### Setup
+All scripts live under `.claude/skills/data-sync/scripts/`.
 
-On each machine:
+**Step 1 — Attach remote** (run while `data/` is on `master`):
 
 ```bash
-bash scripts/setup-data-remote.sh git@github.com:<you>/<private-data-repo>.git
+bash .claude/skills/data-sync/scripts/setup-data-remote.sh <private-url>
 ```
 
-The script:
+Verifies `data/.git` exists, refuses dirty trees and conflicting origins, sets the GitHub merge-method flag to `merge` (disabling squash/rebase), and pushes `master` upstream. Idempotent on identical URLs.
 
-1. Verifies `data/` and `data/.git` exist (otherwise refuses).
-2. Refuses if `data/` has uncommitted changes.
-3. Refuses if `origin` is already set to a different URL.
-4. Runs `git -C data remote add origin <url>` and `git -C data push -u origin <branch>`.
+**Step 2 — Install CI lint workflow** (run while `data/` is still on `master`):
 
-Create the private repo first on GitHub (or any private host). Do **not** reuse the outer repo's URL.
+```bash
+bash .claude/skills/data-sync/scripts/setup-data-ci.sh <pin>
+```
 
-### Daily workflow (manual, current model)
+`<pin>` is a tag or SHA of the outer repo that includes the `KB_DATA_DIR` change. Commits the CI workflow file to the remote and opens the first PR. Must run on `master` before the work-branch checkout.
 
-- **Start of day** on machine A: `git -C data pull --rebase`
-- **After cron-wrapup commit** (around 05:00 KST): `git -C data push`
-- Repeat on machine B.
+**Step 3 — Check out work branch**:
 
-AI sessions and cron jobs commit locally but **do not push**. Push is a deliberate user action so privacy invariants stay visible.
+```bash
+bash .claude/skills/data-sync/scripts/setup-data-workbranch.sh
+```
 
-### Conflict recovery
+Moves `data/` from `master` onto a `sync/<machine>-<date>-<rand>` branch. After this, AI/cron sessions commit only to work branches; they never commit to `master` directly.
 
-When `git -C data pull --rebase` fails with conflicts:
+### Daily workflow
 
-1. **Inspect**: `git -C data status` to list conflicted paths.
-2. **Resolve by file class:**
+- **Automated (cron)**: `kb-cron-wrapup.sh` runs `sync-data.sh` after its session commits, inside the same `data/.git/kb-sync.lock`.
+- **Manual intra-day**: `bash .claude/skills/data-sync/scripts/sync-data.sh`
 
-   | Path pattern | Resolution |
-   |---|---|
-   | `data/log.md` | Append-only: keep both sides, sort by date. |
-   | `data/wiki/**/*.md` | Manual merge. For `sources:` frontmatter arrays, take the union. |
-   | `data/handoffs/**/*.md` | Handoffs are immutable. A conflict means the same handoff was edited on two machines — keep the side with the newer `updated:` field and record the reason in the next handoff. |
-   | `data/raw/**` | Raw files are immutable (CLAUDE.md). A conflict here is an invariant violation: same path was created with different content on two machines. Investigate which side is authentic before continuing. Do **not** push until resolved. |
-
-3. **Finish rebase**: `git -C data rebase --continue`.
-4. **Lint before pushing**:
-
-   ```bash
-   uv run kb-wiki-index
-   uv run kb-lint-wiki --check-immutability
-   uv run kb-lint-handoff
-   ```
-
-5. **Push**: `git -C data push`.
-
-If the conflict is too large to merge by hand, create a per-machine branch (e.g. `machine-a`, `machine-b`), push both, and resolve in a long-form merge on one machine.
+`sync-data.sh` flow: fetch → detect merged/closed PR → reconcile or cut fresh branch → check dirty tree → mandatory local lint → push → create/update PR.
 
 ### Privacy guardrails
 
-- The outer repo's `.gitignore` already excludes `data/`. Do not unset that.
-- Never set the `data/` remote URL to the outer repo's URL or any public host.
-- AI sessions (cron-wrapup, wiki-promote, memory-report) commit to `data/` but never push. Push remains a user/setup action.
+- Origin allowlist: only the configured private repo (SSH or HTTPS). Any other URL is refused before push.
+- All `gh` calls pin `--repo <private-repo>`.
+- Outer `.gitignore` excludes `data/`; `data/.git` is independent.
+- AI/cron sessions never push. Only `sync-data.sh` (a shell script, not an AI session) pushes and opens PRs.
+
+### Conflict handling
+
+`sync-data.sh` never auto-resolves. On a non-mergeable PR or rebase conflict it prints the file-class recipe and exits non-zero. See Appendix A for the manual recovery steps.
+
+### Lint gates
+
+Two gates run on every sync:
+
+1. **Local (blocking)**: `sync-data.sh` runs `kb-wiki-index`, `kb-lint-wiki --check-immutability`, `kb-lint-handoff`. Refuses to push on any failure.
+2. **Remote CI**: the installed GitHub Actions workflow re-lints on every PR push. Merge is blocked until CI passes.
 
 ## 3. Usage
 
 | Need | Command |
 |---|---|
-| Configure private remote on a new machine | `bash scripts/setup-data-remote.sh <url>` |
-| Pull updates before working | `git -C data pull --rebase` |
-| Push after cron-wrapup commits | `git -C data push` |
+| Attach private remote (Step 1) | `bash .claude/skills/data-sync/scripts/setup-data-remote.sh <url>` |
+| Install CI workflow (Step 2) | `bash .claude/skills/data-sync/scripts/setup-data-ci.sh <pin>` |
+| Check out work branch (Step 3) | `bash .claude/skills/data-sync/scripts/setup-data-workbranch.sh` |
+| Manual sync (push + PR) | `bash .claude/skills/data-sync/scripts/sync-data.sh` |
+| Dry-run (no network calls) | `bash .claude/skills/data-sync/scripts/sync-data.sh --dry-run` |
 | Inspect current remote | `git -C data remote -v` |
 | Change remote URL | `git -C data remote set-url origin <new-url>` |
 
 ---
 
-## Appendix
+## Appendix A — Conflict Recovery
 
-### A. Future: automated sync
+When `sync-data.sh` exits non-zero with a conflict message, recover by hand:
 
-A later PR will add:
+```bash
+# 1. Commit or stash any uncommitted in-session output first.
+git -C data status
 
-- A `cron-wrapup` post-commit hook that pushes to the private remote.
-- A session-start hook that runs `git -C data pull --rebase` before AI workflows begin.
+# 2. Rebase the work branch onto the updated master.
+git -C data rebase origin/master
+```
 
-Until then, push and pull are manual. This is intentional — automatic push hides privacy decisions that should be conscious.
+Resolve by file class:
 
-### B. State DB (`data/db/`)
+| Path pattern | Resolution |
+|---|---|
+| `log.md` | Keep both sides; sort entries by date. |
+| `wiki/**` | Union the `sources:` frontmatter arrays; manually merge prose. |
+| `handoffs/**` | Keep the side with the newer `updated:` field; record the reason in the next handoff. |
+| `raw/**` | Conflict = immutability violation. The same path was created with different content on two machines. Investigate which side is authentic before continuing. Do **not** push until resolved. |
+
+```bash
+# 3. After resolving all conflicts:
+git -C data rebase --continue
+
+# 4. Re-run sync (re-lints, then pushes).
+bash .claude/skills/data-sync/scripts/sync-data.sh
+```
+
+## Appendix B — Future: auto-merge switch
+
+`gh pr merge --auto --merge` requires that GitHub branch protection marks the CI check as **required**. The two are a coupled pair, not independent toggles. Without the required check, `--auto` merges immediately, defeating the lint gate. Enable auto-merge only after confirming the CI check appears as a required status check in the branch protection rules for `master`.
+
+## Appendix C — State DB (`data/db/`)
 
 `data/db/` is excluded by `data/.gitignore` and is not synced via git. The current memory workflow keeps markdown frontmatter as the source of truth; `state.db` is derivable per-machine. A future migration to "DB as source of truth" will require a separate sync mechanism (rsync, litestream, etc.).
 
-### C. PatchNote
+## Appendix D — PatchNote
 
+- 2026-05-29: Rewrote for the work-branch → PR → merge-commit model. `setup-data-remote.sh` moved into the `data-sync` skill; added `setup-data-ci.sh` and `setup-data-workbranch.sh`; daily PR via `kb-cron-wrapup`; remote CI lint; mandatory local lint gate.
 - 2026-05-28: Initial publication. Establishes private-remote model, conflict recovery guide, and future hook roadmap.
