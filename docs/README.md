@@ -1,6 +1,6 @@
 # Documentation Index
 
-Updated: 2026-05-20
+Updated: 2026-05-28
 
 ## 1. Synopsis
 
@@ -35,6 +35,7 @@ For human onboarding, read:
 | `docs/architecture.md` | System layout and data boundaries |
 | `docs/reference/` | Human-readable schemas, categories, commands, and lookup tables |
 | `docs/db_informations/` | Database and reporting references |
+| `docs/data-sync.md` | Private remote sync for the nested `data/` repo |
 | `docs/CLAUDE.md` | Document authoring rules |
 
 ### Document Types
@@ -56,6 +57,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 | Approve/reject wiki pages | `.claude/skills/wiki-approval/SKILL.md` |
 | Run CLI commands | `docs/reference/commands.md` |
 | Start review console (web UI) | `README.md` → "Review console" section; `scripts/dev-web.sh` |
+| Sync `data/` across machines | `docs/data-sync.md`; `scripts/setup-data-remote.sh` |
 
 ---
 
@@ -63,6 +65,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 
 ### A. PatchNote
 
+- 2026-05-28: Added `docs/data-sync.md` for private remote sync of the nested `data/` repo.
 - 2026-05-20: Removed `docs/workflows/`; project skills are now the sole workflow surface.
 - 2026-05-20: Reframed docs as design/reference material and routed runtime workflows to `.claude/skills/`.
 - 2026-05-20: Added review console (web UI) to usage table.

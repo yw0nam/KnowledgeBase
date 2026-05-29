@@ -10,12 +10,12 @@ Use this skill as the runtime contract for repository setup. Do not load `docs/`
 ## Rules
 
 - Treat the current directory as the KnowledgeBase root.
-- `data/` is a nested local-only git repository. Never add it to the outer repo.
+- `data/` is a nested private git repository. Never add it to the outer repo. It may have its own private remote — see `docs/data-sync.md`.
 - Never modify existing files under `data/raw/`.
 - Preserve existing `data/` contents; create only missing directories/files.
 - Do not install or edit crontab until the user approves the exact entries.
 - Memory cron jobs run lint and leave changes uncommitted for manual review.
-- Wiki promotion may commit inside the nested `data/` repo after promoting pages. It never pushes.
+- Wiki promotion may commit inside the nested `data/` repo after promoting pages. It does not push from the AI session — push to a private `data/` remote (if configured — see `docs/data-sync.md`) is handled outside the AI session.
 - Prefer relative paths from repo root. Do not hard-code machine-specific absolute paths except when showing final crontab examples.
 
 ## Required Data Layout
@@ -96,6 +96,20 @@ Append-only operation record.
 ```
 
 Do not create raw source files during initialization.
+
+## Phase 2.5: Configure Private Data Remote (optional)
+
+If the user wants to sync `data/` across machines, ask whether to attach a private remote now. If yes:
+
+```bash
+bash scripts/setup-data-remote.sh <git-url>
+```
+
+- The URL must be a private repository scoped to `data/` only.
+- Never point it at the outer repo's URL or any public host.
+- See `docs/data-sync.md` for the full workflow and conflict recovery.
+
+Skip this phase on machines that won't sync. The script is idempotent and can be run later.
 
 ## Phase 3: Verify Tooling
 
