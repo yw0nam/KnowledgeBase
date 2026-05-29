@@ -375,13 +375,21 @@ def lint(
 
 
 def main():
+    from kb import data_dir
+
     strict = "--strict" in sys.argv
     check_immutability = "--check-immutability" in sys.argv or strict
 
-    print("Linting wiki/...\n")
+    dd = data_dir()
+    print(f"Linting {dd / 'wiki'}/...\n")
 
     result = LintResult()
-    lint(result, check_immutability=check_immutability)
+    lint(
+        result,
+        wiki_dir=dd / "wiki",
+        raw_dir=dd / "raw",
+        check_immutability=check_immutability,
+    )
     result.print_report()
 
     if not result.ok:
