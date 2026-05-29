@@ -47,7 +47,7 @@ Moves `data/` from `master` onto a `sync/<machine>-<date>-<rand>` branch. After 
 - **Automated (cron)**: `kb-cron-wrapup.sh` runs `sync-data.sh` after its session commits, inside the same `data/.git/kb-sync.lock`.
 - **Manual intra-day**: `bash .claude/skills/data-sync/scripts/sync-data.sh`
 
-`sync-data.sh` flow: fetch → detect merged/closed PR → reconcile or cut fresh branch → check dirty tree → mandatory local lint → push → create/update PR.
+`sync-data.sh` flow: fetch → detect merged/closed PR → reconcile or cut fresh branch → warn on dirty tree (non-blocking) → mandatory local lint → push → create/update PR.
 
 ### Privacy guardrails
 

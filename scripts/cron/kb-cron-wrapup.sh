@@ -16,10 +16,15 @@ mkdir -p "$INFLIGHT_LOG_DIR"
 
 PROMPT="Run the KB cron wrap-up for $TARGET_DATE. Import and follow .claude/skills/cron-wrapup/SKILL.md as the runtime contract. Import .claude/skills/handoff-document/SKILL.md for the run handoff. Do not read docs as runtime instructions. After successful data lint, commit only the nested data repo with message \"cron-wrapup: $TARGET_DATE\". Never commit the outer repo. Never push. If blocked, write the wrap-up with Status: FAILED and a handoff with status: ready, then exit non-zero."
 
+if [ ! -d "$KB_ROOT/data/.git" ]; then
+  echo "FATAL: $KB_ROOT/data/.git not found — run knowledgebase-initialize before cron." >> "$INFLIGHT_LOG"
+  exit 1
+fi
+
 SYNC="$KB_ROOT/.claude/skills/data-sync/scripts/sync-data.sh"
 SESSION_EXIT=0
 flock -n "$KB_ROOT/data/.git/kb-sync.lock" bash -c '
-  set -uo pipefail
+  set -uo pipefail   # -e omitted on purpose: the git-commit no-ops below use || true and would abort under -e
   KB_ROOT="$1"; PROMPT="$2"; TARGET_DATE="$3"; INFLIGHT_LOG="$4"
   ARCHIVE_LOG_DIR="$5"; ARCHIVE_REL="$6"; SYNC="$7"
   rc=0
@@ -29,7 +34,8 @@ flock -n "$KB_ROOT/data/.git/kb-sync.lock" bash -c '
 
   # Archive + commit the run log on the work branch (post-session).
   mkdir -p "$ARCHIVE_LOG_DIR"
-  cp "$INFLIGHT_LOG" "$ARCHIVE_LOG_DIR/$(basename "$ARCHIVE_REL")"
+  cp "$INFLIGHT_LOG" "$ARCHIVE_LOG_DIR/$(basename "$ARCHIVE_REL")" \
+    || echo "WARN: failed to archive run log to $ARCHIVE_LOG_DIR" >> "$INFLIGHT_LOG"
   git -C "$KB_ROOT/data" add "$ARCHIVE_REL" 2>/dev/null || true
   git -C "$KB_ROOT/data" diff --cached --quiet 2>/dev/null \
     || git -C "$KB_ROOT/data" commit -m "cron-wrapup-log: $TARGET_DATE" 2>/dev/null || true
