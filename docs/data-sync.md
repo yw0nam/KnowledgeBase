@@ -32,7 +32,7 @@ Verifies `data/.git` exists, refuses dirty trees and conflicting origins, sets t
 bash .claude/skills/data-sync/scripts/setup-data-ci.sh <pin>
 ```
 
-`<pin>` is a tag or SHA of the outer repo that includes the `KB_DATA_DIR` change. Commits the CI workflow file to the remote and opens the first PR. Must run on `master` before the work-branch checkout.
+`<pin>` is a tag or SHA of the outer repo that includes the `KB_DATA_DIR` change. Commits the CI workflow file and pushes it **directly to `master`** on the remote (a direct push, not a PR — the workflow must exist on `master` before it can run on later PRs). No force-push. Must run on `master` before the work-branch checkout.
 
 **Step 3 — Check out work branch**:
 
