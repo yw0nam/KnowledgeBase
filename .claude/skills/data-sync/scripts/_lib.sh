@@ -65,3 +65,7 @@ ensure_machine_id_ignored() {
 
 # KB_SYNC_TEST=1 disables the network allowlist guard for hermetic tests that
 # push to a local bare remote. Never set this outside the test suite.
+
+# KB_SYNC_LINT_CMD overrides the pre-flight lint command (tests only). The
+# pre-flight lint is a MANDATORY gate — sync-data.sh refuses to push if it
+# fails. Never set KB_SYNC_LINT_CMD outside the test suite.

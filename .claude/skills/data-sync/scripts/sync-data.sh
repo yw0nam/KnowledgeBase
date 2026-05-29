@@ -13,7 +13,7 @@ source "$SCRIPT_DIR/_lib.sh"
 
 DRY_RUN="${1:-}"
 [ -z "$DRY_RUN" ] || [ "$DRY_RUN" = "--dry-run" ] || { echo "error: only --dry-run supported" >&2; exit 2; }
-run() { echo "+ $*"; [ "$DRY_RUN" = "--dry-run" ] || "$@"; }
+run() { echo "+ ${*//$DATA/data}"; [ "$DRY_RUN" = "--dry-run" ] || "$@"; }
 
 _print_conflict_help() {
   cat >&2 <<'EOF'

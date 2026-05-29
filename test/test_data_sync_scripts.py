@@ -216,3 +216,38 @@ def test_sync_refuses_non_private_origin(tmp_path):
     proc = _run("sync-data.sh", data)
     assert proc.returncode != 0
     assert "not the allowed private remote" in (proc.stdout + proc.stderr)
+
+
+def test_sync_dry_run_plans_push_and_pr(tmp_path):
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True)
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    (data / "log.md").write_text("# log\nmore\n")
+    _git(data, "commit", "-qam", "more")
+    proc = _run("sync-data.sh", data, "--dry-run", KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="true")
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout
+    assert "git" in out and "push" in out
+    assert "gh pr" in out
+
+
+def test_sync_blocks_push_when_local_lint_fails(tmp_path):
+    """Mandatory local lint gate: a failing lint must abort BEFORE push/PR."""
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True)
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    (data / "log.md").write_text("# log\nbad\n")
+    _git(data, "commit", "-qam", "bad")
+    proc = _run("sync-data.sh", data, KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="false")
+    assert proc.returncode != 0
+    assert "lint" in (proc.stdout + proc.stderr).lower()
+    assert "push" not in proc.stdout          # never reached the push step
+    remote_heads = subprocess.run(["git", "-C", str(data), "ls-remote", "--heads", "origin"],
+                                  capture_output=True, text=True).stdout
+    assert "sync/host-2026-05-29-abcd" not in remote_heads
