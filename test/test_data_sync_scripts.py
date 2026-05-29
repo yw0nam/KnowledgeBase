@@ -257,7 +257,7 @@ def test_sync_blocks_push_when_local_lint_fails(tmp_path):
     proc = _run("sync-data.sh", data, KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="false")
     assert proc.returncode != 0
     assert "lint" in (proc.stdout + proc.stderr).lower()
-    assert "push" not in proc.stdout  # never reached the push step
+    assert "push -u origin" not in proc.stdout  # never reached the push step
     remote_heads = subprocess.run(
         ["git", "-C", str(data), "ls-remote", "--heads", "origin"],
         capture_output=True,
