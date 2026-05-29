@@ -1,0 +1,36 @@
+# .claude/skills/data-sync/reference/data-lint.yml
+# Installed into data/.github/workflows/lint.yml by setup-data-ci.sh.
+# __KB_PIN__ is replaced by the installer with a tag/SHA of yw0nam/KnowledgeBase
+# that INCLUDES the KB_DATA_DIR CLI change (spec §4.4).
+name: data lint
+on:
+  pull_request:
+    branches: [master]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch origin master
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v5
+      - run: uv pip install --system "git+https://github.com/yw0nam/KnowledgeBase@__KB_PIN__"
+      - name: lint
+        env:
+          KB_DATA_DIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          kb-wiki-index
+          test -z "$(git status --porcelain -- wiki/INDEX.md)" \
+            || { echo "INDEX.md out of date or untracked"; git status --porcelain -- wiki/INDEX.md; exit 1; }
+          kb-lint-wiki
+          kb-lint-handoff
+          # raw immutability: only Added (A) allowed under raw/** vs the merge base.
+          changed="$(git diff --diff-filter=acdmrtuxb --name-status -M origin/master...HEAD -- raw/)"
+          if [ -n "$changed" ]; then
+            echo "raw/** is immutable; non-addition changes found:"; echo "$changed"; exit 1
+          fi
