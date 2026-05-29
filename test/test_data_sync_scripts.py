@@ -201,3 +201,18 @@ def test_ci_raw_immutability_filter_allows_adds_blocks_modify(tmp_path):
     (data / "raw" / "keep.md").write_text("tampered\n")
     _git(data, "commit", "-qam", "mod")
     assert "raw/keep.md" in raw_changes()
+
+
+def test_sync_refuses_on_master(tmp_path):
+    data = _make_data_repo(tmp_path, origin_url="git@github.com:yw0nam/PrivateKnowledgeBase.git")
+    proc = _run("sync-data.sh", data)
+    assert proc.returncode != 0
+    assert "work branch" in (proc.stdout + proc.stderr).lower()
+
+
+def test_sync_refuses_non_private_origin(tmp_path):
+    data = _make_data_repo(tmp_path, origin_url="https://github.com/yw0nam/KnowledgeBase.git")
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    proc = _run("sync-data.sh", data)
+    assert proc.returncode != 0
+    assert "not the allowed private remote" in (proc.stdout + proc.stderr)
