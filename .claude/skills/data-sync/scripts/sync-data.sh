@@ -41,16 +41,19 @@ preflight_lint() {
     && KB_DATA_DIR="$DATA" uv run kb-lint-handoff )
 }
 
+[ -d "$DATA/.git" ] || { echo "error: $DATA is not a git repo. Run knowledgebase-initialize / setup-data-workbranch.sh." >&2; exit 1; }
+
 # Re-exec under flock on the canonical lock (shared with the cron wrapper) so
-# no two syncs — or a sync and a cron commit — touch data/ at once.
+# no two syncs — or a sync and a cron commit — touch data/ at once. If flock is
+# unavailable (e.g. macOS), degrade gracefully: all other guards still run.
 LOCK="$DATA/$LOCK_FILE_REL"
-if [ -z "${KB_SYNC_LOCKED:-}" ]; then
+if [ -z "${KB_SYNC_LOCKED:-}" ] && command -v flock >/dev/null 2>&1; then
   exec env KB_SYNC_LOCKED=1 flock -n "$LOCK" "$0" "$@"
 fi
 
 # ── Guards ───────────────────────────────────────────────────────────
-[ -d "$DATA/.git" ] || { echo "error: $DATA is not a git repo." >&2; exit 1; }
-WB="$(git -C "$DATA" symbolic-ref --short HEAD)"
+WB="$(git -C "$DATA" symbolic-ref --short HEAD 2>/dev/null)" \
+  || { echo "error: data/ is in detached HEAD (a prior sync may have crashed mid-reconcile). Resolve manually: git -C data checkout <branch>." >&2; exit 1; }
 if [[ "$WB" != sync/* ]]; then
   echo "error: data/ is not on a work branch (HEAD=$WB). Run setup-data-workbranch.sh." >&2; exit 1
 fi
@@ -58,6 +61,10 @@ fi
 if [ "${KB_SYNC_TEST:-}" != "1" ]; then
   gh auth status >/dev/null 2>&1 || { echo "error: gh not authenticated. Run: gh auth login" >&2; exit 1; }
 fi
+# Reconcile mints fresh work branches via new_work_branch → machine_id, which
+# writes .sync-machine-id into data/. Ensure it's locally excluded up front so
+# the conflict-abort path leaves a genuinely clean tree (not "?? .sync-machine-id").
+ensure_machine_id_ignored "$DATA"
 
 # ── Fetch ────────────────────────────────────────────────────────────
 run git -C "$DATA" fetch origin
@@ -86,8 +93,8 @@ if [ "$STATE" = "MERGED" ]; then
     run git -C "$DATA" checkout -b "$NEW" origin/master
     if ! git -C "$DATA" cherry-pick "origin/master..$WB" 2>/dev/null; then
       git -C "$DATA" cherry-pick --abort 2>/dev/null || true
-      run git -C "$DATA" checkout "$WB"
-      run git -C "$DATA" branch -D "$NEW"
+      git -C "$DATA" checkout "$WB"
+      git -C "$DATA" branch -D "$NEW" 2>/dev/null || true
       _print_conflict_help; exit 1
     fi
     run git -C "$DATA" branch -D "$WB"
@@ -106,6 +113,10 @@ AHEAD="$(git -C "$DATA" rev-list --count origin/master.."$WB" 2>/dev/null || ech
 if [ "$AHEAD" = "0" ]; then
   echo "nothing to sync (work branch not ahead of origin/master)."; exit 0
 fi
+
+# Dirty-tree warning (spec §4.3 step 4): only committed work syncs. Warn, do not auto-commit.
+[ -z "$(git -C "$DATA" status --porcelain)" ] \
+  || echo "warning: data/ has uncommitted changes — only committed work will appear in the PR." >&2
 
 # ── Pre-flight lint — MANDATORY blocking gate (spec §4.3 step 6) ─────────
 # Bad data never leaves the machine: if lint fails, abort BEFORE push/PR.

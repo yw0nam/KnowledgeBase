@@ -299,3 +299,122 @@ def test_sync_reconcile_prunes_merged_branch(tmp_path):
         ["git", "-C", str(data), "branch", "--list", wb], capture_output=True, text=True
     ).stdout
     assert wb not in branches  # merged branch pruned (local)
+
+
+def test_sync_refuses_closed_pr(tmp_path):
+    """A CLOSED (not merged) PR must abort, not auto-recreate the PR."""
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    (data / "log.md").write_text("# log\nx\n")
+    _git(data, "commit", "-qam", "x")
+    proc = _run("sync-data.sh", data, KB_SYNC_TEST="1", KB_SYNC_FAKE_PR_STATE="CLOSED")
+    assert proc.returncode != 0
+    assert "closed" in (proc.stdout + proc.stderr).lower()
+
+
+def test_sync_reconcile_cherrypicks_leftover(tmp_path):
+    """MERGED PR but a new commit landed after the synced push: the leftover
+    must be cherry-picked onto a fresh branch (no commit loss), old branch pruned."""
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    wb = "sync/host-2026-05-29-abcd"
+    _git(data, "checkout", "-q", "-b", wb)
+    (data / "log.md").write_text("# log\nx\n")
+    _git(data, "commit", "-qam", "x")
+    _git(data, "push", "-q", "-u", "origin", wb)
+    # merge wb into origin/master (the "merged" part)
+    _git(data, "checkout", "-q", "master")
+    _git(data, "merge", "--no-ff", "-q", wb, "-m", f"Merge {wb}")
+    _git(data, "push", "-q", "origin", "master")
+    _git(data, "checkout", "-q", wb)
+    # a NEW commit lands on wb AFTER the merge → leftover (touch a DIFFERENT file so it cherry-picks clean)
+    (data / "extra.md").write_text("leftover\n")
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "leftover")
+    proc = _run(
+        "sync-data.sh",
+        data,
+        KB_SYNC_TEST="1",
+        KB_SYNC_FAKE_PR_STATE="MERGED",
+        KB_SYNC_LINT_CMD="true",
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    head = subprocess.run(
+        ["git", "-C", str(data), "symbolic-ref", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert head.startswith("sync/") and head != wb
+    # leftover commit preserved on the fresh branch (no commit loss)
+    assert (data / "extra.md").exists()
+    log = subprocess.run(
+        ["git", "-C", str(data), "log", "--oneline"], capture_output=True, text=True
+    ).stdout
+    assert "leftover" in log
+    # old branch pruned locally
+    branches = subprocess.run(
+        ["git", "-C", str(data), "branch", "--list", wb], capture_output=True, text=True
+    ).stdout
+    assert wb not in branches
+
+
+def test_sync_reconcile_conflict_aborts_cleanly(tmp_path):
+    """If the leftover cherry-pick conflicts, sync must abort, leave data/ on the
+    ORIGINAL work branch (not detached, no half-applied pick), and exit non-zero."""
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    wb = "sync/host-2026-05-29-abcd"
+    _git(data, "checkout", "-q", "-b", wb)
+    (data / "log.md").write_text("# log\nfrom-wb\n")
+    _git(data, "commit", "-qam", "wb-change")
+    _git(data, "push", "-q", "-u", "origin", wb)
+    # merge wb into origin/master
+    _git(data, "checkout", "-q", "master")
+    _git(data, "merge", "--no-ff", "-q", wb, "-m", f"Merge {wb}")
+    # a divergent commit on master touching the SAME file/line, pushed to origin
+    (data / "log.md").write_text("# log\nfrom-master-divergent\n")
+    _git(data, "commit", "-qam", "master-divergent")
+    _git(data, "push", "-q", "origin", "master")
+    _git(data, "checkout", "-q", wb)
+    # a leftover commit on wb touching the SAME line → cherry-pick onto fresh-from-origin/master will conflict
+    (data / "log.md").write_text("# log\nfrom-wb-leftover\n")
+    _git(data, "commit", "-qam", "wb-leftover")
+    proc = _run(
+        "sync-data.sh",
+        data,
+        KB_SYNC_TEST="1",
+        KB_SYNC_FAKE_PR_STATE="MERGED",
+        KB_SYNC_LINT_CMD="true",
+    )
+    assert proc.returncode != 0
+    assert "conflict" in (proc.stdout + proc.stderr).lower()
+    # data/ left on the ORIGINAL work branch, not detached, no cherry-pick in progress
+    head = subprocess.run(
+        ["git", "-C", str(data), "symbolic-ref", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert head == wb
+    # working tree clean (no half-applied cherry-pick / conflict markers)
+    porcelain = subprocess.run(
+        ["git", "-C", str(data), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert porcelain.strip() == ""
