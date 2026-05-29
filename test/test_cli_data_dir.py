@@ -38,3 +38,10 @@ def test_lint_wiki_lints_kb_data_dir(tmp_path):
     proc = _run("kb.cli.lint_wiki", tmp_path)
     assert proc.returncode == 1
     assert "dead link [[NonexistentTarget]]" in proc.stdout
+
+
+def test_wiki_index_writes_into_kb_data_dir(tmp_path):
+    _make_wiki(tmp_path)
+    proc = _run("kb.cli.wiki_index", tmp_path)
+    assert proc.returncode == 0
+    assert (tmp_path / "wiki" / "INDEX.md").exists()
