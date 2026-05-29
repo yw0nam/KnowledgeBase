@@ -446,6 +446,7 @@ work-branch → PR → merge-commit model. Design doc: `docs/data-sync.md`.
 - AI/cron sessions **commit only to the work branch** (`sync/<machine>-<date>-<rand>`), never to `master`.
 - Push / PR / branch pruning happen **only in `sync-data.sh`** (shell, outside any AI session).
 - Local `master` is never hand-committed; it only tracks `origin/master` via fetch.
+- **A mandatory local lint gate runs before every push — `sync-data.sh` refuses to push if it fails.** Remote CI is the second, authoritative gate; bad data never leaves the machine.
 - Merge method is **merge-commit**, enforced at the repo level (set in `setup-data-remote.sh`).
 - Privacy: every network path runs the origin allowlist guard; all `gh` calls pin `--repo yw0nam/PrivateKnowledgeBase`.
 
@@ -989,7 +990,9 @@ git commit -m "feat(data-sync): sync-data.sh guards, lock, nothing-to-sync"
 - Modify: `.claude/skills/data-sync/scripts/sync-data.sh`
 - Test: `test/test_data_sync_scripts.py` (append)
 
-- [ ] **Step 1: Write the failing test (dry-run plan)**
+**The local pre-flight lint is a MANDATORY blocking gate (spec §4.3 step 6 / §4.4):** the helper lints locally and **refuses to push if lint fails**. Remote CI is the second, authoritative gate — but we never push known-bad data. To keep this testable, the gate runs through a `preflight_lint()` function that the real script wires to the `uv run kb-*` commands, and which a test can override via `KB_SYNC_LINT_CMD` (so the gate is *exercised*, not skipped, in tests).
+
+- [ ] **Step 1: Write two failing tests — the gate passes (push happens) and the gate fails (push blocked)**
 
 ```python
 def test_sync_dry_run_plans_push_and_pr(tmp_path):
@@ -1001,34 +1004,70 @@ def test_sync_dry_run_plans_push_and_pr(tmp_path):
     _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
     (data / "log.md").write_text("# log\nmore\n")
     _git(data, "commit", "-qam", "more")
-    proc = _run("sync-data.sh", data, "--dry-run", KB_SYNC_TEST="1")
+    # KB_SYNC_LINT_CMD="true" → the mandatory gate runs and passes (no real uv needed).
+    proc = _run("sync-data.sh", data, "--dry-run", KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="true")
     assert proc.returncode == 0, proc.stderr
     out = proc.stdout
     assert "git" in out and "push" in out
     assert "gh pr" in out
+
+
+def test_sync_blocks_push_when_local_lint_fails(tmp_path):
+    """Mandatory local lint gate: a failing lint must abort BEFORE push/PR."""
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True)
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    (data / "log.md").write_text("# log\nbad\n")
+    _git(data, "commit", "-qam", "bad")
+    # KB_SYNC_LINT_CMD="false" simulates a lint failure.
+    proc = _run("sync-data.sh", data, KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="false")
+    assert proc.returncode != 0
+    assert "lint" in (proc.stdout + proc.stderr).lower()
+    assert "push" not in proc.stdout          # never reached the push step
+    # the work branch was NOT pushed to the bare remote
+    remote_heads = subprocess.run(["git", "-C", str(data), "ls-remote", "--heads", "origin"],
+                                  capture_output=True, text=True).stdout
+    assert "sync/host-2026-05-29-abcd" not in remote_heads
 ```
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `uv run pytest test/test_data_sync_scripts.py::test_sync_dry_run_plans_push_and_pr -v`
-Expected: FAIL — current script prints the `TODO: push + PR` line, no `gh pr`.
+Run: `uv run pytest test/test_data_sync_scripts.py -k "dry_run_plans or blocks_push" -v`
+Expected: FAIL — current script prints the `TODO: push + PR` line; no gate, no `gh pr`.
 
-- [ ] **Step 3: Replace the TODO with push + PR**
+- [ ] **Step 3: Replace the TODO with the mandatory lint gate + push + PR**
 
-Replace the final two lines of `sync-data.sh` (the `echo "TODO..."` block) with:
+Add the gate function near the top of `sync-data.sh` (after `source _lib.sh`):
 
 ```bash
-# ── Pre-flight lint (belt-and-suspenders; CI re-runs authoritatively) ──
-if [ "${KB_SYNC_TEST:-}" != "1" ]; then
-  ( cd "$KB_ROOT" && \
-    KB_DATA_DIR="$DATA" uv run kb-wiki-index && \
-    [ -z "$(git -C "$DATA" status --porcelain -- wiki/INDEX.md)" ] && \
-    KB_DATA_DIR="$DATA" uv run kb-lint-wiki --check-immutability && \
-    KB_DATA_DIR="$DATA" uv run kb-lint-handoff ) || {
-      echo "error: pre-flight lint failed — not pushing (CI would reject)." >&2; exit 1; }
+# Mandatory pre-flight lint. Real run wires uv; tests override via KB_SYNC_LINT_CMD.
+preflight_lint() {
+  if [ -n "${KB_SYNC_LINT_CMD:-}" ]; then
+    eval "$KB_SYNC_LINT_CMD"; return $?
+  fi
+  ( cd "$KB_ROOT" \
+    && KB_DATA_DIR="$DATA" uv run kb-wiki-index \
+    && [ -z "$(git -C "$DATA" status --porcelain -- wiki/INDEX.md)" ] \
+    && KB_DATA_DIR="$DATA" uv run kb-lint-wiki --check-immutability \
+    && KB_DATA_DIR="$DATA" uv run kb-lint-handoff )
+}
+```
+
+Then replace the final `echo "TODO..."` block with:
+
+```bash
+# ── Pre-flight lint — MANDATORY blocking gate (spec §4.3 step 6) ─────────
+# Bad data never leaves the machine: if lint fails, abort BEFORE push/PR.
+if [ "$DRY_RUN" = "--dry-run" ]; then
+  echo "+ preflight lint (would run; skipped in --dry-run)"
+else
+  preflight_lint || { echo "error: pre-flight lint failed — refusing to push." >&2; exit 1; }
 fi
 
-# ── Push ───────────────────────────────────────────────────────────────
+# ── Push (only reached if lint passed) ──────────────────────────────────
 run git -C "$DATA" push -u origin "$WB"
 
 # ── PR (create or update) ──────────────────────────────────────────────
@@ -1046,16 +1085,28 @@ else
 fi
 ```
 
-- [ ] **Step 4: Run to verify the test passes**
+> Order is load-bearing: the lint gate is **before** the push. The `blocks_push` test asserts the push step is never reached on lint failure. In `--dry-run` the gate is described but not executed (it would write `INDEX.md`); a real run always executes it.
 
-Run: `uv run pytest test/test_data_sync_scripts.py::test_sync_dry_run_plans_push_and_pr -v`
-Expected: PASS
+- [ ] **Step 4: Run to verify both tests pass**
 
-- [ ] **Step 5: Commit**
+Run: `uv run pytest test/test_data_sync_scripts.py -k "dry_run_plans or blocks_push" -v`
+Expected: PASS (gate-passes → push planned; gate-fails → push blocked, branch not on remote).
+
+- [ ] **Step 5: Document the lint-gate seam in `_lib.sh`**
+
+Append to `_lib.sh`:
 
 ```bash
-git add .claude/skills/data-sync/scripts/sync-data.sh test/test_data_sync_scripts.py
-git commit -m "feat(data-sync): sync-data.sh push + PR create/update"
+# KB_SYNC_LINT_CMD overrides the pre-flight lint command (tests only). The
+# pre-flight lint is a MANDATORY gate — sync-data.sh refuses to push if it
+# fails. Never set KB_SYNC_LINT_CMD outside the test suite.
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add .claude/skills/data-sync/scripts/sync-data.sh .claude/skills/data-sync/scripts/_lib.sh test/test_data_sync_scripts.py
+git commit -m "feat(data-sync): mandatory local lint gate before push + PR"
 ```
 
 ### Task 11: `sync-data.sh` — post-merge reconcile + conflict detection

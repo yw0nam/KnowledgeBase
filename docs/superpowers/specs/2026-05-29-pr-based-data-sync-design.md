@@ -7,7 +7,7 @@ Scope: A only — PR-based `data/` git sync + remote CI lint. The Hermes-kanban 
 ## 1. Synopsis
 
 - **Purpose**: Replace direct `git push origin master` of the nested `data/` repo with a branch → PR → **merge-commit** model on the existing private remote (`yw0nam/PrivateKnowledgeBase`), adding a remote CI lint gate, a review surface, and multi-machine conflict safety — without exposing `data/` to the outer repo's public remote.
-- **I/O**: Local `data/` commits (from AI/cron sessions, made on a **daily work branch** — never on `master`) → that work branch pushed → PR against `master` → merge-commit after CI lint passes. `master` is never hand-committed locally; it only advances via PR merge on the remote.
+- **I/O**: Local `data/` commits (from AI/cron sessions, made on a **daily work branch** — never on `master`) → **mandatory local lint gate (must pass before push)** → work branch pushed → PR against `master` → remote CI lint re-checks → merge-commit after CI passes. `master` is never hand-committed locally; it only advances via PR merge on the remote. **Two lint gates: local (before push, blocking) + remote CI (before merge, authoritative).**
 - **Drivers** (user-stated): clean history, multi-machine conflict safety, remote CI lint, review gate. (The longer-term motivation — removing the external Hermes-kanban dependency in favor of GitHub-native primitives — is satisfied by a later spec B; this spec only lays the GitHub branch/PR/CI foundation it will build on.)
 
 ## 2. Background / Current State
@@ -112,12 +112,13 @@ Idempotent; **at most one open sync PR at a time**. `data/` is already checked o
    - **Invariant:** a branch is deleted only when `git log origin/master..<branch>` is empty (fully contained in `origin/master`).
 4. **Dirty-tree warning**: if `data/` has uncommitted changes (e.g., memory-job output), **warn** that uncommitted work will NOT be in the PR; do **not** auto-commit. (Continue — only committed work syncs.)
 5. **Nothing-to-sync check**: if the work branch is not ahead of `origin/master` and no open PR exists → print "nothing to sync", exit 0.
-6. **Pre-flight lint** — run from the **outer repo root** (where the `uv` project lives), pointing `KB_DATA_DIR` at the `data/` work tree (an *absolute* path, to avoid the `data/data` trap if cwd ever changes). Belt-and-suspenders; CI re-runs authoritatively:
+6. **Pre-flight lint — MANDATORY local gate; push is blocked on failure.** Local lint is **not** optional and **not** merely a convenience: the helper runs the full lint locally and verifies integrity **before** any push, and **refuses to push/PR if it fails** (§9). Remote CI is a *second, authoritative* line (it re-runs on the pinned linter for cross-machine consistency and gates the merge), but the local gate is the *first* one and must pass first — we never push known-bad data and wait for CI to reject it. Run from the **outer repo root** (where the `uv` project lives), pointing `KB_DATA_DIR` at the `data/` work tree (an *absolute* path, to avoid the `data/data` trap if cwd ever changes):
    ```
    KB_DATA_DIR="$(pwd)/data" uv run kb-wiki-index    # then assert no INDEX change — see below
    KB_DATA_DIR="$(pwd)/data" uv run kb-lint-wiki --check-immutability
    KB_DATA_DIR="$(pwd)/data" uv run kb-lint-handoff
    ```
+   - **Any non-zero exit here aborts the sync before step 7 (push). No push, no PR.**
    - INDEX freshness must be checked with `git -C data status --porcelain -- wiki/INDEX.md` being empty (not just `git diff --exit-code`) so a *regenerated-but-untracked* `INDEX.md` is also caught (§4.4).
    - `KB_DATA_DIR` is the **data tree root** (matching `src/kb/web/config.py`); the linters derive `wiki/`, `raw/`, `handoffs/` as children. The local pre-flight keeps the mtime-based `--check-immutability`; CI omits it (§4.4).
 7. **Push**: `git -C data push -u origin <work-branch>`.
@@ -127,6 +128,8 @@ Idempotent; **at most one open sync PR at a time**. `data/` is already checked o
 **Conflict path is manual (C1 — not scripted)**: when the work branch is not cleanly mergeable because `origin/master` moved (another machine merged first), `sync-data.sh` does **not** attempt to rebase or resolve. It **detects** the condition (the leftover-rebase in step 3 conflicts, or `gh pr view` reports the PR not mergeable), prints the file-class resolution guidance (§9), and exits non-zero. The user resolves by hand — consistent with the manual merge gate (the user is already reviewing/merging every PR on GitHub). This deliberately trades rare-case automation for a much smaller, safer script: auto-merging `data/` content by file class is the most error-prone logic in the design and is exercised only when two machines have overlapping in-flight changes, which is uncommon for a 1–3 machine personal KB. Recommended manual recipe is in §9; the user runs an ordinary `git -C data rebase origin/master`, resolves per file class, and re-runs `sync-data.sh`.
 
 ### 4.4 Remote CI lint
+
+Remote CI is the **second** lint gate, not the only one. The **first** gate is the mandatory local pre-flight lint in `sync-data.sh` (§4.3 step 6), which blocks the push if it fails — bad data never leaves the machine. CI then re-runs the same checks on a *pinned* linter version (authoritative for cross-machine consistency) and gates the merge. Both gates run the same logical checks; the local one gives fast feedback without burning a push/PR/CI cycle, the remote one is the source of truth at merge time.
 
 > **Prerequisite code change (verified against current code):** the CLI linters do **not** honor `KB_DATA_DIR` — `src/kb/cli/lint_wiki.py` and `wiki_index.py` hard-code `WIKI_DIR = REPO_ROOT/"data"/"wiki"` (only the web app reads `KB_DATA_DIR`). `lint_wiki.run()` already accepts `wiki_dir`/`raw_dir` params, so the change is small: make `kb-lint-wiki`, `kb-lint-handoff`, `kb-wiki-index` resolve their data dir from `KB_DATA_DIR` (falling back to the current default). Without this, CI lints the empty installed-package path, not the checkout. This is the one in-scope code change beyond scripts/skills.
 
@@ -197,7 +200,7 @@ Because `data/` is a separate repo re-created per machine, the CI workflow must 
 | Step | Owner | Context | Notes |
 |---|---|---|---|
 | Decide to sync (trigger) | `kb-cron-wrapup.sh` wrapper **or** user | shell, outside AI | daily after the log commit; or manual intra-day |
-| Pre-flight lint | `sync-data.sh` | shell, outside AI | in `data/` on the work branch; CI re-runs authoritatively |
+| **Pre-flight lint (blocking gate)** | `sync-data.sh` | shell, outside AI | mandatory; **push is skipped if it fails**; CI re-runs authoritatively before merge |
 | **Push** work branch | `sync-data.sh` | shell, outside AI | `git -C data push -u origin <work-branch>` |
 | **Open/update PR** | `sync-data.sh` | shell, outside AI | `gh pr create --repo <private> --base master`; push updates an already-open PR |
 | Run CI lint | GitHub Actions | remote | on `pull_request` to `master` |
@@ -282,7 +285,7 @@ Precondition: `data/` is on work branch `sync/dev43-DATE` (cut from `origin/mast
 - **No remote configured** → helper instructs running `setup-data-remote.sh`; exit non-zero.
 - **Private-remote guard fails** (outer/public URL) → refuse, exit non-zero, no network call.
 - **`gh` unauth** → instruct `gh auth login`; exit non-zero.
-- **Pre-flight lint fails** → do not push/PR; print failures; exit non-zero (CI would reject anyway).
+- **Pre-flight lint fails (mandatory local gate)** → **do not push/PR**; print the lint failures; exit non-zero. This is a hard stop, not advisory — bad data never leaves the machine. Fix locally (commit the fix to the work branch), then re-run the helper. (CI would reject it too, but we don't burn a push/PR/CI cycle to discover what the local lint already knows.)
 - **PR not cleanly mergeable / leftover-rebase conflict** (`origin/master` moved — C1, manual) → `sync-data.sh` does **not** rebase or force-push. It aborts cleanly (`git rebase --abort` if it had started the post-merge leftover rebase) leaving `data/` on its work branch untouched, prints the manual recipe, and exits non-zero. **Manual recipe** the user follows in the live `data/` checkout (commit/stash any in-session output first):
   ```
   git -C data rebase origin/master      # resolve conflicts by file class, then:
