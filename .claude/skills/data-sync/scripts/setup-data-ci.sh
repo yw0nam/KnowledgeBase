@@ -4,6 +4,7 @@ set -euo pipefail
 # Install the CI lint workflow onto origin/master. Must run while data/ is on
 # master (C4 — no throwaway worktree). Usage: bash setup-data-ci.sh <pin> [--dry-run]
 #   <pin> = a tag or SHA of yw0nam/KnowledgeBase that includes the KB_DATA_DIR change.
+# Note: --dry-run skips fetch/merge, so its no-op check compares against the local lint.yml, not origin/master.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KB_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
@@ -34,15 +35,16 @@ run git -C "$DATA" fetch origin
 run git -C "$DATA" merge --ff-only origin/master
 
 DEST="$DATA/.github/workflows"
-mkdir -p "$DEST"
 TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
 sed "s|__KB_PIN__|$PIN|g" "$SCRIPT_DIR/../reference/data-lint.yml" > "$TMP"
 
 if [ -f "$DEST/lint.yml" ] && cmp -s "$TMP" "$DEST/lint.yml"; then
-  rm -f "$TMP"; echo "ok: lint.yml unchanged — no-op"; exit 0
+  echo "ok: lint.yml unchanged — no-op"; exit 0
 fi
-[ "$DRY_RUN" = "--dry-run" ] && { echo "+ install lint.yml (pin=$PIN)"; rm -f "$TMP"; exit 0; }
-cp "$TMP" "$DEST/lint.yml"; rm -f "$TMP"
+[ "$DRY_RUN" = "--dry-run" ] && { echo "+ install lint.yml (pin=$PIN)"; exit 0; }
+mkdir -p "$DEST"
+cp "$TMP" "$DEST/lint.yml"
 
 run git -C "$DATA" add .github/workflows/lint.yml
 run git -C "$DATA" commit -m "ci: add data lint workflow"

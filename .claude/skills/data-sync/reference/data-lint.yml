@@ -30,7 +30,7 @@ jobs:
           kb-lint-wiki
           kb-lint-handoff
           # raw immutability: only Added (A) allowed under raw/** vs the merge base.
-          changed="$(git diff --diff-filter=acdmrtuxb --name-status -M origin/master...HEAD -- raw/)"
+          changed="$(git diff --diff-filter=a --name-status -M origin/master...HEAD -- raw/)"
           if [ -n "$changed" ]; then
             echo "raw/** is immutable; non-addition changes found:"; echo "$changed"; exit 1
           fi

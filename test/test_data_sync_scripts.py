@@ -135,6 +135,69 @@ def test_ci_install_substitutes_pin_and_is_idempotent(tmp_path):
     assert "yw0nam/KnowledgeBase@v1.2.3" in wf
     assert "__KB_PIN__" not in wf
     # idempotent: second run no new commit
+    count_before = subprocess.run(
+        ["git", "-C", str(data), "rev-list", "--count", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     proc2 = _run("setup-data-ci.sh", data, "v1.2.3", KB_SYNC_TEST="1")
     assert proc2.returncode == 0
     assert "no-op" in (proc2.stdout + proc2.stderr).lower()
+    count_after = subprocess.run(
+        ["git", "-C", str(data), "rev-list", "--count", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert count_before == count_after
+
+
+def test_ci_raw_immutability_filter_allows_adds_blocks_modify(tmp_path):
+    """data-lint.yml's raw-immutability diff-filter must pass pure additions
+    and flag any modify/delete/rename of an existing raw file (regression: the
+    original --diff-filter=acdmrtuxb wrongly flagged add-only PRs)."""
+    yml = (SCRIPTS.parent / "reference" / "data-lint.yml").read_text()
+    assert "--diff-filter=a " in yml and "acdmrtuxb" not in yml  # anti-drift pin
+    data = tmp_path / "data"
+    data.mkdir()
+    _git(data, "init", "-q", "-b", "master")
+    _git(data, "config", "user.email", "t@t")
+    _git(data, "config", "user.name", "t")
+    (data / "raw").mkdir()
+    (data / "raw" / "keep.md").write_text("orig\n")
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "base")
+    base = subprocess.run(
+        ["git", "-C", str(data), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+
+    def raw_changes() -> str:
+        return subprocess.run(
+            [
+                "git",
+                "-C",
+                str(data),
+                "diff",
+                "--diff-filter=a",
+                "--name-status",
+                "-M",
+                f"{base}...HEAD",
+                "--",
+                "raw/",
+            ],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    # add-only PR → empty (allowed)
+    _git(data, "checkout", "-q", "-b", "addpr")
+    (data / "raw" / "new.md").write_text("new\n")
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "add")
+    assert raw_changes() == ""
+
+    # modify an existing raw file → flagged
+    _git(data, "checkout", "-q", "master")
+    _git(data, "checkout", "-q", "-b", "modpr")
+    (data / "raw" / "keep.md").write_text("tampered\n")
+    _git(data, "commit", "-qam", "mod")
+    assert "raw/keep.md" in raw_changes()
