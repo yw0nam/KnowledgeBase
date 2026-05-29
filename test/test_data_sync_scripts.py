@@ -12,8 +12,9 @@ SCRIPTS = kb.REPO_ROOT / ".claude" / "skills" / "data-sync" / "scripts"
 
 
 def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(cwd), *args], check=True,
-                   capture_output=True, text=True)
+    subprocess.run(
+        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
+    )
 
 
 def _make_data_repo(tmp_path: Path, origin_url: str | None = None) -> Path:
@@ -31,17 +32,34 @@ def _make_data_repo(tmp_path: Path, origin_url: str | None = None) -> Path:
     return data
 
 
-def _run(script: str, data: Path, *args: str, **env_extra: str) -> subprocess.CompletedProcess:
+def _run(
+    script: str, data: Path, *args: str, **env_extra: str
+) -> subprocess.CompletedProcess:
     # Inherit the real env (git needs HOME/PATH etc.); override the data dir.
     env = dict(os.environ, KB_DATA_OVERRIDE=str(data), **env_extra)
     return subprocess.run(
         ["bash", str(SCRIPTS / script), *args],
-        capture_output=True, text=True, env=env,
+        capture_output=True,
+        text=True,
+        env=env,
     )
 
 
 def test_remote_refuses_non_private_origin(tmp_path):
-    data = _make_data_repo(tmp_path, origin_url="https://github.com/yw0nam/KnowledgeBase.git")
-    proc = _run("setup-data-remote.sh", data, "https://github.com/yw0nam/KnowledgeBase.git")
+    data = _make_data_repo(
+        tmp_path, origin_url="https://github.com/yw0nam/KnowledgeBase.git"
+    )
+    proc = _run(
+        "setup-data-remote.sh", data, "https://github.com/yw0nam/KnowledgeBase.git"
+    )
     assert proc.returncode != 0
     assert "not the allowed private remote" in (proc.stdout + proc.stderr)
+
+
+def test_remote_refuses_when_origin_mismatches(tmp_path):
+    data = _make_data_repo(tmp_path, origin_url="git@github.com:someone/Other.git")
+    proc = _run(
+        "setup-data-remote.sh", data, "git@github.com:yw0nam/PrivateKnowledgeBase.git"
+    )
+    assert proc.returncode != 0
+    assert "already set to a different url" in (proc.stdout + proc.stderr)

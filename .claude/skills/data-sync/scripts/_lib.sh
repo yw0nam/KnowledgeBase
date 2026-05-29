@@ -4,6 +4,7 @@
 # computes KB_ROOT and exports DATA before sourcing.
 
 PRIVATE_REPO="yw0nam/PrivateKnowledgeBase"
+# shellcheck disable=SC2034  # consumed by sync-data.sh
 LOCK_FILE_REL=".git/kb-sync.lock"   # under $DATA
 
 # Allowlist guard: refuse unless data/ origin matches the private repo in
@@ -35,7 +36,7 @@ machine_id() {
   [ -z "$slug" ] && slug="host"
   rand="$(_rand4)"
   id="${slug}-${rand}"
-  printf '%s' "$id" > "$idfile"
+  printf '%s' "$id" > "$idfile" || { echo "error: cannot write $idfile" >&2; return 1; }
   printf '%s' "$id"
 }
 

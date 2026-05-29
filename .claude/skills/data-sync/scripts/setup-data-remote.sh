@@ -36,7 +36,12 @@ fi
 
 EXISTING="$(git -C "$DATA" remote get-url origin 2>/dev/null || true)"
 if [ -n "$EXISTING" ] && [ "$EXISTING" != "$URL" ]; then
-  echo "error: origin already set to a different url: $EXISTING" >&2; exit 1
+  echo "error: origin already set to a different url: $EXISTING" >&2
+  echo "       to change, run: git -C $DATA remote set-url origin <url>" >&2
+  exit 1
+fi
+if [ -n "$EXISTING" ] && [ "$EXISTING" = "$URL" ]; then
+  echo "ok: origin already set to $URL (no-op)"; exit 0
 fi
 
 BRANCH="$(git -C "$DATA" symbolic-ref --short HEAD)"
