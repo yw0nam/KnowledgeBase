@@ -68,43 +68,49 @@ ensure_machine_id_ignored "$DATA"
 
 # ── Fetch ────────────────────────────────────────────────────────────
 run git -C "$DATA" fetch origin
+[ "$DRY_RUN" = "--dry-run" ] && echo "  (dry-run: origin not fetched; ahead-counts and PR-state below may be stale)"
 
 # ── Post-merge reconcile (commit-loss-safe) ─────────────────────────
 pr_state() {
   if [ "${KB_SYNC_TEST:-}" = "1" ]; then echo "${KB_SYNC_FAKE_PR_STATE:-OPEN}"; return; fi
   gh pr view "$WB" --repo "$PRIVATE_REPO" --json state -q .state 2>/dev/null || echo "NONE"
 }
-STATE="$(pr_state)"
-LEFTOVER="$(git -C "$DATA" rev-list --count origin/master.."$WB" 2>/dev/null || echo 0)"
 
-if [ "$STATE" = "MERGED" ]; then
-  # Cheap assert: with repo-level merge-commit enforcement the branch tip is an
-  # ancestor of origin/master once leftover is empty (spec §4.3, C3).
-  if [ "$LEFTOVER" = "0" ]; then
-    NEW="$(new_work_branch "$DATA")"
-    run git -C "$DATA" checkout -b "$NEW" origin/master
-    run git -C "$DATA" branch -D "$WB"
-    run git -C "$DATA" push origin --delete "$WB" || true
-    WB="$NEW"
-  else
-    # Leftover = genuinely new commits after the synced push. Rebase onto a
-    # fresh branch off origin/master; on conflict, abort + hand to the user.
-    NEW="$(new_work_branch "$DATA")"
-    run git -C "$DATA" checkout -b "$NEW" origin/master
-    if ! git -C "$DATA" cherry-pick "origin/master..$WB" 2>/dev/null; then
-      git -C "$DATA" cherry-pick --abort 2>/dev/null || true
-      git -C "$DATA" checkout "$WB"
-      git -C "$DATA" branch -D "$NEW" 2>/dev/null || true
-      _print_conflict_help; exit 1
+if [ "$DRY_RUN" = "--dry-run" ]; then
+  echo "+ (dry-run) post-merge reconcile skipped (would inspect PR state, prune a merged branch, or cherry-pick leftover commits)"
+else
+  STATE="$(pr_state)"
+  LEFTOVER="$(git -C "$DATA" rev-list --count origin/master.."$WB" 2>/dev/null || echo 0)"
+
+  if [ "$STATE" = "MERGED" ]; then
+    # Cheap assert: with repo-level merge-commit enforcement the branch tip is an
+    # ancestor of origin/master once leftover is empty (spec §4.3, C3).
+    if [ "$LEFTOVER" = "0" ]; then
+      NEW="$(new_work_branch "$DATA")"
+      run git -C "$DATA" checkout -b "$NEW" origin/master
+      run git -C "$DATA" branch -D "$WB"
+      run git -C "$DATA" push origin --delete "$WB" || true
+      WB="$NEW"
+    else
+      # Leftover = genuinely new commits after the synced push. Rebase onto a
+      # fresh branch off origin/master; on conflict, abort + hand to the user.
+      NEW="$(new_work_branch "$DATA")"
+      run git -C "$DATA" checkout -b "$NEW" origin/master
+      if ! git -C "$DATA" cherry-pick "origin/master..$WB" 2>/dev/null; then
+        git -C "$DATA" cherry-pick --abort 2>/dev/null || true
+        git -C "$DATA" checkout "$WB"
+        git -C "$DATA" branch -D "$NEW" 2>/dev/null || true
+        _print_conflict_help; exit 1
+      fi
+      run git -C "$DATA" branch -D "$WB"
+      run git -C "$DATA" push origin --delete "$WB" || true
+      WB="$NEW"
     fi
-    run git -C "$DATA" branch -D "$WB"
-    run git -C "$DATA" push origin --delete "$WB" || true
-    WB="$NEW"
+  elif [ "$STATE" = "CLOSED" ]; then
+    echo "error: PR for $WB is CLOSED (not merged). Reopen it, or cut a fresh branch" >&2
+    echo "       discarding the work, then re-run. Refusing to auto-recreate the PR." >&2
+    exit 1
   fi
-elif [ "$STATE" = "CLOSED" ]; then
-  echo "error: PR for $WB is CLOSED (not merged). Reopen it, or cut a fresh branch" >&2
-  echo "       discarding the work, then re-run. Refusing to auto-recreate the PR." >&2
-  exit 1
 fi
 
 # ── Nothing-to-sync ──────────────────────────────────────────────────

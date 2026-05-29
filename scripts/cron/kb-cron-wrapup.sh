@@ -22,6 +22,15 @@ if [ ! -d "$KB_ROOT/data/.git" ]; then
 fi
 
 SYNC="$KB_ROOT/.claude/skills/data-sync/scripts/sync-data.sh"
+
+# If the canonical sync lock is already held (manual sync, or a stuck prior run),
+# flock -n below would silently skip the whole wrap-up. Probe first and leave a
+# breadcrumb so the morning digest can see why the night produced no artefact.
+if ! flock -n "$KB_ROOT/data/.git/kb-sync.lock" true 2>/dev/null; then
+  echo "LOCK_CONTENDED: kb-sync.lock held by another process; cron-wrapup skipped for $TARGET_DATE" >> "$INFLIGHT_LOG"
+  exit 1
+fi
+
 SESSION_EXIT=0
 flock -n "$KB_ROOT/data/.git/kb-sync.lock" bash -c '
   set -uo pipefail   # -e omitted on purpose: the git-commit no-ops below use || true and would abort under -e

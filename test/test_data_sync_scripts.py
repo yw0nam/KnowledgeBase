@@ -418,3 +418,57 @@ def test_sync_reconcile_conflict_aborts_cleanly(tmp_path):
         text=True,
     ).stdout
     assert porcelain.strip() == ""
+
+
+def test_sync_dry_run_does_not_mutate_on_merged_leftover(tmp_path):
+    """A --dry-run with a MERGED PR + leftover commits must NOT cherry-pick/mutate
+    the tree (regression: the bare cherry-pick used to execute under --dry-run)."""
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    wb = "sync/host-2026-05-29-abcd"
+    _git(data, "checkout", "-q", "-b", wb)
+    (data / "log.md").write_text("# log\nx\n")
+    _git(data, "commit", "-qam", "x")
+    _git(data, "push", "-q", "-u", "origin", wb)
+    _git(data, "checkout", "-q", "master")
+    _git(data, "merge", "--no-ff", "-q", wb, "-m", f"Merge {wb}")
+    _git(data, "push", "-q", "origin", "master")
+    _git(data, "checkout", "-q", wb)
+    # leftover commit on wb after the merge
+    (data / "extra.md").write_text("leftover\n")
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "leftover")
+    head_before = subprocess.run(
+        ["git", "-C", str(data), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    proc = _run(
+        "sync-data.sh",
+        data,
+        "--dry-run",
+        KB_SYNC_TEST="1",
+        KB_SYNC_FAKE_PR_STATE="MERGED",
+        KB_SYNC_LINT_CMD="true",
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    # still on the original work branch, HEAD unchanged (no cherry-pick happened)
+    head_after = subprocess.run(
+        ["git", "-C", str(data), "rev-parse", "HEAD"], capture_output=True, text=True
+    ).stdout.strip()
+    assert head_after == head_before
+    branch = subprocess.run(
+        ["git", "-C", str(data), "symbolic-ref", "--short", "HEAD"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert branch == wb
+    porcelain = subprocess.run(
+        ["git", "-C", str(data), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert porcelain.strip() == ""
