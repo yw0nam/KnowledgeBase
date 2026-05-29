@@ -54,3 +54,14 @@ kst_date() { TZ=Asia/Seoul date +%F; }
 
 # Build a fresh work-branch name.
 new_work_branch() { printf 'sync/%s-%s-%s' "$(machine_id "$1")" "$(kst_date)" "$(_rand4)"; }
+
+# Ensure the per-machine id file is ignored locally (machine-local exclude, not
+# the tracked .gitignore — it needs no commit and survives a master reset).
+ensure_machine_id_ignored() {
+  local data="$1" excl="$1/.git/info/exclude"
+  [ -d "$1/.git/info" ] || return 0
+  grep -qxF '.sync-machine-id' "$excl" 2>/dev/null || printf '%s\n' '.sync-machine-id' >> "$excl"
+}
+
+# KB_SYNC_TEST=1 disables the network allowlist guard for hermetic tests that
+# push to a local bare remote. Never set this outside the test suite.

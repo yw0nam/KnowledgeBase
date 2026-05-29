@@ -63,3 +63,36 @@ def test_remote_refuses_when_origin_mismatches(tmp_path):
     )
     assert proc.returncode != 0
     assert "already set to a different url" in (proc.stdout + proc.stderr)
+
+
+def test_workbranch_migrates_master_onto_workbranch(tmp_path):
+    # remote (bare) + a clone on master ahead by 1 commit
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True)
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    # local master now 1 ahead of origin/master
+    (data / "log.md").write_text("# log\nahead\n")
+    _git(data, "commit", "-qam", "ahead")
+
+    proc = _run("setup-data-workbranch.sh", data, KB_SYNC_TEST="1")
+    assert proc.returncode == 0, proc.stderr
+    head = subprocess.run(["git", "-C", str(data), "symbolic-ref", "--short", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    assert head.startswith("sync/")
+    # .sync-machine-id is machine-local and must not pollute git status
+    assert (data / ".sync-machine-id").exists()
+    porcelain = subprocess.run(["git", "-C", str(data), "status", "--porcelain"],
+                               capture_output=True, text=True).stdout
+    assert ".sync-machine-id" not in porcelain
+    # local master mirrors origin/master (the ahead commit moved to the work branch)
+    master = subprocess.run(["git", "-C", str(data), "rev-parse", "master"],
+                            capture_output=True, text=True).stdout.strip()
+    origin_master = subprocess.run(["git", "-C", str(data), "rev-parse", "origin/master"],
+                                   capture_output=True, text=True).stdout.strip()
+    assert master == origin_master
+    # idempotent: a second run is a no-op (already on a work branch)
+    proc2 = _run("setup-data-workbranch.sh", data, KB_SYNC_TEST="1")
+    assert proc2.returncode == 0
+    assert "already on a work branch" in (proc2.stdout + proc2.stderr)
