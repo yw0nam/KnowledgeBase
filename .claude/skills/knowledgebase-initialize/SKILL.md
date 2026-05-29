@@ -102,14 +102,34 @@ Do not create raw source files during initialization.
 If the user wants to sync `data/` across machines, ask whether to attach a private remote now. If yes:
 
 ```bash
-bash scripts/setup-data-remote.sh <git-url>
+bash .claude/skills/data-sync/scripts/setup-data-remote.sh <git-url>
 ```
 
 - The URL must be a private repository scoped to `data/` only.
 - Never point it at the outer repo's URL or any public host.
-- See `docs/data-sync.md` for the full workflow and conflict recovery.
+- See the `data-sync` skill (`docs/data-sync.md`) for the full workflow and conflict recovery.
 
 Skip this phase on machines that won't sync. The script is idempotent and can be run later.
+
+## Phase 2.6: Install Data CI Workflow
+
+Run while `data/` is **on `master`** (before the work-branch checkout):
+
+```bash
+bash .claude/skills/data-sync/scripts/setup-data-ci.sh <pin>
+```
+
+`<pin>` is the tag or SHA of the outer repo that includes the `KB_DATA_DIR` change (used to pin the CI workflow to a known-good version). See the `data-sync` skill as the runtime contract.
+
+## Phase 2.7: Check Out Work Branch
+
+Migrate `data/` from `master` onto a work branch:
+
+```bash
+bash .claude/skills/data-sync/scripts/setup-data-workbranch.sh
+```
+
+After this, `data/` will be on `sync/<machine>-<date>-<rand>`. AI/cron sessions commit only to work branches. See the `data-sync` skill as the runtime contract.
 
 ## Phase 3: Verify Tooling
 

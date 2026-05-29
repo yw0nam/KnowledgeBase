@@ -73,7 +73,7 @@ Use this for the daily `wiki-promote` cron or a manual promotion run.
    git add wiki rejected handoffs log.md
    git commit -m "promote: YYYY-MM-DD wiki promotion"
    ```
-   Do not push from this skill — push to the private `data/` remote (if configured — see `docs/data-sync.md`) is handled outside the AI session.
+   Do not push from this skill — push/PR (via the `data-sync` skill's `sync-data.sh`) is handled outside the AI session.
 
 ## Human Approval / Rejection
 
