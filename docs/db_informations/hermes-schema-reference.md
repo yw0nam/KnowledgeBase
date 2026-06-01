@@ -77,6 +77,10 @@ schema_version                     (마이그레이션 버전)
 | `cli_close` | CLI 세션 종료 |
 | `tui_close` / `tui_shutdown` | TUI 세션 종료 |
 | `cron_complete` | 크론 작업 완료 |
+| `api_complete` | API 서버 요청 정상 완료 |
+| `api_error` | API 서버 요청 중 에러/크래시 |
+| `api_cancelled` | API 서버 요청 서버 취소 (shutdown 등) |
+| `api_client_disconnect` | API 서버 SSE 클라이언트 연결 끊김 |
 | `session_reset` | 세션 리셋 |
 | `new_session` | 새 세션으로 전환 |
 | `compression` | 컨텍스트 압축 |
