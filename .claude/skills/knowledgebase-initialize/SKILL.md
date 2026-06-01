@@ -134,6 +134,12 @@ bash .claude/skills/data-sync/scripts/setup-data-workbranch.sh
 
 After this, `data/` will be on `sync/<machine>-<date>-<rand>`. AI/cron sessions commit only to work branches. See the `data-sync` skill as the runtime contract.
 
+**If this machine's `data/` already has commits ahead of `origin/master`** (local
+`master` or a feature branch), do **not** run Phases 2.6–2.7 as-is: installing CI
+while `master` is ahead pushes those commits straight to `master`. Follow the
+migration recipe in `docs/data-sync.md` Appendix E (back up → reset master →
+CI → cherry-pick → work branch) instead.
+
 ## Phase 3: Verify Tooling
 
 Run from repo root:

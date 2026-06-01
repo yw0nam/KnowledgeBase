@@ -138,6 +138,47 @@ web UI or a direct push to `master`. Treat both as prohibited operator actions.
 
 ## Appendix D — PatchNote
 
+- 2026-06-01: Bootstrapped the reference machine onto the work-branch model and documented the existing-local-commits migration recipe (Appendix E). `merge-data-pr.sh` requires a modern `gh` (uses `gh pr checks --watch`, `gh pr view --json headRefOid`, `gh pr merge --match-head-commit`); these are unsupported on `gh` 2.4.0.
 - 2026-06-01: Adapted merge enforcement for GitHub Free private repositories. Added `merge-data-pr.sh`; remote lint is verified by the supported merge helper because server-side protected branches require a paid plan.
 - 2026-05-29: Rewrote for the work-branch → PR → merge-commit model. `setup-data-remote.sh` moved into the `data-sync` skill; added `setup-data-ci.sh` and `setup-data-workbranch.sh`; daily PR via `kb-cron-wrapup`; remote CI lint; mandatory local lint gate.
 - 2026-05-28: Initial publication. Establishes private-remote model, conflict recovery guide, and future hook roadmap.
+
+## Appendix E — Migrating a machine that already has local `data/` commits
+
+Use when a machine's `data/` carries commits **ahead of `origin/master`** (on
+`master` or a feature branch) and you are adopting the work-branch model.
+`setup-data-workbranch.sh` alone is **not** enough here: if local `master` is
+ahead, `setup-data-ci.sh` would push those data commits straight to `master`,
+bypassing the PR/lint flow. The reset (step 2) **must** precede CI install (step 3).
+
+Substitute `<WORK>` = the branch holding your commits, `<DATE>` = today, `<pin>`
+= an outer-repo SHA that includes the `KB_DATA_DIR` change.
+
+```bash
+# 1. Back up the local commits (preserves everything; nothing below loses work).
+git -C data fetch origin
+git -C data branch backup/pre-sync-<DATE> <WORK>
+
+# 2. Reset local master to the remote (commits are safe in the backup branch).
+git -C data switch --detach origin/master
+git -C data branch -f master origin/master
+git -C data switch master
+
+# 3. Remote policy + CI — the ONLY direct master pushes (run while on master).
+bash .claude/skills/data-sync/scripts/setup-data-remote.sh <private-url>
+bash .claude/skills/data-sync/scripts/setup-data-ci.sh <pin>
+
+# 4. Replay the backed-up commits onto a fresh work branch.
+#    cherry-pick stages them on master; setup-data-workbranch moves them to the
+#    work branch and resets master back to origin/master.
+git -C data cherry-pick origin/master..backup/pre-sync-<DATE>
+bash .claude/skills/data-sync/scripts/setup-data-workbranch.sh
+
+# 5. First PR → review → merge → reconcile onto a fresh work branch.
+bash .claude/skills/data-sync/scripts/sync-data.sh
+bash .claude/skills/data-sync/scripts/merge-data-pr.sh
+bash .claude/skills/data-sync/scripts/sync-data.sh
+
+# 6. After confirming origin/master is correct, delete the backup and old branch.
+git -C data branch -D backup/pre-sync-<DATE> <WORK>
+```
