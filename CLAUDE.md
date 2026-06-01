@@ -112,6 +112,47 @@ Project skills live under `.claude/skills/`, auto-load by description match, and
 - `memory-report` — daily, weekly, or monthly memory workflow (period dispatch inside the skill). Imports `wiki-authoring` for page edits and `handoff-document` for run handoffs.
 - `cron-wrapup` — nightly KB cron wrap-up. Aggregates the previous day's usage reports, memory page, wiki-promote/TTL outcomes, and per-run cron evidence from `data/raw/ops/cron/{YYYY}/{MM}/{date}_kb-*.log` into a single Slack-digest-stable `wiki/summaries/.../{date}-cron-wrapup.md` plus run handoff. Runtime contract for the 05:00 cron job.
 
+## Cron Jobs
+
+The cron job runs KB cron jobs directly. The script delegates LLM work to `opencode run` where reasoning is needed, or calls deterministic `uv run` CLIs for pure data plumbing.
+
+### Execution patterns
+
+| Pattern | Used by | Mechanism |
+|---------|---------|-----------|
+| **LLM-Driven** | memory-daily/weekly/monthly, wiki-promote, cron-wrapup | skill-driven + opencode run  `opencode run --model anthropic/claude-sonnet-4-6` |
+| **Deterministic** (no LLM) | opencode/hermes/claude-code daily reports, wiki-ttl-sweep, ingest-papers | `uv run kb-*-daily-report --date --lint`, `uv run kb-wiki-review ttl-sweep --days 7`, `uv run python scripts/ingest-daily-papers.py` |
+
+### Pipeline schedule (KST)
+
+```
+00:30  kb-wiki-ttl-sweep          deterministic
+03:10  kb-opencode-daily-report   deterministic
+03:15  kb-hermes-daily-report     deterministic
+03:20  kb-claude-code-daily-report deterministic
+03:30  kb-memory-daily            LLM-Driven
+04:00  kb-wiki-promote            LLM-Driven
+04:15  kb-memory-weekly (Mon)     LLM-Driven
+04:45  kb-memory-monthly (1st)    LLM-Driven
+05:00  kb-cron-wrapup             LLM-Driven
+10:05  kb-ingest-daily-papers     deterministic
+```
+
+`morning-slack-digest` (09:00, Hermes agent) reads the wrapup artefact and delivers to Slack — it is **not** a KB cron job and runs with the agent.
+
+### Proxy scripts
+
+Cron jobs reference short script names (e.g. `kb-memory-daily.sh`) that resolve to `~/.hermes/scripts/`. Each is a thin proxy that `cd`s to KB root and `exec`s the real script under `scripts/cron/`. When adding a new cron script, create both the real script and the `~/.hermes/scripts/` proxy.
+
+### Runtime contracts
+
+OpenCode-powered jobs load their behavior from `.claude/skills/<name>/SKILL.md`:
+- memory-* → `memory-report` (+ `wiki-authoring`, `handoff-document`)
+- wiki-promote → `wiki-approval` (+ `wiki-authoring` if fixes needed)
+- cron-wrapup → `cron-wrapup` (+ `handoff-document`)
+
+All run logs go to `data/raw/ops/cron/{YYYY}/{MM}/{date}_{job}.log`.
+
 ## Documentation
 
 - [Documentation Index](docs/README.md) — design/reference document map
