@@ -5,8 +5,10 @@ description: Use when syncing the nested data/ repo to its private remote — pu
 
 # data-sync
 
-Runtime contract for syncing `data/` to `yw0nam/PrivateKnowledgeBase` via a
-work-branch → PR → merge-commit model. Design doc: `docs/data-sync.md`.
+Runtime contract for syncing `data/` to its private remote — whatever `data/`'s
+own `origin` points at, set when the user clones or attaches their private repo
+at init (no repo is hardcoded) — via a work-branch → PR → merge-commit model.
+Design doc: `docs/data-sync.md`.
 
 ## Invariants
 
@@ -16,7 +18,7 @@ work-branch → PR → merge-commit model. Design doc: `docs/data-sync.md`.
 - **A mandatory local lint gate runs before every push — `sync-data.sh` refuses to push if it fails.** Remote CI is the second, authoritative gate; bad data never leaves the machine.
 - Merge method is **merge-commit**, enforced at the repo level (set in `setup-data-remote.sh`).
 - GitHub Free private repos cannot enforce branch protection. Merge only through `merge-data-pr.sh`, which requires the remote `lint` check to pass and pins the reviewed head SHA.
-- Privacy: every network path runs the origin allowlist guard; all `gh` calls pin `--repo yw0nam/PrivateKnowledgeBase`.
+- Privacy: every network path runs the origin guard (`assert_private_origin` — origin must be a `github.com` remote, else refuse); all `gh` calls pin `--repo "$PRIVATE_REPO"`, the `owner/name` derived from `data/`'s own origin.
 
 ## Scripts
 

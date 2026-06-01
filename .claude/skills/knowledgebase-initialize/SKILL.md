@@ -78,12 +78,29 @@ If `uv sync` needs network and fails due sandbox/network restrictions, ask for a
 
 ## Phase 2: Initialize Data Repo
 
-If `data/` is missing, create it and initialize a nested repo:
+If `data/` already exists with a `.git/`, skip this phase. Otherwise, **ask the
+user whether they already have a private `data/` repository to clone** (e.g.
+from a previous machine):
 
-```bash
-mkdir -p data
-git -C data init
-```
+- **Yes** → clone it. Its `origin` becomes the private remote that everything
+  else derives from — no repo URL is hardcoded anywhere:
+
+  ```bash
+  git clone <private-git-url> data
+  ```
+
+  The URL must be a private repo scoped to `data/` only — never the outer repo's
+  URL or any public host. The remote is now attached, so **skip Phase 2.5** and
+  continue at Phase 2.6.
+
+- **No** (fresh start) → create an empty nested repo:
+
+  ```bash
+  mkdir -p data
+  git -C data init
+  ```
+
+  Attach a private remote later via Phase 2.5 when you want to sync.
 
 Create missing required directories with `.gitkeep` only when an empty directory must be tracked by the nested repo.
 
@@ -99,7 +116,9 @@ Do not create raw source files during initialization.
 
 ## Phase 2.5: Configure Private Data Remote (optional)
 
-If the user wants to sync `data/` across machines, ask whether to attach a private remote now. If yes:
+Skip this phase if Phase 2 cloned an existing private repo (the remote is already attached).
+
+If `data/` was freshly initialized and the user wants to sync it across machines, ask whether to attach a private remote now. If yes:
 
 ```bash
 bash .claude/skills/data-sync/scripts/setup-data-remote.sh <git-url>

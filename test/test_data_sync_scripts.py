@@ -50,15 +50,13 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(0o755)
 
 
-def test_remote_refuses_non_private_origin(tmp_path):
-    data = _make_data_repo(
-        tmp_path, origin_url="https://github.com/yw0nam/KnowledgeBase.git"
-    )
-    proc = _run(
-        "setup-data-remote.sh", data, "https://github.com/yw0nam/KnowledgeBase.git"
-    )
+def test_remote_rejects_non_github_url(tmp_path):
+    # The private repo is now user-supplied; the only setup-time guard left is
+    # that the URL must be a github.com SSH/HTTPS remote (no public/other host).
+    data = _make_data_repo(tmp_path)
+    proc = _run("setup-data-remote.sh", data, "https://gitlab.com/foo/bar.git")
     assert proc.returncode != 0
-    assert "not the allowed private remote" in (proc.stdout + proc.stderr)
+    assert "github.com" in (proc.stdout + proc.stderr)
 
 
 def test_remote_refuses_when_origin_mismatches(tmp_path):
@@ -241,14 +239,16 @@ def test_sync_refuses_on_master(tmp_path):
     assert "work branch" in (proc.stdout + proc.stderr).lower()
 
 
-def test_sync_refuses_non_private_origin(tmp_path):
+def test_sync_refuses_non_github_origin(tmp_path):
+    # data/ origin must be a github.com remote; a non-github host is refused
+    # before any push/PR (privacy guard).
     data = _make_data_repo(
-        tmp_path, origin_url="https://github.com/yw0nam/KnowledgeBase.git"
+        tmp_path, origin_url="https://gitlab.com/yw0nam/PrivateKnowledgeBase.git"
     )
     _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
     proc = _run("sync-data.sh", data)
     assert proc.returncode != 0
-    assert "not the allowed private remote" in (proc.stdout + proc.stderr)
+    assert "github.com" in (proc.stdout + proc.stderr)
 
 
 def test_sync_refuses_production_lint_override(tmp_path):

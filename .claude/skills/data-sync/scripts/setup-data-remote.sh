@@ -20,11 +20,17 @@ if [ -n "$DRY_RUN" ] && [ "$DRY_RUN" != "--dry-run" ]; then
   echo "error: unknown flag '$DRY_RUN' (only --dry-run supported)" >&2; exit 2
 fi
 
-# Privacy allowlist: the URL we are about to attach must be the private repo.
+# The user supplies the private repo here. Require a github.com SSH/HTTPS URL
+# and derive owner/name from it (nothing is hardcoded). Never point this at the
+# outer repo's URL or any public host — that stays the operator's responsibility.
 case "$URL" in
-  "git@github.com:$PRIVATE_REPO".git|"git@github.com:$PRIVATE_REPO") ;;
-  "https://github.com/$PRIVATE_REPO".git|"https://github.com/$PRIVATE_REPO") ;;
-  *) echo "error: '$URL' is not the allowed private remote ($PRIVATE_REPO)." >&2; exit 1 ;;
+  git@github.com:*|https://github.com/*|http://github.com/*) ;;
+  *) echo "error: '$URL' is not a github.com SSH or HTTPS git URL." >&2; exit 1 ;;
+esac
+PRIVATE_REPO="$(parse_repo_slug "$URL")"
+case "$PRIVATE_REPO" in
+  */*) ;;
+  *) echo "error: '$URL' did not parse to an owner/name repo." >&2; exit 1 ;;
 esac
 
 [ -d "$DATA" ] || { echo "error: $DATA does not exist. Run knowledgebase-initialize first." >&2; exit 1; }

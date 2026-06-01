@@ -3,27 +3,40 @@
 # Resolves KB_ROOT from the *caller's* location is unreliable; each script
 # computes KB_ROOT and exports DATA before sourcing.
 
-PRIVATE_REPO="yw0nam/PrivateKnowledgeBase"
-# shellcheck disable=SC2034  # consumed by sync-data.sh
+# shellcheck disable=SC2034  # consumed by sync-data.sh / merge-data-pr.sh
 LOCK_FILE_REL=".git/kb-sync.lock"   # under $DATA
 
-# Allowlist guard: refuse unless data/ origin matches the private repo in
-# either SSH or HTTPS form. Allowlist (not denylist) so a new public host
-# cannot slip through. Call: assert_private_origin "$DATA"
+# Parse owner/name out of a github URL (SSH or HTTPS).
+parse_repo_slug() {
+  local s="$1"
+  s="${s#git@github.com:}"
+  s="${s#ssh://git@github.com/}"
+  s="${s#https://github.com/}"
+  s="${s#http://github.com/}"
+  s="${s%.git}"; s="${s%/}"
+  printf '%s' "$s"
+}
+
+# The private repo is whatever data/'s own origin points at — set when the user
+# clones (knowledgebase-initialize Phase 2) or attaches (setup-data-remote.sh)
+# their private repo at init. Nothing is hardcoded. The guard still refuses a
+# non-github origin so data/ can never be pushed to an unexpected host. On
+# success it exports PRIVATE_REPO=owner/name. Call: assert_private_origin "$DATA"
+PRIVATE_REPO="${PRIVATE_REPO:-}"
 assert_private_origin() {
   local data="$1" url
   url="$(git -C "$data" remote get-url origin 2>/dev/null || true)"
   if [ -z "$url" ]; then
-    echo "error: no 'origin' remote on $data. Run setup-data-remote.sh first." >&2
+    echo "error: no 'origin' remote on $data. Clone your private repo into data/, or run setup-data-remote.sh." >&2
     return 1
   fi
   case "$url" in
-    "git@github.com:$PRIVATE_REPO".git|"git@github.com:$PRIVATE_REPO") return 0 ;;
-    "https://github.com/$PRIVATE_REPO".git|"https://github.com/$PRIVATE_REPO") return 0 ;;
+    git@github.com:*|https://github.com/*|http://github.com/*) ;;
+    *) echo "error: origin '$url' is not a github.com remote — refusing to push/PR data/ (privacy guard)." >&2
+       return 1 ;;
   esac
-  echo "error: origin '$url' is not the allowed private remote ($PRIVATE_REPO)." >&2
-  echo "       refusing to push/PR data/ to a non-allowlisted host (privacy guard)." >&2
-  return 1
+  PRIVATE_REPO="$(parse_repo_slug "$url")"
+  return 0
 }
 
 # Stable per-machine id, minted once and persisted to data/.sync-machine-id.
