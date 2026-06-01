@@ -302,6 +302,37 @@ def test_sync_blocks_push_when_local_lint_fails(tmp_path):
     assert "sync/host-2026-05-29-abcd" not in remote_heads
 
 
+def test_sync_refuses_dirty_tree(tmp_path):
+    """A dirty work tree must abort BEFORE push: preflight lints the working tree
+    while remote CI lints the committed tree, so an uncommitted change can pass
+    preflight yet fail CI. Only a clean, fully-committed tree may sync."""
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    # One committed change makes the branch ahead of origin/master (past the
+    # nothing-to-sync gate); a second, uncommitted change makes the tree dirty.
+    (data / "log.md").write_text("# log\ncommitted\n")
+    _git(data, "commit", "-qam", "committed")
+    (data / "log.md").write_text("# log\ncommitted\nuncommitted\n")
+    # Lint is wired to pass — proving the refusal comes from the dirty-tree gate,
+    # not the lint gate.
+    proc = _run("sync-data.sh", data, KB_SYNC_TEST="1", KB_SYNC_LINT_CMD="true")
+    assert proc.returncode != 0
+    assert "uncommitted" in (proc.stdout + proc.stderr).lower()
+    assert "push -u origin" not in proc.stdout  # never reached the push step
+    remote_heads = subprocess.run(
+        ["git", "-C", str(data), "ls-remote", "--heads", "origin"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "sync/host-2026-05-29-abcd" not in remote_heads
+
+
 def test_sync_reconcile_prunes_merged_branch(tmp_path):
     """Simulate: work branch's commits are already in origin/master (merged),
     leftover empty → sync cuts a fresh work branch and deletes the merged one."""

@@ -267,7 +267,7 @@ This skill specifies only:
 7. Write run handoff via `handoff-document` under handoffs/{Y}/{M}/cron-wrapup/
    (subject = TARGET, role = invoker, status: ready).
 8. Append to data/log.md. Run Lint Order (kb-wiki-index → kb-lint-wiki --check-immutability → kb-lint-handoff).
-9. If lint exits 0, commit only the nested `data/` repo with message `cron-wrapup: {TARGET}`.
+9. If lint exits 0, `git -C data add -A` and commit the whole pending tree (message `cron-wrapup: {TARGET}`). Then verify `git -C data status --porcelain` is empty — a dirty tree means the commit was incomplete and `sync-data.sh` will refuse to push it. See Data Commit Policy.
 10. STOP. Do NOT commit the outer repo. Do NOT push — push/PR (via the `data-sync` skill's `sync-data.sh`) is handled by the shell wrapper outside the AI session.
 ```
 
@@ -278,8 +278,11 @@ This skill specifies only:
 Rules:
 
 - Commit only inside `data/` with `git -C data ...`.
-- Include the wrap-up summary, run handoff, `data/log.md`, regenerated `wiki/INDEX.md`, any same-run report/memory artefacts that are still uncommitted and are required by the wrap-up sources, and every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` for the target — **excluding** `{TARGET}_kb-cron-wrapup.log`, which does not exist yet during the session and is committed by the shell wrapper in a follow-up commit after the session exits.
+- **Commit the whole night's accumulated `data/` work as one complete checkpoint — stage every pending change with `git -C data add -A`, not a hand-picked subset.** The wrap-up is the only workflow that commits, so by 05:00 `data/` holds uncommitted output from the entire pipeline: the wrap-up summary, run handoff, `data/log.md`, the regenerated `wiki/INDEX.md`, same-run report/memory artefacts (usage-metrics JSON under `ops/reports/`, memory pages), the target's `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` files, **and any uncommitted page edits left by earlier jobs** — e.g. a `review_status` flip from a `wiki-approval` (promote or human-approval) run. All of it must land in this commit.
+- **Why `add -A`, not an enumerated list:** `kb-wiki-index` regenerates `wiki/INDEX.md` from the *on-disk* pages. If a page's `review_status` was flipped on disk but its edit is not committed, committing the regenerated INDEX alone ships an INDEX that lists the page as approved while the committed page still says pending — and remote CI (which lints the committed tree) fails. The INDEX and every page it is derived from must be committed atomically.
+- `{TARGET}_kb-cron-wrapup.log` is **not** in `data/` during the session (it lives in `.cron/logs/`), so `add -A` will not stage it; the shell wrapper archives and commits it in a follow-up commit after the session exits.
 - Commit only after `kb-wiki-index`, `kb-lint-wiki --check-immutability`, and `kb-lint-handoff` all exit 0.
+- **After committing, the `data/` tree must be clean: `git -C data status --porcelain` must print nothing.** `sync-data.sh` (run by the shell wrapper) refuses to push a dirty tree, so any change left uncommitted here is not a "skipped for review" item — it silently fails the night's publish. If `status --porcelain` is non-empty after your commit, you missed something: stage and amend it into the same `cron-wrapup: {TARGET}` commit.
 - Use commit message `cron-wrapup: {TARGET}`.
 - Do not push from this skill. Push/PR (via the `data-sync` skill's `sync-data.sh`) is the shell wrapper's responsibility outside the AI session.
 - Never stage or commit outer repo files.
@@ -311,7 +314,7 @@ If a required input is missing (e.g. memory page never wrote):
 ## Red Flags — STOP and re-check
 
 - About to read any cron log other than `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` → STOP. The wrap-up summarizes exactly this target's per-run files; no time-window scan. (`{TARGET}_kb-cron-wrapup.log` does not exist during the session — the shell wrapper creates and commits it after the session exits; never read or stage it.)
-- About to `git add` something under `raw/ops/cron/` for a TARGET other than the one you are wrapping up → STOP. Stage only this target's per-run logs.
+- About to commit while another TARGET's `raw/ops/cron/` log shows as modified/untracked in `git status` → STOP. The commit uses `git add -A`, so a stray non-current-target raw change would be swept in. A *modification* to an already-committed log is an immutability violation (`kb-lint-wiki --check-immutability` will error before commit — fix the replay per the Workflow Discipline "Replay caveat", do not commit over it). A new log for the current TARGET is expected and should be committed.
 - About to re-render the full memory page into the wrap-up → STOP. Extract only concise insights and action items.
 - About to rename or reorder one of the seven H2 sections → STOP. The Slack digest will break.
 - About to create a wiki page but `kb-wiki-index` not yet run → run index first

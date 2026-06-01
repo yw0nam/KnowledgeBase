@@ -132,9 +132,23 @@ if [ "$AHEAD" = "0" ]; then
   echo "nothing to sync (work branch not ahead of origin/master)."; exit 0
 fi
 
-# Dirty-tree warning (spec §4.3 step 4): only committed work syncs. Warn, do not auto-commit.
-[ -z "$(git -C "$DATA" status --porcelain)" ] \
-  || echo "warning: data/ has uncommitted changes — only committed work will appear in the PR." >&2
+# Dirty-tree gate: refuse to push when the work tree is not clean.
+# Preflight lint (below) runs against the WORKING tree, but remote CI lints the
+# COMMITTED tree. An uncommitted change can therefore make preflight pass while CI
+# fails — e.g. a page `review_status` flip that a regenerated `wiki/INDEX.md` already
+# reflects on disk, committed as INDEX without the page edit. Requiring a clean tree
+# makes preflight a faithful CI proxy: only a fully-committed, lint-clean tree is pushed.
+if [ -n "$(git -C "$DATA" status --porcelain)" ]; then
+  if [ "$DRY_RUN" = "--dry-run" ]; then
+    echo "+ would refuse: data/ has uncommitted or untracked changes (clean tree required to push)"
+    git -C "$DATA" status --short
+  else
+    echo "error: data/ has uncommitted or untracked changes — refusing to push." >&2
+    echo "       Only committed work can sync. Commit or clean the tree, then re-run:" >&2
+    git -C "$DATA" status --short >&2
+    exit 1
+  fi
+fi
 
 # ── Pre-flight lint — MANDATORY blocking gate (spec §4.3 step 6) ─────────
 # Bad data never leaves the machine: if lint fails, abort BEFORE push/PR.
