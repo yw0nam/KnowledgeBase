@@ -57,7 +57,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 | Approve/reject wiki pages | `.claude/skills/wiki-approval/SKILL.md` |
 | Run CLI commands | `docs/reference/commands.md` |
 | Start review console (web UI) | `README.md` → "Review console" section; `scripts/dev-web.sh` |
-| Sync `data/` across machines | `docs/data-sync.md`; `scripts/setup-data-remote.sh` |
+| Sync `data/` across machines | `docs/data-sync.md`; `.claude/skills/data-sync/SKILL.md` |
 
 ---
 
@@ -65,6 +65,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 
 ### A. PatchNote
 
+- 2026-05-29: Updated data-sync sync entry to point at the `data-sync` skill.
 - 2026-05-28: Added `docs/data-sync.md` for private remote sync of the nested `data/` repo.
 - 2026-05-20: Removed `docs/workflows/`; project skills are now the sole workflow surface.
 - 2026-05-20: Reframed docs as design/reference material and routed runtime workflows to `.claude/skills/`.

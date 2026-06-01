@@ -25,7 +25,7 @@ from pathlib import Path
 
 import yaml
 
-from kb import REPO_ROOT as BASEDIR
+from kb import REPO_ROOT as BASEDIR, data_dir
 from kb.cli.handoff.validators import (
     CANONICAL_BODY_SECTIONS as CANONICAL_BODY_SECTIONS,
     FINAL_FILENAME_RE,
@@ -198,10 +198,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print("Linting data/handoffs/...\n")
+    handoffs_dir = data_dir() / "handoffs"
+    print(f"Linting {handoffs_dir}/...\n")
 
     result = LintResult()
-    lint(result)
+    lint(result, handoffs_dir=handoffs_dir)
     result.print_report()
 
     if not result.ok:

@@ -37,7 +37,7 @@ import re
 import sys
 from pathlib import Path
 
-from kb import REPO_ROOT as BASEDIR
+from kb import REPO_ROOT as BASEDIR, data_dir
 from kb.cli.wiki.checks import (
     CAPTURED_AT_MTIME_TOLERANCE_SEC,
     RAW_FM_REQUIRED,
@@ -378,10 +378,16 @@ def main():
     strict = "--strict" in sys.argv
     check_immutability = "--check-immutability" in sys.argv or strict
 
-    print("Linting wiki/...\n")
+    data_root = data_dir()
+    print(f"Linting {data_root / 'wiki'}/...\n")
 
     result = LintResult()
-    lint(result, check_immutability=check_immutability)
+    lint(
+        result,
+        wiki_dir=data_root / "wiki",
+        raw_dir=data_root / "raw",
+        check_immutability=check_immutability,
+    )
     result.print_report()
 
     if not result.ok:

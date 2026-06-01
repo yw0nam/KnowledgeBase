@@ -9,19 +9,18 @@ from __future__ import annotations
 
 import sys
 
-from kb import REPO_ROOT as BASEDIR
+from kb import data_dir
 from kb.cli.wiki.index import INDEX_FILENAME, build_index
-
-WIKI_DIR = BASEDIR / "data" / "wiki"
 
 
 def main() -> None:
-    if not WIKI_DIR.exists():
-        print(f"ERROR: {WIKI_DIR} does not exist", file=sys.stderr)
+    wiki_dir = data_dir() / "wiki"
+    if not wiki_dir.exists():
+        print(f"ERROR: {wiki_dir} does not exist", file=sys.stderr)
         sys.exit(1)
 
-    content = build_index(WIKI_DIR)
-    out_path = WIKI_DIR / INDEX_FILENAME
+    content = build_index(wiki_dir)
+    out_path = wiki_dir / INDEX_FILENAME
     if out_path.exists() and out_path.read_text() == content:
         print(f"INDEX.md already in sync ({out_path})")
         return
