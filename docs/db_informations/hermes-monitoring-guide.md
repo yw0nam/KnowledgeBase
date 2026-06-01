@@ -29,7 +29,7 @@ Updated: 2026-05-11
 
 | 지표 | 소스 | 의미 |
 |------|------|------|
-| 완료율 | `end_reason = 'cron_complete' 또는 'cli_close'` / 전체 | 실측: `cli_close` 31건, NULL(비정상) 24건 |
+| 완료율 | `end_reason = 'cron_complete', 'cli_close', 'api_complete' 등` / 전체 | 실측: `cli_close` 31건, NULL(비정상) 24건 |
 | end_reason 분포 | `sessions.end_reason` | `context_limit` 多 → compaction 설정 조정, `error` 多 → tool 실패 분석 |
 | 진행 중 세션 수 | `ended_at IS NULL` | 비정상적으로 많으면 좀비 세션 의심 |
 | 도구 호출 횟수 | `sessions.tool_call_count` | 세션당 평균 대비 3배+ = 루프 또는 반복 재시도 |

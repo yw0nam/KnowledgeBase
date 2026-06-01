@@ -134,6 +134,12 @@ bash .claude/skills/data-sync/scripts/setup-data-workbranch.sh
 
 After this, `data/` will be on `sync/<machine>-<date>-<rand>`. AI/cron sessions commit only to work branches. See the `data-sync` skill as the runtime contract.
 
+**If this machine's `data/` already has commits ahead of `origin/master`** (local
+`master` or a feature branch), do **not** run Phases 2.6–2.7 as-is: installing CI
+while `master` is ahead pushes those commits straight to `master`. Follow the
+migration recipe in `docs/data-sync.md` Appendix E (back up → reset master →
+CI → cherry-pick → work branch) instead.
+
 ## Phase 3: Verify Tooling
 
 Run from repo root:
@@ -146,6 +152,24 @@ uv run kb-wiki-review list --counts
 ```
 
 Fresh empty data may produce no queue items. Structural errors are blockers; existing user-data lint errors must be reported rather than auto-rewritten.
+
+## Phase 3.5: Expose Global Skills
+
+Some KB skills are used **outside this repo** (e.g. `handoff-document`, when
+writing handoffs from another project). Install them into the user's global
+Claude skills dir as symlinks so the repo stays the single source of truth — a
+manual copy drifts:
+
+```bash
+bash .claude/skills/knowledgebase-initialize/scripts/install-global-skills.sh
+```
+
+- Idempotent. Symlinks `~/.claude/skills/<name>` → this repo's `.claude/skills/<name>`.
+- A pre-existing real directory (a drifted manual copy) is backed up to
+  `~/.claude/skills.pre-symlink-backups/<name>` (outside the scanned skills dir,
+  so it is not loaded as a duplicate skill), never deleted.
+- Set `CLAUDE_SKILLS_DIR` to override the destination. Edit the `GLOBAL_SKILLS`
+  array in the script to expose more skills (currently: `handoff-document`).
 
 ## Phase 4: Usage Report Mode
 
@@ -270,6 +294,7 @@ Append to `data/log.md`:
 - **data repo**: exists / created
 - **directories**: created <list> / already present
 - **tooling**: <lint command results>
+- **global skills**: symlinked <list> / skipped
 - **usage reports**: <selected modes>
 - **cron**: proposed / approved / skipped
 - **handoff**: handoffs/YYYY/MM/kb-initialize/<file>.md
@@ -280,6 +305,7 @@ Append to `data/log.md`:
 - `data/` exists and has `.git/`.
 - Required directories and `data/log.md` exist.
 - CLI smoke tests ran or blockers are documented.
+- Global skills are symlinked into `~/.claude/skills/` or explicitly skipped.
 - Usage report mode is selected or explicitly skipped.
 - Cron entries are proposed or explicitly skipped.
 - Initialization handoff exists and passes lint.
