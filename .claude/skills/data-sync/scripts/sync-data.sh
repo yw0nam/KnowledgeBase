@@ -10,9 +10,12 @@ KB_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 DATA="${KB_DATA_OVERRIDE:-$KB_ROOT/data}"
 # shellcheck source=_lib.sh
 source "$SCRIPT_DIR/_lib.sh"
+init_test_mode "$DATA" "$KB_ROOT/data"
 
 DRY_RUN="${1:-}"
 [ -z "$DRY_RUN" ] || [ "$DRY_RUN" = "--dry-run" ] || { echo "error: only --dry-run supported" >&2; exit 2; }
+[ -z "${KB_SYNC_LINT_CMD:-}" ] || [ "$TEST_MODE" = "1" ] \
+  || { echo "error: KB_SYNC_LINT_CMD is test-only; refusing to bypass the production lint gate." >&2; exit 1; }
 run() { echo "+ $*"; [ "$DRY_RUN" = "--dry-run" ] || "$@"; }
 
 _print_conflict_help() {
@@ -32,6 +35,8 @@ EOF
 # Mandatory pre-flight lint. Real run wires uv; tests override via KB_SYNC_LINT_CMD.
 preflight_lint() {
   if [ -n "${KB_SYNC_LINT_CMD:-}" ]; then
+    [ "$TEST_MODE" = "1" ] \
+      || { echo "error: KB_SYNC_LINT_CMD is test-only; refusing to bypass the production lint gate." >&2; return 1; }
     eval "$KB_SYNC_LINT_CMD"; return $?
   fi
   ( cd "$KB_ROOT" \
@@ -57,8 +62,8 @@ WB="$(git -C "$DATA" symbolic-ref --short HEAD 2>/dev/null)" \
 if [[ "$WB" != sync/* ]]; then
   echo "error: data/ is not on a work branch (HEAD=$WB). Run setup-data-workbranch.sh." >&2; exit 1
 fi
-[ "${KB_SYNC_TEST:-}" = "1" ] || assert_private_origin "$DATA"
-if [ "${KB_SYNC_TEST:-}" != "1" ]; then
+[ "$TEST_MODE" = "1" ] || assert_private_origin "$DATA"
+if [ "$TEST_MODE" != "1" ]; then
   gh auth status >/dev/null 2>&1 || { echo "error: gh not authenticated. Run: gh auth login" >&2; exit 1; }
 fi
 # Reconcile mints fresh work branches via new_work_branch → machine_id, which
@@ -72,14 +77,18 @@ run git -C "$DATA" fetch origin
 
 # ── Post-merge reconcile (commit-loss-safe) ─────────────────────────
 pr_state() {
-  if [ "${KB_SYNC_TEST:-}" = "1" ]; then echo "${KB_SYNC_FAKE_PR_STATE:-OPEN}"; return; fi
-  gh pr view "$WB" --repo "$PRIVATE_REPO" --json state -q .state 2>/dev/null || echo "NONE"
+  if [ "$TEST_MODE" = "1" ]; then
+    printf '%s %s\n' "${KB_SYNC_FAKE_PR_STATE:-OPEN}" "${KB_SYNC_FAKE_PR_MERGEABLE:-MERGEABLE}"
+    return
+  fi
+  gh pr view "$WB" --repo "$PRIVATE_REPO" --json state,mergeable \
+    -q '.state + " " + .mergeable' 2>/dev/null || echo "NONE UNKNOWN"
 }
 
 if [ "$DRY_RUN" = "--dry-run" ]; then
   echo "+ (dry-run) post-merge reconcile skipped (would inspect PR state, prune a merged branch, or cherry-pick leftover commits)"
 else
-  STATE="$(pr_state)"
+  read -r STATE MERGEABLE <<< "$(pr_state)"
   LEFTOVER="$(git -C "$DATA" rev-list --count origin/master.."$WB" 2>/dev/null || echo 0)"
 
   if [ "$STATE" = "MERGED" ]; then
@@ -92,8 +101,8 @@ else
       run git -C "$DATA" push origin --delete "$WB" || true
       WB="$NEW"
     else
-      # Leftover = genuinely new commits after the synced push. Rebase onto a
-      # fresh branch off origin/master; on conflict, abort + hand to the user.
+      # Leftover = genuinely new commits after the synced push. Cherry-pick onto
+      # a fresh branch off origin/master; on conflict, abort + hand to the user.
       NEW="$(new_work_branch "$DATA")"
       run git -C "$DATA" checkout -b "$NEW" origin/master
       if ! git -C "$DATA" cherry-pick "origin/master..$WB" 2>/dev/null; then
@@ -109,6 +118,9 @@ else
   elif [ "$STATE" = "CLOSED" ]; then
     echo "error: PR for $WB is CLOSED (not merged). Reopen it, or cut a fresh branch" >&2
     echo "       discarding the work, then re-run. Refusing to auto-recreate the PR." >&2
+    exit 1
+  elif [ "$STATE" = "OPEN" ] && [ "$MERGEABLE" = "CONFLICTING" ]; then
+    _print_conflict_help
     exit 1
   fi
 fi
@@ -136,7 +148,7 @@ fi
 run git -C "$DATA" push -u origin "$WB"
 
 # ── PR (create or update) ──────────────────────────────────────────────
-if [ "${KB_SYNC_TEST:-}" = "1" ]; then
+if [ "$TEST_MODE" = "1" ]; then
   echo "+ gh pr create --repo $PRIVATE_REPO --base master --head $WB  (skipped in test)"
   exit 0
 fi

@@ -5,7 +5,7 @@ Updated: 2026-05-29
 ## 1. Synopsis
 
 - **Purpose**: Sync the nested `data/` git repo across machines via a private git remote, without ever exposing it to the outer repo's remote.
-- **I/O**: `data/` rides a work branch `sync/<machine>-<date>-<rand>`; AI/cron commits land there; `sync-data.sh` runs a mandatory local lint gate then pushes and opens a PR against `master`; remote CI re-lints; user merges (merge-commit); next sync prunes the merged branch and cuts a fresh one.
+- **I/O**: `data/` rides a work branch `sync/<machine>-<date>-<rand>`; AI/cron commits land there; `sync-data.sh` runs a mandatory local lint gate then pushes and opens a PR against `master`; remote CI re-lints; the user runs `merge-data-pr.sh`; next sync prunes the merged branch and cuts a fresh one.
 - **Runtime contract**: the `data-sync` skill (`.claude/skills/data-sync/SKILL.md`). This document is the design reference.
 
 ## 2. Core Logic
@@ -17,6 +17,10 @@ Updated: 2026-05-29
 ### Setup (per machine, in order)
 
 All scripts live under `.claude/skills/data-sync/scripts/`.
+
+This workflow supports GitHub Free private repositories. GitHub Free does not
+provide protected branches for private repos, so CI enforcement lives in the
+user-run `merge-data-pr.sh` helper rather than a server-side branch rule.
 
 **Step 1 — Attach remote** (run while `data/` is on `master`):
 
@@ -44,10 +48,21 @@ Moves `data/` from `master` onto a `sync/<machine>-<date>-<rand>` branch. After 
 
 ### Daily workflow
 
-- **Automated (cron)**: `kb-cron-wrapup.sh` runs `sync-data.sh` after its session commits, inside the same `data/.git/kb-sync.lock`.
+- **Automated (cron)**: `kb-cron-wrapup.sh` runs `sync-data.sh` after its session commits, archives the sync result, then publishes the archived log commit too, inside the same `data/.git/kb-sync.lock`.
 - **Manual intra-day**: `bash .claude/skills/data-sync/scripts/sync-data.sh`
 
 `sync-data.sh` flow: fetch → detect merged/closed PR → reconcile or cut fresh branch → warn on dirty tree (non-blocking) → mandatory local lint → push → create/update PR.
+
+After reviewing the PR, merge it through the free-plan merge gate:
+
+```bash
+bash .claude/skills/data-sync/scripts/merge-data-pr.sh
+```
+
+The helper waits for remote checks, requires the `lint` job to pass, verifies
+that the PR is mergeable, and pins the reviewed head SHA during merge. Do not
+merge through the GitHub UI or push directly to `master`: GitHub Free private
+repos cannot block those bypasses server-side.
 
 ### Privacy guardrails
 
@@ -58,14 +73,14 @@ Moves `data/` from `master` onto a `sync/<machine>-<date>-<rand>` branch. After 
 
 ### Conflict handling
 
-`sync-data.sh` never auto-resolves. On a non-mergeable PR or rebase conflict it prints the file-class recipe and exits non-zero. See Appendix A for the manual recovery steps.
+`sync-data.sh` never auto-resolves. On a non-mergeable PR or leftover cherry-pick conflict it prints the file-class recipe and exits non-zero. See Appendix A for the manual recovery steps.
 
 ### Lint gates
 
 Two gates run on every sync:
 
 1. **Local (blocking)**: `sync-data.sh` runs `kb-wiki-index`, `kb-lint-wiki --check-immutability`, `kb-lint-handoff`. Refuses to push on any failure.
-2. **Remote CI**: the installed GitHub Actions workflow re-lints on every PR push. Merge is blocked until CI passes.
+2. **Remote CI**: the installed GitHub Actions workflow re-lints on every PR push. `merge-data-pr.sh` refuses to merge until its `lint` job passes.
 
 ## 3. Usage
 
@@ -75,6 +90,7 @@ Two gates run on every sync:
 | Install CI workflow (Step 2) | `bash .claude/skills/data-sync/scripts/setup-data-ci.sh <pin>` |
 | Check out work branch (Step 3) | `bash .claude/skills/data-sync/scripts/setup-data-workbranch.sh` |
 | Manual sync (push + PR) | `bash .claude/skills/data-sync/scripts/sync-data.sh` |
+| Merge reviewed PR after CI | `bash .claude/skills/data-sync/scripts/merge-data-pr.sh` |
 | Dry-run (no network calls) | `bash .claude/skills/data-sync/scripts/sync-data.sh --dry-run` |
 | Inspect current remote | `git -C data remote -v` |
 | Change remote URL | `git -C data remote set-url origin <new-url>` |
@@ -110,9 +126,11 @@ git -C data rebase --continue
 bash .claude/skills/data-sync/scripts/sync-data.sh
 ```
 
-## Appendix B — Future: auto-merge switch
+## Appendix B — GitHub Free limitation
 
-`gh pr merge --auto --merge` requires that GitHub branch protection marks the CI check as **required**. The two are a coupled pair, not independent toggles. Without the required check, `--auto` merges immediately, defeating the lint gate. Enable auto-merge only after confirming the CI check appears as a required status check in the branch protection rules for `master`.
+Protected branches for private repositories require a paid GitHub plan. On the
+free plan, GitHub cannot prevent a user from bypassing `merge-data-pr.sh` via the
+web UI or a direct push to `master`. Treat both as prohibited operator actions.
 
 ## Appendix C — State DB (`data/db/`)
 
@@ -120,5 +138,6 @@ bash .claude/skills/data-sync/scripts/sync-data.sh
 
 ## Appendix D — PatchNote
 
+- 2026-06-01: Adapted merge enforcement for GitHub Free private repositories. Added `merge-data-pr.sh`; remote lint is verified by the supported merge helper because server-side protected branches require a paid plan.
 - 2026-05-29: Rewrote for the work-branch → PR → merge-commit model. `setup-data-remote.sh` moved into the `data-sync` skill; added `setup-data-ci.sh` and `setup-data-workbranch.sh`; daily PR via `kb-cron-wrapup`; remote CI lint; mandatory local lint gate.
 - 2026-05-28: Initial publication. Establishes private-remote model, conflict recovery guide, and future hook roadmap.

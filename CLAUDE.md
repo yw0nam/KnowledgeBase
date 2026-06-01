@@ -43,7 +43,7 @@ KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 │       └── wiki-categories.md    # Wiki categories
 └── .gitignore                    # Excludes data/
 
-data/                             # Nested git repo: raw sources + wiki (local-only)
+data/                             # Nested private git repo: raw sources + wiki
 ├── .git/
 ├── raw/
 │   ├── github/
@@ -96,7 +96,7 @@ Use two separate records because this repository has two git histories:
 - `data/.git` is independent from outer repo
 - All raw sources and wiki pages stay private
 - Handoff documents (which may contain sensitive decisions) stay private
-- AI sessions and cron-wrapup commits do not push; push is a user/setup action (or, in a future Phase 3, a shell wrapper running outside the AI session)
+- AI sessions do not push. The `kb-cron-wrapup.sh` shell wrapper publishes the committed work branch through the private PR workflow outside the AI session.
 
 Never commit `data/` contents to the outer repository. Never set `data/`'s remote to the outer repo's URL or any public host.
 

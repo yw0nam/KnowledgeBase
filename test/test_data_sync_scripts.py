@@ -11,8 +11,8 @@ import kb
 SCRIPTS = kb.REPO_ROOT / ".claude" / "skills" / "data-sync" / "scripts"
 
 
-def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(
+def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
         ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
     )
 
@@ -45,6 +45,11 @@ def _run(
     )
 
 
+def _write_executable(path: Path, content: str) -> None:
+    path.write_text(content)
+    path.chmod(0o755)
+
+
 def test_remote_refuses_non_private_origin(tmp_path):
     data = _make_data_repo(
         tmp_path, origin_url="https://github.com/yw0nam/KnowledgeBase.git"
@@ -63,6 +68,30 @@ def test_remote_refuses_when_origin_mismatches(tmp_path):
     )
     assert proc.returncode != 0
     assert "already set to a different url" in (proc.stdout + proc.stderr)
+
+
+def test_remote_existing_origin_still_enforces_merge_policy(tmp_path):
+    url = "git@github.com:yw0nam/PrivateKnowledgeBase.git"
+    data = _make_data_repo(tmp_path, origin_url=url)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    gh_log = tmp_path / "gh.log"
+    _write_executable(
+        bin_dir / "gh",
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$GH_LOG"\n',
+    )
+    proc = _run(
+        "setup-data-remote.sh",
+        data,
+        url,
+        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        GH_LOG=str(gh_log),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    calls = gh_log.read_text()
+    assert "allow_merge_commit=true" in calls
+    assert "allow_squash_merge=false" in calls
+    assert "allow_rebase_merge=false" in calls
 
 
 def test_workbranch_migrates_master_onto_workbranch(tmp_path):
@@ -222,6 +251,13 @@ def test_sync_refuses_non_private_origin(tmp_path):
     assert "not the allowed private remote" in (proc.stdout + proc.stderr)
 
 
+def test_sync_refuses_production_lint_override(tmp_path):
+    data = _make_data_repo(tmp_path)
+    proc = _run("sync-data.sh", data, KB_SYNC_LINT_CMD="true")
+    assert proc.returncode != 0
+    assert "test-only" in (proc.stdout + proc.stderr)
+
+
 def test_sync_dry_run_plans_push_and_pr(tmp_path):
     bare = tmp_path / "remote.git"
     subprocess.run(
@@ -316,6 +352,56 @@ def test_sync_refuses_closed_pr(tmp_path):
     proc = _run("sync-data.sh", data, KB_SYNC_TEST="1", KB_SYNC_FAKE_PR_STATE="CLOSED")
     assert proc.returncode != 0
     assert "closed" in (proc.stdout + proc.stderr).lower()
+
+
+def test_sync_refuses_open_conflicting_pr(tmp_path):
+    bare = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "-q", "--bare", "-b", "master", str(bare)], check=True
+    )
+    data = _make_data_repo(tmp_path)
+    _git(data, "remote", "add", "origin", str(bare))
+    _git(data, "push", "-q", "-u", "origin", "master")
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    (data / "log.md").write_text("# log\nx\n")
+    _git(data, "commit", "-qam", "x")
+    proc = _run(
+        "sync-data.sh",
+        data,
+        KB_SYNC_TEST="1",
+        KB_SYNC_FAKE_PR_STATE="OPEN",
+        KB_SYNC_FAKE_PR_MERGEABLE="CONFLICTING",
+    )
+    assert proc.returncode != 0
+    assert "conflict" in (proc.stdout + proc.stderr).lower()
+
+
+def test_merge_refuses_when_remote_lint_did_not_pass(tmp_path):
+    data = _make_data_repo(tmp_path)
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    proc = _run(
+        "merge-data-pr.sh",
+        data,
+        KB_SYNC_TEST="1",
+        KB_SYNC_FAKE_LINT_BUCKET="fail",
+    )
+    assert proc.returncode != 0
+    assert "remote lint check did not pass" in (proc.stdout + proc.stderr)
+
+
+def test_merge_uses_merge_commit_and_pins_head_sha_after_remote_lint(tmp_path):
+    data = _make_data_repo(tmp_path)
+    _git(data, "checkout", "-q", "-b", "sync/host-2026-05-29-abcd")
+    proc = _run(
+        "merge-data-pr.sh",
+        data,
+        KB_SYNC_TEST="1",
+        KB_SYNC_FAKE_LINT_BUCKET="pass",
+        KB_SYNC_FAKE_HEAD_SHA="abc123",
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "gh pr merge sync/host-2026-05-29-abcd" in proc.stdout
+    assert "--merge --match-head-commit abc123" in proc.stdout
 
 
 def test_sync_reconcile_cherrypicks_leftover(tmp_path):

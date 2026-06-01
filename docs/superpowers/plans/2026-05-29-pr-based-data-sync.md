@@ -4,7 +4,7 @@
 
 **Goal:** Replace direct `git push origin master` of the nested `data/` repo with a work-branch → PR → merge-commit model on the private remote, with remote CI lint, a self-contained `data-sync` skill, and privacy guardrails.
 
-**Architecture:** `data/` always rides a work branch `sync/<machine>-<date>-<rand>` cut from `origin/master`; local `master` is never hand-committed. AI/cron sessions commit to the work branch; a shell helper (`sync-data.sh`, outside any AI session) pushes + opens a PR; the user merges (merge-commit) after CI lint passes; the next sync prunes the merged branch and cuts a fresh one. Cross-machine conflicts are detected and handed to the user, not auto-resolved (simplicity decisions C1–C4 in the spec §12).
+**Architecture:** `data/` always rides a work branch `sync/<machine>-<date>-<rand>` cut from `origin/master`; local `master` is never hand-committed. AI/cron sessions commit to the work branch; a shell helper (`sync-data.sh`, outside any AI session) pushes + opens a PR; after review the user runs `merge-data-pr.sh`, which verifies remote lint and pins the head SHA before merge-commit; the next sync prunes the merged branch and cuts a fresh one. Cross-machine conflicts are detected and handed to the user, not auto-resolved (simplicity decisions C1–C4 in the spec §12).
 
 **Tech Stack:** Python 3.11 (`uv`, pytest), Bash (`gh`, `git`, `flock`), GitHub Actions.
 
@@ -29,6 +29,7 @@
 - `.claude/skills/data-sync/scripts/setup-data-workbranch.sh` — onboarding/migration onto a work branch.
 - `.claude/skills/data-sync/scripts/setup-data-ci.sh` — CI workflow installer into `data/`.
 - `.claude/skills/data-sync/scripts/sync-data.sh` — the sync helper.
+- `.claude/skills/data-sync/scripts/merge-data-pr.sh` — GitHub Free private-repo merge gate.
 - `.claude/skills/data-sync/scripts/_lib.sh` — shared bash helpers (allowlist guard, machine-id, lock path).
 - `.claude/skills/data-sync/reference/data-lint.yml` — CI workflow template (with a `__KB_PIN__` placeholder).
 - `docs/data-sync.md` — rewrite (was created in a prior PR).
@@ -448,6 +449,7 @@ work-branch → PR → merge-commit model. Design doc: `docs/data-sync.md`.
 - Local `master` is never hand-committed; it only tracks `origin/master` via fetch.
 - **A mandatory local lint gate runs before every push — `sync-data.sh` refuses to push if it fails.** Remote CI is the second, authoritative gate; bad data never leaves the machine.
 - Merge method is **merge-commit**, enforced at the repo level (set in `setup-data-remote.sh`).
+- GitHub Free private repos cannot enforce protected branches. Merge only through `merge-data-pr.sh`, which requires remote `lint=pass` and pins the reviewed head SHA.
 - Privacy: every network path runs the origin allowlist guard; all `gh` calls pin `--repo yw0nam/PrivateKnowledgeBase`.
 
 ## Scripts
@@ -456,10 +458,11 @@ work-branch → PR → merge-commit model. Design doc: `docs/data-sync.md`.
 - `scripts/setup-data-ci.sh <pin> [--dry-run]` — install the CI lint workflow onto `origin/master`. Must run while `data/` is on `master`. (setup, user-run)
 - `scripts/setup-data-workbranch.sh [--dry-run]` — migrate `data/` from `master` onto a work branch. (setup, user-run)
 - `scripts/sync-data.sh [--dry-run]` — publish the work branch as a PR; prune merged branches; detect conflicts. (daily cron + manual)
+- `scripts/merge-data-pr.sh` — wait for remote checks, require `lint=pass`, pin the reviewed head SHA, merge-commit. (user-run)
 
 ## Conflict handling (manual)
 
-`sync-data.sh` never auto-resolves. On a non-mergeable PR or leftover-rebase
+`sync-data.sh` never auto-resolves. On a non-mergeable PR or leftover cherry-pick
 conflict it prints the file-class recipe and exits non-zero. Resolve by hand
 in the live `data/` checkout, then re-run `sync-data.sh`. File classes:
 `log.md` keep-both/sort-by-date · `wiki/**` union `sources:` · `handoffs/**`
@@ -1355,9 +1358,10 @@ The doc must stay under the 200-line main-body rule (`docs/CLAUDE.md`); move edg
 Rewrite `docs/data-sync.md` to describe the work-branch model as the **current** workflow (not future):
 - **Synopsis / I/O**: work branch → PR → merge-commit; the `data-sync` skill is the runtime contract.
 - **Daily workflow**: cron runs `sync-data.sh`; manual intra-day `bash .claude/skills/data-sync/scripts/sync-data.sh`.
+- **Merge workflow**: after review, run `bash .claude/skills/data-sync/scripts/merge-data-pr.sh`; GitHub Free private repos cannot enforce branch protection server-side.
 - **Setup (per machine)**: `setup-data-remote.sh` → `setup-data-ci.sh <pin>` (on master) → `setup-data-workbranch.sh`.
 - **Conflict recovery**: the manual file-class recipe (mirror §9 / `_print_conflict_help`).
-- **Appendix A**: future auto-merge switch — `gh pr merge --auto --merge` requires branch protection that **requires the CI check**; the two are a coupled pair (spec §6).
+- **Appendix A**: GitHub Free private-repo limitation — UI merge and direct `master` push are prohibited bypasses because server-side branch protection requires a paid plan.
 - Point at the `data-sync` skill and the new script paths throughout.
 - Add a dated PatchNote to the Appendix (per `docs/CLAUDE.md`).
 

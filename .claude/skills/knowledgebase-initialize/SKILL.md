@@ -120,6 +120,9 @@ bash .claude/skills/data-sync/scripts/setup-data-ci.sh <pin>
 ```
 
 `<pin>` is the tag or SHA of the outer repo that includes the `KB_DATA_DIR` change (used to pin the CI workflow to a known-good version). See the `data-sync` skill as the runtime contract.
+GitHub Free private repos cannot enforce protected branches. After setup, merge
+data PRs only through `data-sync/scripts/merge-data-pr.sh`, which verifies the
+remote `lint` result and pins the reviewed head SHA.
 
 ## Phase 2.7: Check Out Work Branch
 

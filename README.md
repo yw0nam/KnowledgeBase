@@ -7,7 +7,7 @@ Personal LLM wiki. Raw sources go in, LLM writes wiki pages, lint keeps them hon
 KnowledgeBase separates code from data:
 
 - **Outer repo** (`KnowledgeBase/`) — Code, lint tools, templates, documentation. Public-safe.
-- **Nested repo** (`data/`) — Raw sources, wiki pages, handoff documents. Local-only, never pushed.
+- **Nested repo** (`data/`) — Raw sources, wiki pages, handoff documents. Kept private; may sync to its dedicated private remote.
 
 ```
 KnowledgeBase/
@@ -24,7 +24,7 @@ KnowledgeBase/
 ├── README.md                     This file
 └── .gitignore                    Excludes data/
 
-data/                             Nested git repo (local-only)
+data/                             Nested private git repo
 ├── raw/
 │   ├── github/                   CLAUDE.md, Issues, PRs
 │   ├── conversations/            Desktop Chatbot history
@@ -50,11 +50,13 @@ Project workflows live in `.claude/skills/`. Use `wiki-authoring` for source-bac
 
 ## Privacy
 
-`data/` is local-only. Never pushed to remote.
+`data/` is private. It must never be pushed to the outer repository or a public remote.
+For multi-machine use, it may sync to its dedicated private repository through
+the PR-based workflow in `docs/data-sync.md`.
 
 - Outer `.gitignore` excludes `data/`
-- All raw sources and wiki pages stay local
-- Handoff documents (sensitive decisions) stay local
+- All raw sources and wiki pages stay private
+- Handoff documents (sensitive decisions) stay private
 
 ## Quick Start
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-KB_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+KB_ROOT="${KB_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 TARGET_DATE="$(TZ=Asia/Seoul date -d 'yesterday' +%F)"
 # While the AI session runs it writes to .cron/logs/ (not data/raw/) so the file
 # is never in-flight inside the nested repo during the session's own git commit.
@@ -25,7 +25,7 @@ SYNC="$KB_ROOT/.claude/skills/data-sync/scripts/sync-data.sh"
 
 # If the canonical sync lock is already held (manual sync, or a stuck prior run),
 # flock -n below would silently skip the whole wrap-up. Probe first and leave a
-# breadcrumb so the morning digest can see why the night produced no artefact.
+# breadcrumb so the operator can see why the night produced no artefact.
 if ! flock -n "$KB_ROOT/data/.git/kb-sync.lock" true 2>/dev/null; then
   echo "LOCK_CONTENDED: kb-sync.lock held by another process; cron-wrapup skipped for $TARGET_DATE" >> "$INFLIGHT_LOG"
   exit 1
@@ -41,22 +41,40 @@ flock -n "$KB_ROOT/data/.git/kb-sync.lock" bash -c '
   opencode run --model anthropic/claude-sonnet-4-6 --dangerously-skip-permissions \
     --dir "$KB_ROOT" "$PROMPT" >> "$INFLIGHT_LOG" 2>&1 || rc=$?
 
-  # Archive + commit the run log on the work branch (post-session).
-  mkdir -p "$ARCHIVE_LOG_DIR"
-  cp "$INFLIGHT_LOG" "$ARCHIVE_LOG_DIR/$(basename "$ARCHIVE_REL")" \
-    || echo "WARN: failed to archive run log to $ARCHIVE_LOG_DIR" >> "$INFLIGHT_LOG"
-  git -C "$KB_ROOT/data" add "$ARCHIVE_REL" 2>/dev/null || true
-  git -C "$KB_ROOT/data" diff --cached --quiet 2>/dev/null \
-    || git -C "$KB_ROOT/data" commit -m "cron-wrapup-log: $TARGET_DATE" 2>/dev/null || true
-
-  # Publish the day'\''s work as a PR (inside the same lock). Mark SYNC_SKIPPED in
-  # the log if it cannot run, so the morning digest surfaces a silent machine.
+  # Publish the session commit first so the durable log records the outcome.
+  sync_rc=0
   if [ -x "$SYNC" ]; then
-    KB_SYNC_LOCKED=1 bash "$SYNC" >> "$INFLIGHT_LOG" 2>&1 \
-      || echo "SYNC_SKIPPED: sync-data.sh exited non-zero" >> "$INFLIGHT_LOG"
+    KB_SYNC_LOCKED=1 bash "$SYNC" >> "$INFLIGHT_LOG" 2>&1 || sync_rc=$?
   else
     echo "SYNC_SKIPPED: sync helper not found at $SYNC" >> "$INFLIGHT_LOG"
+    sync_rc=1
   fi
+  [ "$sync_rc" -eq 0 ] \
+    || echo "SYNC_SKIPPED: sync-data.sh exited non-zero (rc=$sync_rc)" >> "$INFLIGHT_LOG"
+
+  # Archive + commit the completed run log on the work branch (post-session).
+  archive_rc=0
+  mkdir -p "$ARCHIVE_LOG_DIR" || archive_rc=$?
+  [ "$archive_rc" -ne 0 ] \
+    || cp "$INFLIGHT_LOG" "$ARCHIVE_LOG_DIR/$(basename "$ARCHIVE_REL")" || archive_rc=$?
+  [ "$archive_rc" -ne 0 ] \
+    || git -C "$KB_ROOT/data" add "$ARCHIVE_REL" 2>/dev/null || archive_rc=$?
+  [ "$archive_rc" -ne 0 ] \
+    || git -C "$KB_ROOT/data" diff --cached --quiet 2>/dev/null \
+    || git -C "$KB_ROOT/data" commit -m "cron-wrapup-log: $TARGET_DATE" 2>/dev/null \
+    || archive_rc=$?
+  [ "$archive_rc" -eq 0 ] \
+    || echo "WARN: failed to archive/commit run log to $ARCHIVE_LOG_DIR (rc=$archive_rc)" >> "$INFLIGHT_LOG"
+
+  # On the happy path, publish once more so the PR also contains the archived log.
+  if [ "$sync_rc" -eq 0 ] && [ "$archive_rc" -eq 0 ] && [ -x "$SYNC" ]; then
+    KB_SYNC_LOCKED=1 bash "$SYNC" >> "$INFLIGHT_LOG" 2>&1 || sync_rc=$?
+    [ "$sync_rc" -eq 0 ] \
+      || echo "SYNC_SKIPPED: final log publish exited non-zero (rc=$sync_rc)" >> "$INFLIGHT_LOG"
+  fi
+
+  [ "$rc" -ne 0 ] || [ "$archive_rc" -eq 0 ] || rc=$archive_rc
+  [ "$rc" -ne 0 ] || [ "$sync_rc" -eq 0 ] || rc=$sync_rc
   exit $rc
 ' bash "$KB_ROOT" "$PROMPT" "$TARGET_DATE" "$INFLIGHT_LOG" "$ARCHIVE_LOG_DIR" \
   "raw/ops/cron/$(TZ=Asia/Seoul date -d "$TARGET_DATE" +%Y/%m)/${TARGET_DATE}_kb-cron-wrapup.log" \

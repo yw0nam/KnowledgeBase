@@ -10,6 +10,7 @@ KB_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 DATA="${KB_DATA_OVERRIDE:-$KB_ROOT/data}"
 # shellcheck source=_lib.sh
 source "$SCRIPT_DIR/_lib.sh"
+init_test_mode "$DATA" "$KB_ROOT/data"
 
 DRY_RUN="${1:-}"
 [ -z "$DRY_RUN" ] || [ "$DRY_RUN" = "--dry-run" ] || { echo "error: only --dry-run supported" >&2; exit 2; }
@@ -29,7 +30,7 @@ if ! git -C "$DATA" diff --quiet || ! git -C "$DATA" diff --cached --quiet \
   echo "error: $DATA has uncommitted changes. Commit or stash first." >&2; exit 1
 fi
 
-[ "${KB_SYNC_TEST:-}" = "1" ] || assert_private_origin "$DATA"
+[ "$TEST_MODE" = "1" ] || assert_private_origin "$DATA"
 
 # Ensure the machine-local id file is git-ignored before it is minted, so it
 # never shows as untracked or gets committed (it is per-machine, not shared).

@@ -64,7 +64,19 @@ ensure_machine_id_ignored() {
 }
 
 # KB_SYNC_TEST=1 disables the network allowlist guard for hermetic tests that
-# push to a local bare remote. Never set this outside the test suite.
+# push to a local bare remote. Refuse it against the live data/ tree so an
+# inherited environment variable cannot disable production guards.
+init_test_mode() {
+  local data="$1" live_data="$2"
+  TEST_MODE=0
+  if [ "${KB_SYNC_TEST:-}" = "1" ]; then
+    if [ -z "${KB_DATA_OVERRIDE:-}" ] || [ "$data" = "$live_data" ]; then
+      echo "error: KB_SYNC_TEST=1 requires KB_DATA_OVERRIDE pointing at a non-live test repo." >&2
+      return 1
+    fi
+    TEST_MODE=1
+  fi
+}
 
 # KB_SYNC_LINT_CMD overrides the pre-flight lint command (tests only). The
 # pre-flight lint is a MANDATORY gate — sync-data.sh refuses to push if it

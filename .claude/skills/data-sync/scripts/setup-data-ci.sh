@@ -11,6 +11,7 @@ KB_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 DATA="${KB_DATA_OVERRIDE:-$KB_ROOT/data}"
 # shellcheck source=_lib.sh
 source "$SCRIPT_DIR/_lib.sh"
+init_test_mode "$DATA" "$KB_ROOT/data"
 
 PIN="${1:-}"; DRY_RUN="${2:-}"
 [ -n "$PIN" ] && [[ "$PIN" != --* ]] || { echo "usage: bash setup-data-ci.sh <tag-or-sha> [--dry-run]" >&2; exit 2; }
@@ -26,7 +27,7 @@ if [ "$HEAD_BRANCH" != "master" ]; then
   exit 1
 fi
 
-[ "${KB_SYNC_TEST:-}" = "1" ] || assert_private_origin "$DATA"
+[ "$TEST_MODE" = "1" ] || assert_private_origin "$DATA"
 
 run() { echo "+ $*"; [ "$DRY_RUN" = "--dry-run" ] || "$@"; }
 
@@ -40,7 +41,8 @@ trap 'rm -f "$TMP"' EXIT
 sed "s|__KB_PIN__|$PIN|g" "$SCRIPT_DIR/../reference/data-lint.yml" > "$TMP"
 
 if [ -f "$DEST/lint.yml" ] && cmp -s "$TMP" "$DEST/lint.yml"; then
-  echo "ok: lint.yml unchanged — no-op"; exit 0
+  echo "ok: lint.yml unchanged — no-op"
+  exit 0
 fi
 [ "$DRY_RUN" = "--dry-run" ] && { echo "+ install lint.yml (pin=$PIN)"; exit 0; }
 mkdir -p "$DEST"

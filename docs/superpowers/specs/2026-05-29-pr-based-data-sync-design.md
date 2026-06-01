@@ -7,7 +7,7 @@ Scope: A only — PR-based `data/` git sync + remote CI lint. The Hermes-kanban 
 ## 1. Synopsis
 
 - **Purpose**: Replace direct `git push origin master` of the nested `data/` repo with a branch → PR → **merge-commit** model on the existing private remote (`yw0nam/PrivateKnowledgeBase`), adding a remote CI lint gate, a review surface, and multi-machine conflict safety — without exposing `data/` to the outer repo's public remote.
-- **I/O**: Local `data/` commits (from AI/cron sessions, made on a **daily work branch** — never on `master`) → **mandatory local lint gate (must pass before push)** → work branch pushed → PR against `master` → remote CI lint re-checks → merge-commit after CI passes. `master` is never hand-committed locally; it only advances via PR merge on the remote. **Two lint gates: local (before push, blocking) + remote CI (before merge, authoritative).**
+- **I/O**: Local `data/` commits (from AI/cron sessions, made on a **daily work branch** — never on `master`) → **mandatory local lint gate (must pass before push)** → work branch pushed → PR against `master` → remote CI lint re-checks → `merge-data-pr.sh` verifies CI + pins the reviewed head SHA → merge-commit. `master` is never hand-committed locally; it only advances via PR merge on the remote. **Two lint gates: local (before push, blocking) + remote CI (checked by the merge helper).**
 - **Drivers** (user-stated): clean history, multi-machine conflict safety, remote CI lint, review gate. (The longer-term motivation — removing the external Hermes-kanban dependency in favor of GitHub-native primitives — is satisfied by a later spec B; this spec only lays the GitHub branch/PR/CI foundation it will build on.)
 
 ## 2. Background / Current State
@@ -35,7 +35,7 @@ Scope: A only — PR-based `data/` git sync + remote CI lint. The Hermes-kanban 
 
 **Non-Goals (YAGNI)**
 - Hermes-kanban → GitHub Issues/Projects migration (spec B).
-- `gh pr merge --auto` / branch protection enforcement now — documented as a one-line switch for later (§6).
+- Server-side branch protection / `gh pr merge --auto` — unavailable for GitHub Free private repositories (§6).
 - Session-start auto-pull hook.
 - `data/db/` (state DB) sync.
 - Committing memory jobs' uncommitted output (left to user review, as today).
@@ -51,6 +51,7 @@ A new self-contained workflow skill owns the entire `data/` sync lifecycle, mirr
 ├── SKILL.md                    # runtime contract: guards, sync procedure, conflict recovery, merge policy
 ├── scripts/
 │   ├── sync-data.sh            # publish daily/manual PR (work-branch model)
+│   ├── merge-data-pr.sh         # free-plan gate: require CI pass, then merge-commit
 │   ├── setup-data-remote.sh    # MOVED from scripts/ (init-only, belongs to this workflow)
 │   ├── setup-data-ci.sh        # install the CI workflow into data/
 │   └── setup-data-workbranch.sh # one-time: migrate data/ from master onto a work branch
@@ -61,7 +62,7 @@ A new self-contained workflow skill owns the entire `data/` sync lifecycle, mirr
 - **Skill imports (consistent with existing pattern):**
   - `knowledgebase-initialize` imports `data-sync` for its setup phases (run `setup-data-remote.sh`, `setup-data-ci.sh`).
   - `kb-cron-wrapup.sh` (shell wrapper) calls `data-sync`'s `scripts/sync-data.sh` after the post-session log commit.
-- **Manual invocation:** `bash .claude/skills/data-sync/scripts/sync-data.sh` (and `setup-data-*.sh`).
+- **Manual invocation:** `bash .claude/skills/data-sync/scripts/sync-data.sh`, then `bash .claude/skills/data-sync/scripts/merge-data-pr.sh` after review (and `setup-data-*.sh` during init).
 - The only shared exception kept loose is lint (`scripts/lint.sh`) and the cron launchers (`scripts/cron/kb-*.sh`), which are scheduler glue, not sync logic.
 
 ### 4.1 Git topology (Option 1 — `data/` rides a work branch; `master` stays clean)
@@ -112,7 +113,7 @@ Idempotent; **at most one open sync PR at a time**. `data/` is already checked o
    - **Invariant:** a branch is deleted only when `git log origin/master..<branch>` is empty (fully contained in `origin/master`).
 4. **Dirty-tree warning**: if `data/` has uncommitted changes (e.g., memory-job output), **warn** that uncommitted work will NOT be in the PR; do **not** auto-commit. (Continue — only committed work syncs.)
 5. **Nothing-to-sync check**: if the work branch is not ahead of `origin/master` and no open PR exists → print "nothing to sync", exit 0.
-6. **Pre-flight lint — MANDATORY local gate; push is blocked on failure.** Local lint is **not** optional and **not** merely a convenience: the helper runs the full lint locally and verifies integrity **before** any push, and **refuses to push/PR if it fails** (§9). Remote CI is a *second, authoritative* line (it re-runs on the pinned linter for cross-machine consistency and gates the merge), but the local gate is the *first* one and must pass first — we never push known-bad data and wait for CI to reject it. Run from the **outer repo root** (where the `uv` project lives), pointing `KB_DATA_DIR` at the `data/` work tree (an *absolute* path, to avoid the `data/data` trap if cwd ever changes):
+6. **Pre-flight lint — MANDATORY local gate; push is blocked on failure.** Local lint is **not** optional and **not** merely a convenience: the helper runs the full lint locally and verifies integrity **before** any push, and **refuses to push/PR if it fails** (§9). Remote CI is a *second, authoritative* line: it re-runs on the pinned linter for cross-machine consistency, and `merge-data-pr.sh` refuses the supported merge path unless it passes. The local gate is the *first* one and must pass first — we never push known-bad data and wait for CI to reject it. Run from the **outer repo root** (where the `uv` project lives), pointing `KB_DATA_DIR` at the `data/` work tree (an *absolute* path, to avoid the `data/data` trap if cwd ever changes):
    ```
    KB_DATA_DIR="$(pwd)/data" uv run kb-wiki-index    # then assert no INDEX change — see below
    KB_DATA_DIR="$(pwd)/data" uv run kb-lint-wiki --check-immutability
@@ -125,11 +126,11 @@ Idempotent; **at most one open sync PR at a time**. `data/` is already checked o
 8. **PR (create or update)**: if a PR for the work branch is already open (`gh pr list --head <work-branch>`), the push already updated it — just print its URL. Else `gh pr create --repo yw0nam/PrivateKnowledgeBase --base master --head <work-branch>` with an auto-generated title/body summarizing `origin/master..HEAD`. Print the PR URL.
 9. **Merge** is manual now (user reviews + merges on GitHub). Helper does not merge.
 
-**Conflict path is manual (C1 — not scripted)**: when the work branch is not cleanly mergeable because `origin/master` moved (another machine merged first), `sync-data.sh` does **not** attempt to rebase or resolve. It **detects** the condition (the leftover-rebase in step 3 conflicts, or `gh pr view` reports the PR not mergeable), prints the file-class resolution guidance (§9), and exits non-zero. The user resolves by hand — consistent with the manual merge gate (the user is already reviewing/merging every PR on GitHub). This deliberately trades rare-case automation for a much smaller, safer script: auto-merging `data/` content by file class is the most error-prone logic in the design and is exercised only when two machines have overlapping in-flight changes, which is uncommon for a 1–3 machine personal KB. Recommended manual recipe is in §9; the user runs an ordinary `git -C data rebase origin/master`, resolves per file class, and re-runs `sync-data.sh`.
+**Conflict path is manual (C1 — not scripted)**: when the work branch is not cleanly mergeable because `origin/master` moved (another machine merged first), `sync-data.sh` does **not** attempt to resolve. It **detects** the condition (the leftover cherry-pick in step 3 conflicts, or `gh pr view` reports the PR not mergeable), prints the file-class resolution guidance (§9), and exits non-zero. The user resolves by hand — consistent with the manual merge gate (the user is already reviewing/merging every PR on GitHub). This deliberately trades rare-case automation for a much smaller, safer script: auto-merging `data/` content by file class is the most error-prone logic in the design and is exercised only when multiple machines have overlapping in-flight changes. Recommended manual recipe is in §9; the user runs an ordinary `git -C data rebase origin/master`, resolves per file class, and re-runs `sync-data.sh`.
 
 ### 4.4 Remote CI lint
 
-Remote CI is the **second** lint gate, not the only one. The **first** gate is the mandatory local pre-flight lint in `sync-data.sh` (§4.3 step 6), which blocks the push if it fails — bad data never leaves the machine. CI then re-runs the same checks on a *pinned* linter version (authoritative for cross-machine consistency) and gates the merge. Both gates run the same logical checks; the local one gives fast feedback without burning a push/PR/CI cycle, the remote one is the source of truth at merge time.
+Remote CI is the **second** lint gate, not the only one. The **first** gate is the mandatory local pre-flight lint in `sync-data.sh` (§4.3 step 6), which blocks the push if it fails — bad data never leaves the machine. CI then re-runs the same checks on a *pinned* linter version (authoritative for cross-machine consistency); `merge-data-pr.sh` checks that result before merging. Both gates run the same logical checks; the local one gives fast feedback without burning a push/PR/CI cycle, the remote one is the source of truth for the supported merge path.
 
 > **Prerequisite code change (verified against current code):** the CLI linters do **not** honor `KB_DATA_DIR` — `src/kb/cli/lint_wiki.py` and `wiki_index.py` hard-code `WIKI_DIR = REPO_ROOT/"data"/"wiki"` (only the web app reads `KB_DATA_DIR`). `lint_wiki.run()` already accepts `wiki_dir`/`raw_dir` params, so the change is small: make `kb-lint-wiki`, `kb-lint-handoff`, `kb-wiki-index` resolve their data dir from `KB_DATA_DIR` (falling back to the current default). Without this, CI lints the empty installed-package path, not the checkout. This is the one in-scope code change beyond scripts/skills.
 
@@ -204,7 +205,7 @@ Because `data/` is a separate repo re-created per machine, the CI workflow must 
 | **Push** work branch | `sync-data.sh` | shell, outside AI | `git -C data push -u origin <work-branch>` |
 | **Open/update PR** | `sync-data.sh` | shell, outside AI | `gh pr create --repo <private> --base master`; push updates an already-open PR |
 | Run CI lint | GitHub Actions | remote | on `pull_request` to `master` |
-| **Merge** (merge-commit) | User (now) → auto later | GitHub | manual review gate now; `gh pr merge --auto --merge` later (§6) |
+| **Merge** (merge-commit) | User via `merge-data-pr.sh` | shell + GitHub | free-plan gate: wait for checks, require `lint=pass`, pin reviewed head SHA, run `gh pr merge --merge` (§6) |
 | Post-merge: cut fresh work branch off `origin/master` + delete merged branch | `sync-data.sh` | shell, outside AI | next run, after fetch shows the branch merged |
 | **Conflict resolution** (only if `origin/master` moved) | **User** (manual) | shell | `sync-data.sh` only *detects* + prints §9 guidance; user runs `git -C data rebase origin/master`, resolves by file class, re-runs sync (C1) |
 
@@ -232,21 +233,22 @@ Because `data/` is a separate repo re-created per machine, the CI workflow must 
 
 - **Allowlist, not denylist**: `sync-data.sh` / `setup-data-*.sh` refuse unless `data/`'s `origin` matches the expected private repo (`yw0nam/PrivateKnowledgeBase`) in **either** SSH (`git@github.com:...`) or HTTPS form. An allowlist can't be slipped by a new public host or an unanticipated URL form the way a denylist can.
 - All `gh` calls pin `--repo yw0nam/PrivateKnowledgeBase`, preventing accidental PR creation against a public repo (e.g., if cwd inference picked the outer repo).
-- The guard runs on **every network path**, including `setup-data-ci.sh`'s bootstrap `push origin master` (§4.5 step 1) and `setup-data-remote.sh`'s merge-method API call — not just `sync-data.sh`.
+- The guard runs on **every network path**, including `setup-data-ci.sh`'s bootstrap `push origin master` (§4.5 step 1), `setup-data-remote.sh`'s merge-method API call, and `merge-data-pr.sh` — not just `sync-data.sh`.
 - Outer `.gitignore` keeps excluding `data/` (unchanged).
 - AI sessions still never push/PR; only the shell helper (outside the session) does.
 
-## 6. Merge Policy & Future Switch
+## 6. Merge Policy on GitHub Free
 
 - **Merge method is merge-commit, enforced at the repo level** (the §4.3/§4.1 containment + pruning logic depends on it): the repo currently allows squash/rebase too. Enforcement is a **mechanism, not just convention** — `setup-data-remote.sh` sets `allow_squash_merge=false`, `allow_rebase_merge=false`, `allow_merge_commit=true` via the GitHub API (§4.2), so the merge button cannot squash. As defense-in-depth: always merge via `gh pr merge --merge`; and pruning **refuses** to delete a branch unless `git log origin/master..<branch>` is empty. (With repo-level enforcement, no per-run merge-method verification network call is needed — §4.3 keeps only a cheap local `merge-base --is-ancestor` assert, C3.)
-- **Now**: manual merge. The user reviews each PR on GitHub and merges (merge-commit) after CI is green. This is the review gate.
-- **Later**: enable auto-merge — note (a) and (b) are a **coupled pair, not independent toggles**: `gh pr merge --auto --merge` only waits for checks if GitHub **branch protection requires the CI check**; without the required check, `--auto` merges as soon as the PR is mergeable, defeating the gate. Documented in `docs/data-sync.md` Appendix.
+- **Supported merge path**: the user reviews each PR, then runs `merge-data-pr.sh`. The helper waits for remote checks, requires the `lint` job to pass, verifies mergeability, and uses `gh pr merge --merge --match-head-commit <reviewed-sha>`.
+- **GitHub Free limitation**: private repositories cannot use protected branches. The web UI and direct pushes cannot be blocked server-side, so both are prohibited operator bypasses. A paid GitHub plan could move this enforcement to branch protection later.
 
 ## 7. Components & File Changes
 
 **New — `data-sync` skill (self-contained)**
 - `.claude/skills/data-sync/SKILL.md` — runtime contract (guards, sync procedure, conflict recovery, merge policy, privacy invariants).
 - `.claude/skills/data-sync/scripts/sync-data.sh` — sync helper (idempotent, guarded; detects conflicts and hands to user — C1, no worktree automation).
+- `.claude/skills/data-sync/scripts/merge-data-pr.sh` — free-plan merge gate (remote lint pass + mergeability + reviewed-head pin).
 - `.claude/skills/data-sync/scripts/setup-data-ci.sh` — CI workflow installer into `data/`.
 - `.claude/skills/data-sync/scripts/setup-data-workbranch.sh` — one-time onboarding/migration of `data/` onto a work branch (§4.8).
 - `.claude/skills/data-sync/reference/data-lint.yml` — CI workflow template (source of truth).
@@ -276,7 +278,7 @@ Precondition: `data/` is on work branch `sync/dev43-DATE` (cut from `origin/mast
 2. 05:00 `kb-cron-wrapup.sh`: AI session writes wrap-up + commits `cron-wrapup: DATE` (work branch); shell commits `cron-wrapup-log: DATE` (work branch).
 3. Shell calls `sync-data.sh`: guards → fetch → post-merge reconcile (no-op if nothing merged) → warn if dirty → pre-flight lint → `git -C data push -u origin sync/dev43-DATE` → `gh pr create --base master` (or no-op if PR already open).
 4. GitHub Actions runs `lint.yml` on the PR.
-5. User reviews, merges (merge-commit) when green.
+5. User reviews, then runs `merge-data-pr.sh`; the helper requires remote `lint=pass`, pins the reviewed head SHA, and merges with a merge-commit.
 6. Next `sync-data.sh` run: fetch sees the work branch merged into `origin/master` → cut fresh `sync/dev43-<newDATE>` from `origin/master`, check it out in `data/`, delete the merged branch (local + remote). Local `master` ref just tracks `origin/master`; it was never hand-committed, so nothing to reconcile.
 
 ## 9. Error Handling
@@ -286,7 +288,7 @@ Precondition: `data/` is on work branch `sync/dev43-DATE` (cut from `origin/mast
 - **Private-remote guard fails** (outer/public URL) → refuse, exit non-zero, no network call.
 - **`gh` unauth** → instruct `gh auth login`; exit non-zero.
 - **Pre-flight lint fails (mandatory local gate)** → **do not push/PR**; print the lint failures; exit non-zero. This is a hard stop, not advisory — bad data never leaves the machine. Fix locally (commit the fix to the work branch), then re-run the helper. (CI would reject it too, but we don't burn a push/PR/CI cycle to discover what the local lint already knows.)
-- **PR not cleanly mergeable / leftover-rebase conflict** (`origin/master` moved — C1, manual) → `sync-data.sh` does **not** rebase or force-push. It aborts cleanly (`git rebase --abort` if it had started the post-merge leftover rebase) leaving `data/` on its work branch untouched, prints the manual recipe, and exits non-zero. **Manual recipe** the user follows in the live `data/` checkout (commit/stash any in-session output first):
+- **PR not cleanly mergeable / leftover cherry-pick conflict** (`origin/master` moved — C1, manual) → `sync-data.sh` does **not** force-push or auto-resolve. It aborts the post-merge cherry-pick cleanly, leaves `data/` on its work branch untouched, prints the manual recipe, and exits non-zero. **Manual recipe** the user follows in the live `data/` checkout (commit/stash any in-session output first):
   ```
   git -C data rebase origin/master      # resolve conflicts by file class, then:
   #   log.md       → keep both, sort by date
@@ -297,18 +299,18 @@ Precondition: `data/` is on work branch `sync/dev43-DATE` (cut from `origin/mast
   bash .claude/skills/data-sync/scripts/sync-data.sh   # re-run; push now fast-forwards the PR
   ```
 - **PR closed but not merged** → do not auto-recreate the PR; warn and require a manual decision (reopen, or cut fresh discarding the work); exit non-zero (§4.3 `CLOSED` arm).
-- **Un-pushed commits beyond a merged (merge-commit) branch** (post-merge reconcile) → rebase them onto `origin/master` before cutting fresh; if that rebase conflicts, fall to the manual recipe above; never discard (§4.3 invariant).
+- **Un-pushed commits beyond a merged (merge-commit) branch** (post-merge reconcile) → cherry-pick them onto a fresh branch from `origin/master`; if that cherry-pick conflicts, fall to the manual recipe above; never discard (§4.3 invariant).
 - **CI-bootstrap push non-fast-forward** (`setup-data-ci.sh`) → re-fetch `origin/master`, re-base the bootstrap commit, retry; **never force `master`** (§4.5).
 - **`setup-data-ci.sh` run while `data/` is on a work branch** → refuse with instructions to run it on `master` during init (C4); exit non-zero.
 - **PR already open** → push updates it; do not open a second PR.
 - **CI red** → user does not merge; fix locally (commit to work branch), re-run helper to update the PR.
-- **`sync-data.sh` invoked by cron but no remote / not on work branch** → log a warning and exit 0 (don't fail wrap-up), **and emit a `SYNC_SKIPPED: <reason>` marker** into the cron-wrapup log so the morning digest surfaces a silently-not-syncing machine.
+- **`sync-data.sh` invoked by cron but no remote / not on work branch** → emit a `SYNC_SKIPPED: <reason>` marker into the committed cron-wrapup log and exit non-zero so the failure is visible both to the scheduler and the morning digest.
 
 ## 10. Testing / Verification
 
 - `sync-data.sh --dry-run` prints planned git/gh commands without executing (mirrors `setup-data-remote.sh --dry-run`).
 - Guard unit checks: origin-not-on-allowlist refusal (non-private URL, both SSH/HTTPS); missing-remote refusal; unauth refusal; `data/`-on-`master` refusal.
-- **Reconcile arms**: (a) MERGED + leftover empty → fresh branch cut, merged branch deleted; (b) MERGED + leftover non-empty → leftover rebased, no duplication; (c) leftover-rebase **conflict → clean abort + non-zero + guidance printed**, `data/` left on its work branch untouched (C1); (d) **CLOSED-not-merged → refusal**, no second PR opened.
+- **Reconcile arms**: (a) MERGED + leftover empty → fresh branch cut, merged branch deleted; (b) MERGED + leftover non-empty → leftover cherry-picked, no duplication; (c) leftover cherry-pick **conflict → clean abort + non-zero + guidance printed**, `data/` left on its work branch untouched (C1); (d) **CLOSED-not-merged → refusal**, no second PR opened.
 - **Branch identity**: machine-id persists across a simulated re-init (same `data/.sync-machine-id` reused); two same-machine same-date cuts produce distinct `<rand>` suffixes (no collision).
 - **Locking**: a manual `sync-data.sh` and a held cron-scope `flock` on `data/.git/kb-sync.lock` are mutually exclusive (second blocks).
 - `setup-data-workbranch.sh`: from a `master`-with-N-ahead `data/`, leaves `data/` on `sync/<machine>-<date>-<rand>` carrying the N commits with local `master` reset to `origin/master`; idempotent (no-op when already on a work branch).
@@ -353,7 +355,7 @@ Remaining (genuinely defer-safe, not blocking):
 
 | ID | Cut | Supersedes | Net effect |
 |---|---|---|---|
-| **C1** | Conflict resolution is **manual** — `sync-data.sh` detects non-mergeable / leftover-rebase conflict, prints the §9 file-class recipe, exits non-zero; the user resolves by hand (consistent with the manual merge gate). | R2 "Reconcile rebase / force-push races" row, the §4.3 worktree path, `.sync-worktrees/` | Removes the most bug-prone, rarely-exercised code: scripted rebase, `--force-with-lease`, PR-state recheck, `reset --hard` adoption, worktree lifecycle. |
+| **C1** | Conflict resolution is **manual** — `sync-data.sh` detects non-mergeable / leftover cherry-pick conflict, prints the §9 file-class recipe, exits non-zero; the user resolves by hand (consistent with the manual merge gate). | R2 "Reconcile rebase / force-push races" row, the §4.3 worktree path, `.sync-worktrees/` | Removes the most bug-prone, rarely-exercised code: scripted rebase, `--force-with-lease`, PR-state recheck, `reset --hard` adoption, worktree lifecycle. |
 | **C2** | Branch name uses a short random `<rand>` suffix, not a managed `<seq>` counter. | R2 "Branch identity / `<seq>`" local+remote-max derivation | Removes ref-counting over local + `ls-remote`. machine-id still guarantees cross-machine uniqueness. |
 | **C3** | Rely on **repo-level** merge-commit enforcement (API in setup); demote the runtime merge-method check to a cheap local `merge-base --is-ancestor` assert. | R2 BLOCKER's per-run `gh pr view mergeCommit` verification | Squash is impossible at the repo level, so the runtime network check guarded an unreachable state. |
 | **C4** | `setup-data-ci.sh` **refuses** when `data/` is on a work branch (run it on `master` during init) instead of scripting a throwaway `master` worktree. | R2 "CI bootstrap … worktree cleanup trap" | Removes the throwaway-worktree path; CI install is a once-per-machine init step where `master` is the natural branch. |

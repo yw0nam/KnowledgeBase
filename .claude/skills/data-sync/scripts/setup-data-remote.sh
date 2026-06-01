@@ -30,9 +30,12 @@ esac
 [ -d "$DATA" ] || { echo "error: $DATA does not exist. Run knowledgebase-initialize first." >&2; exit 1; }
 [ -d "$DATA/.git" ] || { echo "error: $DATA is not a git repo." >&2; exit 1; }
 
-if ! git -C "$DATA" diff --quiet || ! git -C "$DATA" diff --cached --quiet; then
+if ! git -C "$DATA" diff --quiet || ! git -C "$DATA" diff --cached --quiet \
+   || [ -n "$(git -C "$DATA" status --porcelain)" ]; then
   echo "error: $DATA has uncommitted changes. Commit or stash first." >&2; exit 1
 fi
+
+run() { echo "+ $*"; [ "$DRY_RUN" = "--dry-run" ] || "$@"; }
 
 EXISTING="$(git -C "$DATA" remote get-url origin 2>/dev/null || true)"
 if [ -n "$EXISTING" ] && [ "$EXISTING" != "$URL" ]; then
@@ -41,11 +44,14 @@ if [ -n "$EXISTING" ] && [ "$EXISTING" != "$URL" ]; then
   exit 1
 fi
 if [ -n "$EXISTING" ] && [ "$EXISTING" = "$URL" ]; then
-  echo "ok: origin already set to $URL (no-op)"; exit 0
+  echo "ok: origin already set to $URL"
+  run gh api -X PATCH "repos/$PRIVATE_REPO" \
+    -F allow_merge_commit=true -F allow_squash_merge=false -F allow_rebase_merge=false
+  echo "ok: merge-commit policy enforced"
+  exit 0
 fi
 
 BRANCH="$(git -C "$DATA" symbolic-ref --short HEAD)"
-run() { echo "+ $*"; [ "$DRY_RUN" = "--dry-run" ] || "$@"; }
 
 [ -z "$EXISTING" ] && run git -C "$DATA" remote add origin "$URL"
 run git -C "$DATA" push -u origin "$BRANCH"
