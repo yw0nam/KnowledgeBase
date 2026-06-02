@@ -14,7 +14,7 @@ DEST_DIR="${CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
 BACKUP_DIR="${CLAUDE_SKILLS_BACKUP_DIR:-${DEST_DIR%/}.pre-symlink-backups}"
 
 # Skills exposed globally. Add a bare skill-dir name to expose more.
-GLOBAL_SKILLS=(handoff-document)
+GLOBAL_SKILLS=(handoff-document wiki-note)
 
 DRY_RUN="${1:-}"
 [ -z "$DRY_RUN" ] || [ "$DRY_RUN" = "--dry-run" ] || { echo "error: only --dry-run supported" >&2; exit 2; }

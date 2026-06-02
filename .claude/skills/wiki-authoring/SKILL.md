@@ -7,6 +7,8 @@ description: Use when creating or updating source-backed pages under data/wiki â
 
 Use this skill as the runtime contract for raw-to-wiki authoring. Do not look for a workflow doc during execution; this skill is the complete operating surface. Use `docs/reference/` only for human-oriented lookup, not for runtime rules.
 
+> **Evidence-derived only.** This skill is for pages grounded in a `data/raw` source â€” including all LLM/cron authoring, which MUST cite real sources. For a **first-party human note** with no external source, use the `wiki-note` skill (`origin: authored`, `sources: []`); do not fake a citation here.
+
 ## Rules
 
 - Never modify existing files under `data/raw/`.

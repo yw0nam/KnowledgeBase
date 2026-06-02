@@ -16,7 +16,8 @@ Agents should execute core workflows from `.claude/skills/`, not by loading work
 | Task | Runtime contract |
 |---|---|
 | Initialize a clone/profile | `.claude/skills/knowledgebase-initialize/SKILL.md` |
-| Write or fix wiki pages | `.claude/skills/wiki-authoring/SKILL.md` |
+| Write or fix wiki pages (evidence-derived) | `.claude/skills/wiki-authoring/SKILL.md` |
+| Capture a first-party note (human, no source) | `.claude/skills/wiki-note/SKILL.md` |
 | Promote/approve/reject wiki pages | `.claude/skills/wiki-approval/SKILL.md` |
 | Configure usage reports | `.claude/skills/usage-report-setup/SKILL.md` |
 | Daily/weekly/monthly memory build | `.claude/skills/memory-report/SKILL.md` |
@@ -50,6 +51,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 | Understand the repo | `docs/architecture.md` |
 | See the whole picture at a glance | `docs/workflows.md` |
 | Run raw-to-wiki pipeline | `.claude/skills/wiki-authoring/SKILL.md` |
+| Jot a first-party note (no source, from any repo) | `.claude/skills/wiki-note/SKILL.md` |
 | Configure cron jobs | `.claude/skills/knowledgebase-initialize/SKILL.md` |
 | Configure usage reports | `.claude/skills/usage-report-setup/SKILL.md` |
 | Run daily/weekly/monthly memory build | `.claude/skills/memory-report/SKILL.md` |
@@ -67,6 +69,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 
 ### A. PatchNote
 
+- 2026-06-02: Added the `wiki-note` skill (first-party human-authored pages, `origin: authored`) to runtime routing + usage tables; it is exposed globally like `handoff-document`.
 - 2026-06-02: Added `docs/workflows.md` — at-a-glance Mermaid map of the nightly pipeline, review lifecycle, and two-repo sync.
 - 2026-05-29: Updated data-sync sync entry to point at the `data-sync` skill.
 - 2026-05-28: Added `docs/data-sync.md` for private remote sync of the nested `data/` repo.
