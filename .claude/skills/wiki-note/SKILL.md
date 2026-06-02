@@ -32,12 +32,11 @@ content in evidence**. A note you author yourself has different, valid provenanc
 - The knowledge comes from a captured source (issue, chat, doc, web clip) → use
   `wiki-authoring` and cite it. Faking `origin: authored` to skip a real citation
   defeats the grounding the wiki depends on.
-- The page is an `improvement` or `checklist` (extra required fields / `## Items`) →
-  use `wiki-authoring`.
 - An LLM/automation is authoring → `wiki-authoring` with real sources.
 
-Supported types here: **`concept`, `decision`, `question`, `entity`** (the simple
-source-optional schema). Anything else → `wiki-authoring`.
+Supported types here: **`concept`, `decision`, `entity`, `checklist`, `improvement`** —
+one bundled template per type in `reference/templates/`, each pre-set with the
+first-party frontmatter (`origin: authored`, `review_status: approved`, `sources: []`).
 
 ## Step 1 — Resolve the KB root (works from any repo)
 
@@ -59,28 +58,33 @@ All `uv run kb-*` below now run inside the KB project.
 
 ## Step 2 — Choose type + path
 
-| type | path |
-|---|---|
-| `concept` | `data/wiki/concepts/<stem>.md` |
-| `decision` | `data/wiki/decisions/YYYY-MM-DD-<slug>.md` |
-| `question` | `data/wiki/questions/<stem>.md` |
-| `entity` | `data/wiki/entities/<subject>/YYYY-MM/<stem>.md` |
+| type | path | template |
+|---|---|---|
+| `concept` | `data/wiki/concepts/<stem>.md` | `reference/templates/concept.md` |
+| `decision` | `data/wiki/decisions/YYYY-MM-DD-<slug>.md` | `reference/templates/decision.md` |
+| `entity` | `data/wiki/entities/<subject>/YYYY-MM/<stem>.md` | `reference/templates/entity.md` |
+| `checklist` | `data/wiki/checklists/<stem>.md` | `reference/templates/checklist.md` |
+| `improvement` | `data/wiki/improvements/YYYY-MM/<stem>.md` | `reference/templates/improvement.md` |
 
-Use a stable ASCII kebab-case slug.
+Use a stable ASCII kebab-case slug. To keep KB-specific notes grouped, a subfolder is
+fine (e.g. `data/wiki/concepts/knowledgebase/<stem>.md`) — `kb-wiki-index` finds nested
+pages and lint does not require concepts to be flat.
 
 ## Step 3 — Write the page
 
-Copy `reference/templates/note.md` and set `type` + path. Frontmatter:
+Copy the matching `reference/templates/<type>.md` (one per supported type) and fill it.
+Every template already carries the first-party frontmatter — set the dates and `tags`,
+keep the rest:
 
 ```yaml
 ---
-type: concept            # concept | decision | question | entity
-origin: authored         # marks first-party authorship — REQUIRED for source-less pages
-review_status: approved  # born approved is fine (you author and approve); not_processed also OK
+type: concept            # matches the template you copied
+origin: authored         # first-party authorship — keep this; it's why sources can be empty
+review_status: approved  # born approved (you author and approve); not_processed also valid
 created: "YYYY-MM-DD"     # today
 updated: "YYYY-MM-DD"
 sources: []              # empty is allowed BECAUSE origin: authored
-aliases: []              # entity/concept only; harmless elsewhere
+aliases: []              # entity/concept templates only
 tags: []
 ---
 ```
@@ -90,8 +94,14 @@ Rules:
 - `origin: authored` + `sources: []` go together. If you have a real source, you are
   not authoring first-party — use `wiki-authoring` instead.
 - `decision` filename must carry the date: `YYYY-MM-DD-<slug>.md`.
-- Wikilinks (`[[stem]]`) must target an existing page stem, or use plain text.
-- Write real content in the body — a one-line stub will trip the stub warning.
+- `improvement` keeps its extra fields (`kind`, `observed_at`, `domain`, `severity`,
+  `issue_status`, `related`) — fill the enums per the template comments. `checklist`
+  must keep a filled `## Items` task list.
+- **Links go in a `## Related` section** as `- [[stem]] — one line on why it's related`
+  (see the template), not scattered inline. Wikilinks must target an existing page
+  stem; otherwise use plain text.
+- Write real content in the body — a one-line stub trips the stub warning, and an empty
+  `## Related` (no bullets) trips an empty-section warning, so fill it or drop it.
 
 ## Step 4 — Regenerate index + lint (both must be 0 errors)
 
@@ -127,7 +137,8 @@ Append to `data/log.md`:
 |---|---|
 | `origin: authored` on an LLM/cron page | Automation must cite real sources — use `wiki-authoring` |
 | `sources: []` but you actually have a source | Cite it via `wiki-authoring`; don't mark authored |
-| `improvement`/`checklist` here | Use `wiki-authoring` (extra required fields) |
+| `improvement` enum left blank/invalid | Fill `kind`/`domain`/`severity`/`issue_status` per template comments |
+| links scattered inline instead of `## Related` | Collect them as `- [[stem]] — why` in `## Related` |
 | lint before `kb-wiki-index` | Run `kb-wiki-index` first |
 | dead `[[wikilink]]` | Link an existing stem or use plain text |
 | `decision` filename without date | Rename to `YYYY-MM-DD-<slug>.md` |
