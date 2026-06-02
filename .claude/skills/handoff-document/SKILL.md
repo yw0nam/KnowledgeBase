@@ -16,6 +16,24 @@ Handoffs are this repo's operational state board. Every task that crosses an age
 
 The schema, enum values, and lint rules below are the canonical operational summary. If anything contradicts the lint code (`src/kb/cli/handoff/validators.py`), the lint code wins — file an issue and update this skill.
 
+## Step 0 — Resolve the KB root (run from any repo)
+
+This skill is symlinked into the KB repo, so it self-locates the root — no `cd`, env,
+or config needed. Run this first; afterwards every `data/...` path below is relative to
+the KB repo and every `uv run kb-*` runs inside the KB project.
+
+```bash
+KB_ROOT="${KB_ROOT:-}"
+if [ -z "$KB_ROOT" ] && [ -L "$HOME/.claude/skills/handoff-document" ]; then
+  KB_ROOT="$(cd "$(dirname "$(readlink -f "$HOME/.claude/skills/handoff-document")")/../.." && pwd)"
+fi
+[ -n "$KB_ROOT" ] || KB_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+[ -d "$KB_ROOT/data" ] || { echo "KB root not found — set KB_ROOT or run knowledgebase-initialize (install-global-skills.sh)"; exit 1; }
+cd "$KB_ROOT"
+```
+
+Precedence: `$KB_ROOT` override → global symlink self-location → current git repo.
+
 ## When to Use
 
 - Finishing a task (or session) that produced files, decisions, or open questions another agent will pick up
