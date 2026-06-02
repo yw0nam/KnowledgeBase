@@ -157,6 +157,7 @@ All run logs go to `data/raw/ops/cron/{YYYY}/{MM}/{date}_{job}.log`.
 
 - [Documentation Index](docs/README.md) — design/reference document map
 - [Architecture](docs/architecture.md) — repository layout and memory layers
+- [Workflows](docs/workflows.md) — at-a-glance diagram map (nightly pipeline, review lifecycle, data sync); skills own the execution detail
 - [Frontmatter Conventions](docs/reference/frontmatter.md) — schema reference; `wiki-authoring` and `handoff-document` carry runtime rules
 - [Wiki Categories](docs/reference/wiki-categories.md) — category reference; use `wiki-authoring` at runtime
 - [Commands](docs/reference/commands.md) — kb-lint-wiki, kb-lint-handoff, kb-wiki-index

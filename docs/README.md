@@ -35,6 +35,7 @@ For human onboarding, read:
 | `docs/architecture.md` | System layout and data boundaries |
 | `docs/reference/` | Human-readable schemas, categories, commands, and lookup tables |
 | `docs/db_informations/` | Database and reporting references |
+| `docs/workflows.md` | At-a-glance diagram map: nightly pipeline, review lifecycle, data sync (overview only — skills own execution) |
 | `docs/data-sync.md` | Private remote sync for the nested `data/` repo |
 | `docs/CLAUDE.md` | Document authoring rules |
 
@@ -47,6 +48,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 | Need | Read |
 |---|---|
 | Understand the repo | `docs/architecture.md` |
+| See the whole picture at a glance | `docs/workflows.md` |
 | Run raw-to-wiki pipeline | `.claude/skills/wiki-authoring/SKILL.md` |
 | Configure cron jobs | `.claude/skills/knowledgebase-initialize/SKILL.md` |
 | Configure usage reports | `.claude/skills/usage-report-setup/SKILL.md` |
@@ -65,6 +67,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 
 ### A. PatchNote
 
+- 2026-06-02: Added `docs/workflows.md` — at-a-glance Mermaid map of the nightly pipeline, review lifecycle, and two-repo sync.
 - 2026-05-29: Updated data-sync sync entry to point at the `data-sync` skill.
 - 2026-05-28: Added `docs/data-sync.md` for private remote sync of the nested `data/` repo.
 - 2026-05-20: Removed `docs/workflows/`; project skills are now the sole workflow surface.
