@@ -7,7 +7,7 @@ Personal LLM wiki. Raw sources go in, LLM writes wiki pages, lint keeps them hon
 KnowledgeBase separates code from data:
 
 - **Outer repo** (`KnowledgeBase/`) — Code, lint tools, templates, documentation. Public-safe.
-- **Generated data export** (`data/`) — Raw sources, wiki pages, handoff documents. DB-canonical; `data/db/state.db` is the source of truth.
+- **Generated data export** (`data/`) — Raw sources, wiki pages, handoff documents. Postgres (reached via `DATABASE_URL`) is the canonical store; `data/` is a generated Markdown export. See `docs/db-canonical.md`.
 
 ```
 KnowledgeBase/
@@ -24,9 +24,7 @@ KnowledgeBase/
 ├── README.md                     This file
 └── .gitignore                    Excludes data/
 
-data/                             Generated data export (DB-canonical; see docs/db-canonical.md)
-├── db/
-│   └── state.db                  Canonical SQLite database (Source of Truth)
+data/                             Generated Markdown export tree (Postgres is canonical; see docs/db-canonical.md)
 ├── raw/
 │   ├── github/                   CLAUDE.md, Issues, PRs
 │   ├── conversations/            Desktop Chatbot history
@@ -53,7 +51,7 @@ Project workflows live in `.claude/skills/`. Use `wiki-authoring` for source-bac
 ## Privacy
 
 `data/` is private and must never be pushed to the outer repository or a public remote.
-`data/db/state.db` is the canonical store — see `docs/db-canonical.md` for the architecture.
+Postgres (reached via `DATABASE_URL`) is the canonical store — see `docs/db-canonical.md` for the architecture. Markdown under `data/` is a generated export.
 
 - Outer `.gitignore` excludes `data/`
 - All raw sources and wiki pages stay private

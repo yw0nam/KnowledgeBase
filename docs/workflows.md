@@ -5,8 +5,7 @@ Updated: 2026-06-02
 ## 1. Synopsis
 
 - **Purpose**: Give a one-look mental model of how KnowledgeBase moves: what the
-  nightly automation does, how a raw source becomes an approved wiki page, and how
-  private data reaches `master`.
+  nightly automation does and how a raw source becomes an approved wiki page.
 - **Scope**: Overview only. This is **not** an execution guide — every cron job's
   behavior is governed by a skill. For step-level detail, read the relevant
   `.claude/skills/<name>/SKILL.md` (see [§5](#5-where-the-detail-lives)).
@@ -96,13 +95,7 @@ Intuition: `data/raw/` is write-once evidence; wiki pages climb an approval ladd
 in `INDEX.md`. Stale unprocessed/pending pages are swept by TTL; explicit rejections
 are kept as an audit trail.
 
-## 5. Two-repo sync (deprecated)
-
-> The legacy git-based sync model (work branch → PR → merge) is deprecated
-> following the DB-canonical migration. See `docs/db-canonical.md` for the
-> current architecture.
-
-## 6. Where the detail lives
+## 5. Where the detail lives
 
 This map is intentionally shallow. Each job's real contract — inputs, outputs, lint
 order, edge cases — lives in its skill:
@@ -112,7 +105,6 @@ order, edge cases — lives in its skill:
   `cron-wrapup` → `cron-wrapup`).
 - Deterministic jobs are CLIs, but their setup and operating contract are still
   documented in skills (e.g. usage reports → `usage-report-setup`).
-- The legacy sync model (work branch → PR → merge) was owned by the `data-sync` skill (deprecated; see `docs/db-canonical.md`).
 
 Browse `.claude/skills/` for the full set; read the matching `SKILL.md` for any box
 in the diagrams above.

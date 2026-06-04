@@ -9,9 +9,11 @@ description: Use when running the daily, weekly, or monthly memory workflow — 
 
 DB rows are the source of truth. Write summaries, pages, handoffs, and operation
 logs through the HTTP DB API with `Authorization: Bearer $KB_API_TOKEN`.
+**Reads** (source discovery in each Step 0) go directly to Postgres via `psql` —
+schema + recipes in `docs/db_informations/state-db-schema-reference.md`.
 Markdown under `data/` is generated export. If any older instruction below says
-to write files, lint as a write gate, or commit `data/`,
-ignore that instruction and use the DB API instead.
+to write files, lint as a write gate, commit `data/`, or discover sources by
+scanning `data/`, ignore that instruction and use the DB instead.
 
 ## Overview
 
@@ -90,6 +92,7 @@ type: summary
 subtype: daily | weekly | monthly
 date: "YYYY-MM-DD"            # daily only
 week: "YYYY-WNN"              # weekly only
+month: "YYYY-MM"             # monthly only
 period_start: "YYYY-MM-DD"    # weekly/monthly
 period_end: "YYYY-MM-DD"      # weekly/monthly
 created: "YYYY-MM-DD"
@@ -221,23 +224,26 @@ Every run writes one handoff. Use the `handoff-document` skill for filename gram
 **Handoff folder**: `data/handoffs/{YYYY}/{MM}/wiki-daily-build/`
 **Promotion intensity**: triage > restructure. Prefer summary; create wiki pages only when source has clear future value.
 
-## Daily Step 0: Identify yesterday's raw — single command, no tree walking
+## Daily Step 0: Identify yesterday's raw — query the DB, never scan `data/`
+
+Postgres is the source of truth; `data/` is a human-readable export. Discover sources with `psql`, not by walking the export tree.
 
 ```bash
 TARGET="$1"                          # e.g. 2026-05-19
-YEAR="${TARGET%%-*}"
-MONTH=$(echo "$TARGET" | cut -d- -f2)
+psql_kb() { psql "${DATABASE_URL/+psycopg/}" -tAc "$1"; }
 
-find data/raw -type f -name "*.md" \
-  \( -path "*/$YEAR/$MONTH/*" -o -name "${TARGET}*" \) \
-  -not -name ".gitkeep" | sort
+# Raw ingested on TARGET. captured_at is stored in UTC, so range over the KST day.
+FROM=$(date -u -d "$TARGET 00:00:00+09:00" +%FT%T)
+TO=$(date -u -d "$TARGET 00:00:00+09:00 +1 day" +%FT%T)
+psql_kb "SELECT source_key, source_type, captured_at FROM raw_sources
+         WHERE captured_at >= '$FROM' AND captured_at < '$TO' ORDER BY captured_at;"
 
-# Active task handoffs this month + only the ready ones
-ls data/handoffs/$YEAR/$MONTH/*/  2>/dev/null
-grep -lr "status: ready" data/handoffs/$YEAR/$MONTH/
+# Ready handoffs for context (prior daily build + anything else still open)
+psql_kb "SELECT task_slug, handoff_id, status FROM handoffs
+         WHERE status='ready' ORDER BY updated_at DESC;"
 ```
 
-Do NOT walk `data/raw/<subdir>` directory-by-directory.
+Never `find`/`ls`/`grep` under `data/` to discover sources — the export can lag the DB.
 
 ## Daily Workflow (9 steps)
 
@@ -272,22 +278,22 @@ Prefer summary + triage. Create atomic pages only when source has clear future v
 
 ```bash
 TARGET="$1"                          # e.g. 2026-W20
+psql_kb() { psql "${DATABASE_URL/+psycopg/}" -tAc "$1"; }
 # Resolve ISO week → Monday date and Sunday date
 PERIOD_START=$(date -d "$(echo $TARGET | sed 's/-W/ /')-1" +%F 2>/dev/null \
                || date -d "${TARGET%-W*}-01-01 +$((10#${TARGET#*-W} * 7 - 7)) days" +%F)
 PERIOD_END=$(date -d "$PERIOD_START +6 days" +%F)
 
-# Daily memory summaries falling in the week
-for d in $(seq 0 6); do
-  D=$(date -d "$PERIOD_START +$d days" +%F)
-  ls data/wiki/summaries/${D%-*-*}/${D#*-}/${D}-memory.md 2>/dev/null
-done
+# Daily memory summaries falling in the week (slug starts with the date)
+psql_kb "SELECT slug FROM pages WHERE type='summary' AND slug LIKE '%-memory'
+         AND left(slug,10) BETWEEN '$PERIOD_START' AND '$PERIOD_END' ORDER BY slug;"
 
-# Ready handoffs from wiki-daily-build for the period
-grep -l "status: ready" data/handoffs/*/*/wiki-daily-build/*.md 2>/dev/null
+# Ready handoffs from the daily build for the period
+psql_kb "SELECT handoff_id, status FROM handoffs
+         WHERE task_slug='wiki-daily-build' AND status='ready' ORDER BY updated_at DESC;"
 ```
 
-Sanity check: expect 7 daily memory files. Document any missing day in the handoff §8; do not synthesize phantom days.
+Sanity check: expect 7 daily memory summary rows. Document any missing day in the handoff §8; do not synthesize phantom days.
 
 ## Weekly Workflow (10 steps)
 
@@ -329,12 +335,15 @@ Sanity check: expect 7 daily memory files. Document any missing day in the hando
 TARGET="$1"                          # e.g. 2026-05
 YEAR="${TARGET%-*}"
 MONTH="${TARGET#*-}"
+psql_kb() { psql "${DATABASE_URL/+psycopg/}" -tAc "$1"; }
 
-# Weekly summaries within the month
-ls data/wiki/summaries/$YEAR/$MONTH/*-weekly.md 2>/dev/null
+# Weekly summaries exported under this month
+psql_kb "SELECT slug FROM pages WHERE type='summary' AND slug LIKE '%-weekly'
+         AND export_path LIKE 'wiki/summaries/$YEAR/$MONTH/%' ORDER BY slug;"
 
-# Prior monthly maintenance handoffs (ready status only)
-grep -l "status: ready" data/handoffs/*/*/wiki-monthly-maintenance/*.md 2>/dev/null
+# Prior monthly maintenance handoffs (ready only)
+psql_kb "SELECT handoff_id, status FROM handoffs
+         WHERE task_slug='wiki-monthly-maintenance' AND status='ready' ORDER BY updated_at DESC;"
 
 # Cleanup signal — orphan/stub pages flagged by lint
 uv run kb-lint wiki

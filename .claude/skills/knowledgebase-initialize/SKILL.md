@@ -5,14 +5,14 @@ description: Use on a fresh clone, new machine, or new profile to create or repa
 
 # KnowledgeBase Initialize
 
-> **DB-Canonical Override**: The KnowledgeBase is now DB-backed. Do NOT create a nested `data/.git` repo or run `setup-data-remote.sh`/`setup-data-ci.sh`/`setup-data-workbranch.sh`. Initialize only the DB (`data/db/state.db`) and verify the API is reachable.
+> **DB-Canonical Override**: The KnowledgeBase is DB-backed. `data/` is a generated Markdown export — do NOT create a nested `data/.git` repo or set up any Git sync for it. Bring up the Postgres `db` service (compose) and run migrations, and verify the API is reachable.
 
 Use this skill as the runtime contract for repository setup. Do not load `docs/` during execution; docs are design reference only.
 
 ## Rules
 
 - Treat the current directory as the KnowledgeBase root.
-- `data/` is a generated export directory. `data/db/state.db` is the canonical store. Never add `data/` to the outer repo.
+- `data/` is a generated export directory. Postgres (reached via `DATABASE_URL`) is the canonical store. Never add `data/` to the outer repo.
 - Never modify existing files under `data/raw/`.
 - Preserve existing `data/` contents; create only missing directories/files.
 - Do not install or edit crontab until the user approves the exact entries.
@@ -24,8 +24,6 @@ Use this skill as the runtime contract for repository setup. Do not load `docs/`
 
 ```text
 data/
-  db/
-    state.db
   raw/
     github/
       claude-md/
@@ -63,7 +61,7 @@ Check:
 
 ```bash
 test -d data
-test -f data/db/state.db
+psql "${DATABASE_URL/+psycopg/}" -tAc "SELECT 1" >/dev/null && echo "DB reachable"
 test -f data/log.md
 uv --version
 uv run kb-lint --help
@@ -141,7 +139,7 @@ bash .claude/skills/knowledgebase-initialize/scripts/install-global-skills.sh
   `~/.claude/skills.pre-symlink-backups/<name>` (outside the scanned skills dir,
   so it is not loaded as a duplicate skill), never deleted.
 - Set `CLAUDE_SKILLS_DIR` to override the destination. Edit the `GLOBAL_SKILLS`
-  array in the script to expose more skills (currently: `handoff-document`).
+  array in the script to expose more skills (currently: `handoff-document` and `wiki-note`).
 
 ## Phase 4: Usage Report Mode
 
@@ -274,7 +272,7 @@ Append to `data/log.md`:
 
 ## Done Criteria
 
-- `data/db/state.db` exists and DB API is reachable.
+- Postgres `db` service is up (migrations applied) and the DB API is reachable.
 - Required directories and `data/log.md` exist.
 - CLI smoke tests ran or blockers are documented.
 - Global skills are symlinked into `~/.claude/skills/` or explicitly skipped.
