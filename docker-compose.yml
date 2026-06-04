@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: knowledgebase
+      POSTGRES_USER: knowledgebase
+      POSTGRES_PASSWORD: knowledgebase
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U knowledgebase -d knowledgebase"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - kb-postgres-data:/var/lib/postgresql/data
+    ports:
+      - "15432:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://knowledgebase:knowledgebase@db:5432/knowledgebase
+      KB_API_TOKEN: knowledgebase-dev-token
+      KB_DATA_DIR: /data
+      KB_WEB_HOST: 0.0.0.0
+      KB_WEB_PORT: 8765
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data:/data
+    ports:
+      - "8765:8765"
+
+volumes:
+  kb-postgres-data:
