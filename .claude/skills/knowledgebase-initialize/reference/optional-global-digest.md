@@ -1,6 +1,6 @@
 # Optional Global Digest
 
-The morning global digest is optional but recommended once `kb-cron-wrapup` is producing stable, committed daily summaries.
+The morning global digest is optional but recommended once `kb-cron-wrapup` is producing stable, DB-backed daily summaries.
 
 ## Purpose
 
@@ -23,7 +23,7 @@ It should not read:
 morning-slack-digest: 09:00 every day
 ```
 
-Run it after the `05:00` `kb-cron-wrapup` job so the digest has a single stable, committed artifact to parse.
+Run it after the `05:00` `kb-cron-wrapup` job so the digest has a single stable, exported artifact to parse.
 
 ## Setup Guidance
 
@@ -32,7 +32,7 @@ Use whatever scheduler or agent runtime the user already uses for notifications.
 Recommended prompt shape:
 
 ```text
-Read the latest committed KnowledgeBase cron wrap-up summary for yesterday. Summarize only the fixed H2 contract sections: Status, Insights, Action Items, Anomalies, Counters, and Links. Do not inspect memory pages, raw data, usage pages, or cron logs directly. Do not create, edit, lint, commit, or push KB files. Send a concise morning status digest.
+Read the latest KnowledgeBase cron wrap-up summary for yesterday. Summarize only the fixed H2 contract sections: Status, Insights, Action Items, Anomalies, Counters, and Links. Do not inspect memory pages, raw data, usage pages, or cron logs directly. Do not create, edit, lint, commit, or push KB files. Send a concise morning status digest.
 ```
 
 ## Dependency

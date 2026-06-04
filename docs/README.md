@@ -38,8 +38,7 @@ For human onboarding, read:
 | `docs/db_informations/` | Database and reporting references |
 | `docs/db_informations/state-db-schema-reference.md` | Postgres state DB schema + `psql` read recipes (reads go direct to the DB) |
 | `docs/db-canonical.md` | DB-as-source-of-truth memory architecture decision |
-| `docs/workflows.md` | At-a-glance diagram map: nightly pipeline, review lifecycle, data sync (overview only — skills own execution) |
-| `docs/data-sync.md` | Private remote sync for the nested `data/` repo (legacy; see db-canonical.md) |
+| `docs/workflows.md` | At-a-glance diagram map: nightly pipeline, review lifecycle (overview only — skills own execution) |
 | `docs/CLAUDE.md` | Document authoring rules |
 
 ### Document Types
@@ -64,8 +63,8 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 | Run CLI commands | `docs/reference/commands.md` |
 | Read the DB directly (queries) | `docs/db_informations/state-db-schema-reference.md` |
 | Start review console (web UI) | `README.md` → "Review console" section; `scripts/dev-web.sh` |
-| Sync `data/` across machines | `docs/db-canonical.md` |
-| Understand DB-canonical migration direction | `docs/db-canonical.md` |
+| Back up / move the DB across machines | `docs/db-canonical.md` |
+| Understand the DB-canonical migration | `docs/db-canonical.md` |
 
 ---
 
@@ -73,6 +72,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 
 ### A. PatchNote
 
+- 2026-06-04: Removed the legacy `data-sync` skill and `docs/data-sync.md` (git-based two-repo sync); DB-canonical replaces it. Dropped the sync flow from `docs/workflows.md` and its document-map/routing rows here.
 - 2026-06-04: Postgres became the sole source of truth (SQLite removed); added `docs/db_informations/state-db-schema-reference.md` for direct `psql` reads.
 - 2026-06-04: Added `docs/db-canonical.md` to the document map and usage table.
 - 2026-06-02: Added the `wiki-note` skill (first-party human-authored pages, `origin: authored`) to runtime routing + usage tables; it is exposed globally like `handoff-document`.

@@ -11,7 +11,7 @@ DB rows are the source of truth. Write the wrap-up summary, run handoff,
 operation log, and cron run log through the HTTP DB API with
 `Authorization: Bearer $KB_API_TOKEN`. Markdown under `data/` is generated
 export. If any older instruction below says to lint as a
-write gate, commit `data/`, or call `data-sync`, ignore that instruction and use
+write gate or commit `data/`, ignore that instruction and use
 the DB API instead.
 
 ## Overview
@@ -55,11 +55,27 @@ TARGET_DATE="$(TZ=Asia/Seoul date -d 'yesterday' +%F)"
 
 If the user manually invokes "Run the KB cron wrap-up for 2026-05-20", `TARGET = 2026-05-20`. Never default to "today" — the night's pipeline writes for yesterday.
 
-## Repo Layout (the inputs the wrap-up reads)
+## Repo Layout & read model
+
+Postgres is the source of truth; `data/` is a human-readable export. Read the wiki/handoff inputs from the DB with `psql` (schema + recipes in `docs/db_informations/state-db-schema-reference.md`) — never open `data/**/*.md`. The only file reads are the per-run cron logs under `data/raw/ops/cron/` (raw operational evidence).
+
+```bash
+TARGET="$1"; psql_kb() { psql "${DATABASE_URL/+psycopg/}" -tAc "$1"; }
+# Usage + memory summary bodies for the target (summary slugs are date-prefixed)
+psql_kb "SELECT slug, body_md FROM pages WHERE type='summary' AND slug LIKE '$TARGET-%';"
+# Canonical usage numbers when present (see docs/db_informations/state-db-schema-reference.md)
+psql_kb "SELECT report_type, session_count, token_total, cost_usd, tool_error_count FROM metrics WHERE report_date='$TARGET';"
+# Run handoffs from the night's pipeline
+psql_kb "SELECT task_slug, handoff_id, status FROM handoffs WHERE status='ready';"
+# Per-job outcomes when present (status/exit_code/timestamps)
+psql_kb "SELECT job_name, status, exit_code, started_at, finished_at FROM cron_runs WHERE target='$TARGET';"
+```
+
+The export tree below shows where the same data also lands as human-readable markdown:
 
 ```
 data/
-├── wiki/summaries/{YYYY}/{MM}/            # Exported markdown; or read pages via psql (see state-db-schema-reference)
+├── wiki/summaries/{YYYY}/{MM}/            # generated export of the summary pages (read via psql, above)
 │   ├── {TARGET}-opencode-usage.md         # DB-backed (kb-opencode-daily-report posts to DB API)
 │   ├── {TARGET}-claude-code-usage.md      # DB-backed
 │   ├── {TARGET}-hermes-usage.md           # DB-backed
@@ -198,16 +214,16 @@ Late-start detection: per-run logs do not contain wrapper-side start timestamps,
 
 ## Inputs the wrap-up reads — and what to extract from each
 
-| Input | Extract |
+| Input (read via `psql`; logs are files) | Extract |
 |---|---|
-| `wiki/summaries/{Y}/{M}/{T}-opencode-usage.md`     | sessions, total USD (DB metrics via API, or frontmatter/table from export) |
-| `wiki/summaries/{Y}/{M}/{T}-claude-code-usage.md`  | sessions, USD, tool_error_rate, hot files count (DB metrics via API) |
-| `wiki/summaries/{Y}/{M}/{T}-hermes-usage.md`       | sessions, zombie count |
-| `wiki/summaries/{Y}/{M}/{T}-memory.md`             | path, key events, promotion candidates, open items, next-run notes; **do not copy the whole narrative** |
-| `handoffs/{Y}/{M}/wiki-daily-build/{T}_*_handoff_*.md` | path, new pages count from §6 Outputs, risks, next handoff instructions |
-| `handoffs/{Y}/{M}/wiki-promote/...`                | promoted count, rejected count, expired count |
-| `raw/ops/cron/{Y}/{M}/{T}_kb-wiki-ttl-sweep.log`   | swept count + exit code |
-| `raw/ops/cron/{Y}/{M}/{T}_*.log` (every per-run file matching this target — there is no `kb-cron-wrapup.log` in this folder) | non-zero exit lines, `ERROR:` lines, `Lock` skip lines |
+| `pages` slug `{T}-opencode-usage` (numbers also in `metrics` report_type=opencode) | sessions, total USD |
+| `pages` slug `{T}-claude-code-usage` (numbers also in `metrics`)  | sessions, USD, tool_error_rate, hot files count |
+| `pages` slug `{T}-hermes-usage`       | sessions, zombie count |
+| `pages` slug `{T}-memory`             | key events, promotion candidates, open items, next-run notes; **do not copy the whole narrative** |
+| `handoffs` task_slug=`wiki-daily-build`, status=`ready` | new pages count from §6 Outputs, risks, next handoff instructions |
+| `handoffs` task_slug=`wiki-promote`, status=`ready`     | promoted count, rejected count, expired count |
+| `raw/ops/cron/{Y}/{M}/{T}_kb-wiki-ttl-sweep.log` (file) | swept count + exit code |
+| `raw/ops/cron/{Y}/{M}/{T}_*.log` (files; no `kb-cron-wrapup.log` here) | non-zero exit lines, `ERROR:` lines, `Lock` skip lines |
 
 Read each input at most once. Never use lint as a discovery source, never re-render existing summaries. The wrap-up MUST NOT read `data/raw/` other than `raw/ops/cron/{Y}/{M}/{TARGET}_*.log`. The wrap-up may extract concise insights/actions from the daily memory and handoffs, but must not duplicate the memory page's full content narrative.
 
@@ -249,12 +265,12 @@ This skill specifies only:
 - **db_write**: summary + handoff + operation log exported successfully
 ```
 
-## Workflow (8 steps)
+## Workflow (10 steps)
 
 ```
 1. Resolve TARGET = yesterday in KST (or accept explicit argument)
-2. Locate inputs: 3 usage pages, memory page, daily handoff, promote handoff (optional),
-   per-run cron logs at `raw/ops/cron/{Y}/{M}/{TARGET}_*.log`. Note any MISSING required input → Status: FAILED later.
+2. Query inputs via `psql`: usage + memory pages (`pages`), ready handoffs (`handoffs`), usage numbers (`metrics`), job outcomes (`cron_runs`);
+   then read per-run cron logs at `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` (files). Note any MISSING required input → Status: FAILED later.
 3. Extract per-input metrics (see Inputs table). Compute Counters.
 4. Read every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` except `{TARGET}_kb-cron-wrapup.log` — that file does not exist during the session (the shell wrapper writes and commits it after the session exits, so it is never available to read here)
    for non-zero exits, ERRORs, lock skips. Collect into Anomalies.
@@ -288,8 +304,8 @@ If a required input is missing (e.g. memory page never wrote):
 ## Workflow Discipline
 
 - **One target per run.** Never extend scope implicitly to "and also the day before".
-- **Never edit raw files.** The wrap-up reads `data/raw/ops/cron/{Y}/{M}/{TARGET}_*.log` as evidence and `git add`s them on commit, but must never modify their contents. Do not read other `data/raw/` subtrees.
-- **Replay caveat.** A wrapper rerunning for an already-written TARGET will append to a tracked raw log. If you must replay a job for a committed TARGET, use the DB API to manage the existing log entry before the wrapper runs.
+- **Never edit raw files.** The wrap-up reads `data/raw/ops/cron/{Y}/{M}/{TARGET}_*.log` as read-only evidence, but must never modify their contents. Do not read other `data/raw/` subtrees.
+- **Replay caveat.** A wrapper rerunning for an already-written TARGET will append to a persisted log entry. If you must replay a job for a previously-run TARGET, use the DB API to manage the existing log entry before the wrapper runs.
 - **Do not auto-promote** anything — wiki promotion is `wiki-approval`'s job.
 - **Do not use lint as analysis input** — run only the required final gate: `kb-lint all` once.
 - **Persist only through the DB API.** Never commit outer repo files or generated `data/` export.

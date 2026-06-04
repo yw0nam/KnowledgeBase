@@ -16,7 +16,7 @@ KnowledgeBase has one git repository and one generated data directory:
 | Repo | Path | Purpose | Push Policy |
 |---|---|---|---|
 | Outer repo | `KnowledgeBase/` | Code, docs, templates, lint tools | Public-safe |
-| Generated export | `data/` | Raw sources, wiki, handoffs, logs (DB-canonical; `data/db/state.db` is SoT) | Local-only |
+| Generated export | `data/` | Raw sources, wiki, handoffs, logs (Postgres via `DATABASE_URL` is SoT; `data/` is generated export) | Local-only |
 
 Never commit `data/` contents to the outer repository. The outer `.gitignore` excludes `data/`.
 
@@ -55,25 +55,26 @@ Six of the seven types (`entity`, `concept`, `decision`, `improvement`, `checkli
 The DB-canonical flow is:
 
 ```text
-data/raw/ -> DB write (state.db) -> data/wiki/ (Markdown export) -> data/log.md -> lint
+data/raw/ -> FastAPI API -> Postgres write -> data/wiki/ (Markdown export) -> data/log.md -> lint
 ```
 
 Writes go through the DB API; Markdown files under `data/wiki/` are generated exports
-synced from `data/db/state.db`. Handoffs sit beside the flow as the operational state
+exported from Postgres. Handoffs sit beside the flow as the operational state
 board. They record what was processed, what is blocked, and what the next agent should do.
 
-`data/db/state.db` is the canonical memory store — it owns pages, frontmatter, raw
-sources, citations, and revisions. See `docs/db-canonical.md`.
+Postgres (reached via `DATABASE_URL`) is the canonical memory store — it owns pages,
+frontmatter, raw sources, citations, and revisions. Markdown under `data/` is generated
+from the DB. See `docs/db-canonical.md`.
 
 ### DB-Canonical API Server
 
 A local-only FastAPI server that serves wiki pages and review operations from
-`data/db/state.db` via Bearer-auth REST API. Markdown files under `data/wiki/`
+Postgres via Bearer-auth REST API. Markdown files under `data/wiki/`
 are generated exports, not read surfaces.
 
 | Component | Path | Role |
 |---|---|---|
-| FastAPI server | `src/kb/web/` | REST API over `data/db/state.db`; read/write endpoints (queue, pages, dashboard, promote/approve/reject) |
+| FastAPI server | `src/kb/web/` | REST API over Postgres; write-gated endpoints (queue, pages, dashboard, promote/approve/reject) |
 | Dev script | `scripts/dev-web.sh` | Start FastAPI (`:8765`) |
 
 ## 3. Usage
@@ -96,6 +97,7 @@ When deciding where information belongs:
 
 ### A. PatchNote
 
+- 2026-06-04: Postgres is now the sole source of truth; SQLite (`state.db`) removed. Reads go directly to Postgres via `psql`; writes go through the FastAPI API. `data/` is a generated Markdown export, not canonical.
 - 2026-06-04: Added DB-canonical target direction; Markdown/Git flow is now documented as legacy/current rather than the end state.
 - 2026-05-20: Removed workflow docs from the active documentation map; project skills are the runtime workflow layer.
 - 2026-05-20: Reframed workflow docs as design references and `.claude/skills/` as runtime operating instructions.

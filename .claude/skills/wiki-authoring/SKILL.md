@@ -163,7 +163,7 @@ tags: []
 ---
 ```
 
-Weekly/monthly summaries use `period_start` and `period_end`; weekly also has `week: "YYYY-WNN"`. Summaries do not use `review_status`.
+Weekly/monthly summaries use `period_start` and `period_end`; weekly also has `week: "YYYY-WNN"` and monthly `month: "YYYY-MM"`. Summaries do not use `review_status`.
 
 ## Promotion Criteria
 
