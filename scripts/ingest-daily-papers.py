@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Ingest today's HuggingFace Daily Papers email from Gmail into KnowledgeBase raw files.
+"""Ingest today's HuggingFace Daily Papers email into the KnowledgeBase DB.
 
 Default behavior:
 - reads the most recent HuggingFace Daily Papers digest from Gmail
-- only processes it when the subject paper date equals today's KST date
+- processes it when the subject paper date is today or yesterday in KST
+  (HuggingFace's digest for a paper date commonly arrives the next KST morning)
 - extracts paper titles + HuggingFace paper URLs
 - fetches each paper abstract from the arXiv API
-- writes one immutable markdown source under data/raw/web/huggingface/
-- deduplicates with repo-local state under data/raw/ops/ingest_state/daily_papers/
+- submits one immutable raw source through the DB API
+- treats exported raw markdown, if present, as a duplicate hint
 
 This script intentionally performs INGEST only. The existing kb_update cron/job can
 handle graph/fill/lint/log stages separately.
@@ -30,9 +31,10 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
+from kb.cli.db_api import DbApiError, submit_raw_source
+
 KB_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = KB_ROOT / "data" / "raw" / "web" / "huggingface"
-STATE_DIR = KB_ROOT / "data" / "raw" / "ops" / "ingest_state" / "daily_papers"
 GAPI = Path.home() / ".hermes" / "skills" / "productivity" / "google-workspace" / "scripts" / "google_api.py"
 GMAIL_QUERY = 'from:daily_papers_digest@notifications.huggingface.co subject:"Daily papers of" newer_than:2d'
 KST = timezone(timedelta(hours=9))
@@ -201,7 +203,10 @@ def yaml_quote(value: str) -> str:
 
 def render_markdown(email: dict[str, Any], paper_date: datetime, papers: list[dict[str, str]]) -> str:
     subject = email.get("subject", "")
-    captured = email_datetime(email.get("date", "")) or datetime.now(timezone.utc)
+    # `captured_at` is the time this source file is created, not the email's
+    # Date header. The KB raw immutability lint checks captured_at against file
+    # mtime, so using the provider timestamp for a delayed digest fails.
+    captured = datetime.now(timezone.utc)
     paper_date_str = paper_date.strftime("%Y-%m-%d")
 
     lines = [
@@ -249,7 +254,6 @@ def render_markdown(email: dict[str, Any], paper_date: datetime, papers: list[di
 
 def ingest(dry_run: bool, force: bool, allow_non_today: bool) -> int:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
 
     emails = run_gapi("gmail", "search", GMAIL_QUERY, "--max", "1")
     if not emails:
@@ -260,15 +264,17 @@ def ingest(dry_run: bool, force: bool, allow_non_today: bool) -> int:
     paper_date = parse_subject_date(email.get("subject", ""))
     paper_date_str = paper_date.strftime("%Y-%m-%d")
     today_kst = datetime.now(KST).date()
+    accepted_dates = {today_kst, today_kst - timedelta(days=1)}
 
-    if not allow_non_today and paper_date.date() != today_kst:
-        print(f"Skipping non-today digest: {paper_date_str} (today KST: {today_kst.isoformat()})")
+    if not allow_non_today and paper_date.date() not in accepted_dates:
+        accepted = ", ".join(sorted(date.isoformat() for date in accepted_dates))
+        print(f"Skipping stale/future digest: {paper_date_str} (accepted KST paper dates: {accepted})")
         return 0
 
     raw_file = RAW_DIR / f"daily_papers_{paper_date_str}.md"
-    marker = STATE_DIR / f"{paper_date_str}.json"
+    source_key = raw_file.relative_to(KB_ROOT / "data").as_posix()
 
-    if not force and (raw_file.exists() or marker.exists()):
+    if not force and raw_file.exists():
         print(f"Skipping already ingested digest: {paper_date_str}")
         return 0
 
@@ -280,27 +286,18 @@ def ingest(dry_run: bool, force: bool, allow_non_today: bool) -> int:
 
     content = render_markdown(email, paper_date, papers)
     if dry_run:
-        print(f"DRY RUN: would write {raw_file} with {len(papers)} papers")
+        print(f"DRY RUN: would submit {source_key} with {len(papers)} papers")
         print(content[:4000])
         return 0
 
-    raw_file.write_text(content, encoding="utf-8")
-    marker.write_text(
-        json.dumps(
-            {
-                "paper_date": paper_date_str,
-                "gmail_message_id": email["id"],
-                "raw_file": str(raw_file.relative_to(KB_ROOT)),
-                "paper_count": len(papers),
-                "ingested_at": datetime.now(timezone.utc).isoformat(),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    print(f"Wrote {raw_file.relative_to(KB_ROOT)} ({len(papers)} papers with abstracts)")
+    try:
+        submit_raw_source(markdown=content, source_key=source_key, source_type="web_article")
+    except DbApiError as exc:
+        if exc.status_code == 409 and not force:
+            print(f"Skipping already ingested digest in DB: {paper_date_str}")
+            return 0
+        raise
+    print(f"Submitted {source_key} ({len(papers)} papers with abstracts)")
     return 0
 
 
@@ -311,7 +308,7 @@ def main() -> int:
     parser.add_argument(
         "--allow-non-today",
         action="store_true",
-        help="manual/testing escape hatch; default cron behavior only processes today's KST subject date",
+        help="manual/testing escape hatch; default cron behavior processes today/yesterday KST subject dates",
     )
     args = parser.parse_args()
 

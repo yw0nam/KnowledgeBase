@@ -61,4 +61,9 @@ Keep entries concise and user/operator-facing. Avoid tool traces, lint output, h
 
 ### Fixed
 
+- Fixed `kb-wiki-promote.sh` recurring empty-log failures by logging start/failure/lock diagnostics, unsetting inherited `VIRTUAL_ENV`, and wrapping `opencode run` in a 540s child timeout so stale runs release the promotion lock before Hermes cron's 600s script limit.
+- Fixed `kb-ingest-papers.sh` cron environment setup by adding the Google Workspace API dependencies to the project environment and unsetting any inherited `VIRTUAL_ENV` before `uv run`, preventing `googleapiclient` import failures and stale active-venv warnings.
+- Fixed HuggingFace Daily Papers ingestion date gating: the cron now accepts the latest digest when its subject paper date is either today or yesterday in KST, matching HuggingFace's next-morning delivery pattern.
+- Fixed HuggingFace Daily Papers raw frontmatter to use ingestion time for `captured_at` so newly captured digest files satisfy the raw immutability lint.
+
 - Fixed Claude Code daily report tool-call and user-prompt counts being inflated ~250x by overlapping `count_over_time([24h])` sliding windows. `_collect_loki` now uses a new `_query_loki_instant` helper to evaluate the 24h aggregation once at the day boundary instead of summing across query_range step points. Affects `tool_breakdown`, `n_toolcalls`, `error_rate`, and `n_turns`; per-tool error rates were already accurate because numerator and denominator inflated equally.

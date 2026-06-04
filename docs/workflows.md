@@ -25,7 +25,7 @@ The same conventions apply to every diagram below:
 
 ## 3. Nightly cron pipeline (KST)
 
-The whole night collapses to: *collect → organize → checkpoint-commit → publish PR*,
+The whole night collapses to: *collect → organize → DB write + export*,
 with a separate morning read-out to Slack.
 
 ```mermaid
@@ -45,7 +45,6 @@ flowchart LR
   mem["03:30<br/>memory-daily"]:::llm
   prom["04:00<br/>wiki-promote"]:::llm
   wrap["05:00<br/>cron-wrapup"]:::llm
-  sync["sync-data.sh<br/>→ push + PR"]:::gate
   papers["10:05<br/>ingest-daily-papers"]:::det
   slack["09:00 · morning-slack-digest 👤<br/>(Hermes agent — not a KB cron)"]:::ext
   Slack[("Slack")]
@@ -53,17 +52,16 @@ flowchart LR
   wk["04:15 memory-weekly<br/>(Mon)"]:::llm
   mo["04:45 memory-monthly<br/>(1st)"]:::llm
 
-  ttl --> R --> mem --> prom --> wrap --> sync
+  ttl --> R --> mem --> prom --> wrap
   prom -. "Mon" .-> wk -.-> wrap
   prom -. "1st" .-> mo -.-> wrap
   wrap -. "reads committed wrap-up" .-> slack -.-> Slack
   papers
 ```
 
-Intuition: nothing pushes mid-night — `cron-wrapup` (05:00) commits the night's
-work as one checkpoint and `sync-data.sh` opens/updates the PR. `ingest-daily-papers`
-(10:05) and the `morning-slack-digest` (09:00, runs with the Hermes agent) sit
-outside the main chain.
+Intuition: nothing pushes mid-night — `cron-wrapup` (05:00) writes the night's
+work through the DB API as one checkpoint. `ingest-daily-papers` (10:05) and the
+`morning-slack-digest` (09:00, runs with the Hermes agent) sit outside the main chain.
 
 ## 4. Data flow & review lifecycle
 
@@ -98,46 +96,11 @@ Intuition: `data/raw/` is write-once evidence; wiki pages climb an approval ladd
 in `INDEX.md`. Stale unprocessed/pending pages are swept by TTL; explicit rejections
 are kept as an audit trail.
 
-## 5. Two-repo sync (commit → PR → merge)
+## 5. Two-repo sync (deprecated)
 
-Code and private data live in separate git repos; data reaches `master` only through
-a human-gated PR.
-
-```mermaid
-flowchart TB
-  classDef gate fill:#ffffff,stroke:#555,color:#000;
-
-  subgraph OUT["outer repo · public-safe"]
-    code["code · docs · skills · templates"]
-  end
-
-  subgraph DATA["nested data/ · private · local-only"]
-    wb["work branch<br/>sync/&lt;machine&gt;-&lt;date&gt;-&lt;rand&gt;"]
-    mst["master"]
-  end
-
-  ai["AI / cron session"]
-  cleang{"clean tree?"}:::gate
-  llint{"local lint"}:::gate
-  pr["PR on private remote"]
-  rci{"remote CI lint"}:::gate
-  merge["👤 merge-data-pr.sh<br/>requires lint = pass"]
-
-  ai -- "commit<br/>(never master)" --> wb
-  wb --> cleang
-  cleang -- pass --> llint
-  llint -- pass --> pr
-  pr --> rci
-  rci -- pass --> merge
-  merge -- "merge-commit" --> mst
-  mst -. "reconcile → fresh branch" .-> wb
-```
-
-Intuition: AI/cron sessions only ever commit to a **work branch** — never `master`.
-`sync-data.sh` (shell, outside any AI session) refuses to push unless the tree is
-clean and local lint passes, then opens the PR. The merge to `master` is a deliberate
-**human** action (`merge-data-pr.sh`) that itself requires the remote CI lint to pass.
-The outer repo and `data/` never share a remote.
+> The legacy git-based sync model (work branch → PR → merge) is deprecated
+> following the DB-canonical migration. See `docs/db-canonical.md` for the
+> current architecture.
 
 ## 6. Where the detail lives
 
@@ -149,7 +112,7 @@ order, edge cases — lives in its skill:
   `cron-wrapup` → `cron-wrapup`).
 - Deterministic jobs are CLIs, but their setup and operating contract are still
   documented in skills (e.g. usage reports → `usage-report-setup`).
-- The sync model (work branch → PR → merge) is owned by the `data-sync` skill.
+- The legacy sync model (work branch → PR → merge) was owned by the `data-sync` skill (deprecated; see `docs/db-canonical.md`).
 
 Browse `.claude/skills/` for the full set; read the matching `SKILL.md` for any box
 in the diagrams above.

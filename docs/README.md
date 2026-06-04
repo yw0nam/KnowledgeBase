@@ -1,6 +1,6 @@
 # Documentation Index
 
-Updated: 2026-05-28
+Updated: 2026-06-04
 
 ## 1. Synopsis
 
@@ -36,8 +36,9 @@ For human onboarding, read:
 | `docs/architecture.md` | System layout and data boundaries |
 | `docs/reference/` | Human-readable schemas, categories, commands, and lookup tables |
 | `docs/db_informations/` | Database and reporting references |
+| `docs/db-canonical.md` | DB-as-source-of-truth memory architecture decision |
 | `docs/workflows.md` | At-a-glance diagram map: nightly pipeline, review lifecycle, data sync (overview only — skills own execution) |
-| `docs/data-sync.md` | Private remote sync for the nested `data/` repo |
+| `docs/data-sync.md` | Private remote sync for the nested `data/` repo (legacy; see db-canonical.md) |
 | `docs/CLAUDE.md` | Document authoring rules |
 
 ### Document Types
@@ -61,7 +62,8 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 | Approve/reject wiki pages | `.claude/skills/wiki-approval/SKILL.md` |
 | Run CLI commands | `docs/reference/commands.md` |
 | Start review console (web UI) | `README.md` → "Review console" section; `scripts/dev-web.sh` |
-| Sync `data/` across machines | `docs/data-sync.md`; `.claude/skills/data-sync/SKILL.md` |
+| Sync `data/` across machines | `docs/db-canonical.md` |
+| Understand DB-canonical migration direction | `docs/db-canonical.md` |
 
 ---
 
@@ -69,6 +71,7 @@ Use project skills for ordered execution steps. Use `docs/reference/` for human-
 
 ### A. PatchNote
 
+- 2026-06-04: Added `docs/db-canonical.md` to the document map and usage table.
 - 2026-06-02: Added the `wiki-note` skill (first-party human-authored pages, `origin: authored`) to runtime routing + usage tables; it is exposed globally like `handoff-document`.
 - 2026-06-02: Added `docs/workflows.md` — at-a-glance Mermaid map of the nightly pipeline, review lifecycle, and two-repo sync.
 - 2026-05-29: Updated data-sync sync entry to point at the `data-sync` skill.

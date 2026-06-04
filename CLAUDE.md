@@ -2,9 +2,11 @@
 
 Personal LLM wiki backed by handoff system. Raw sources go in, LLM writes wiki pages, lint validates.
 
+**DB-Canonical**: `data/db/state.db` is the Source of Truth. Markdown files under `data/` are generated exports, not the canonical state.
+
 ## Overview
 
-KnowledgeBase is a memory-workflow system (v0) that captures knowledge from multiple sources, organizes it into a structured wiki, and maintains operational records via handoff documents. The system separates code (outer repo) from operational data (nested `data/` repo).
+KnowledgeBase is a memory-workflow system (v0) that captures knowledge from multiple sources, organizes it into a structured wiki, and maintains operational records via handoff documents. The system separates code (outer repo) from operational data (`data/` export).
 
 ## Repository Layout
 
@@ -12,21 +14,23 @@ KnowledgeBase is a memory-workflow system (v0) that captures knowledge from mult
 KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 ├── src/kb/                   # CLI tools + FastAPI web server
 │   ├── cli/
-│   │   ├── lint_wiki.py          # kb-lint-wiki command
-│   │   ├── lint_handoff.py       # kb-lint-handoff command
-│   │   └── wiki_index.py         # kb-wiki-index command (regen wiki/INDEX.md)
-│   └── web/                      # FastAPI review console backend (kb-web)
+│   │   ├── lint.py                   # kb-lint command (wiki + handoff validation)
+│   │   ├── db_ttl_sweep.py           # kb-db-ttl-sweep command
+│   │   ├── db_api.py                 # DB API client (shared lib)
+│   │   ├── opencode_daily_report.py  # kb-opencode-daily-report command
+│   │   ├── hermes_daily_report.py    # kb-hermes-daily-report command
+│   │   └── claude_code_daily_report.py  # kb-claude-code-daily-report command
+│   └── web/                      # FastAPI DB-canonical API server (kb-web)
 │       ├── app.py                #   FastAPI app factory
 │       ├── config.py             #   KB_DATA_DIR, port config
 │       ├── main.py               #   kb-web entrypoint
-│       └── routes/               #   /api/queue, /api/pages, /api/dashboard
+│       ├── auth.py               #   Bearer token auth
+│       ├── export.py             #   Markdown + JSON export from DB
+│       └── routes/db_canonical.py  #   DB-canonical write endpoints
 ├── src/CLAUDE.md                 # CLAUDE.md file for src/
-├── frontend/                     # Vite + React + TypeScript review console SPA
-│   ├── src/                      #   Pages (QueuePage, DashboardPage), components, API clients
-│   └── ...
+
 ├── scripts/
 │   ├── ingest-github.sh          # GitHub source collection
-│   └── dev-web.sh                # Start FastAPI + Vite together
 ├── docs/raw/                # Raw source frontmatter templates
 ├── .claude/skills/               # Runtime workflow contracts + bundled templates
 ├── pyproject.toml
@@ -43,8 +47,9 @@ KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 │       └── wiki-categories.md    # Wiki categories
 └── .gitignore                    # Excludes data/
 
-data/                             # Nested private git repo: raw sources + wiki
-├── .git/
+data/                             # Generated data export (DB-canonical; see docs/db-canonical.md)
+├── db/
+│   └── state.db                  # Canonical SQLite database (Source of Truth)
 ├── raw/
 │   ├── github/
 │   │   ├── claude-md/            # CLAUDE.md files ({owner}_{repo}_CLAUDE.md)
@@ -67,44 +72,34 @@ data/                             # Nested private git repo: raw sources + wiki
 
 ## Important Rules
 
-- Never modify files in `data/raw/`. They are immutable after creation. Use `kb-lint-wiki --check-immutability` to enforce: git-status must not show modifications, `captured_at` must be ≤ file mtime (60s tolerance), and required raw frontmatter fields (`source_url`, `type`, `captured_at`, `contributor`) are always validated.
+- Never modify files in `data/raw/`. They are immutable after creation. Use `kb-lint` to enforce (via DB API): git-status must not show modifications, `captured_at` must be ≤ file mtime (60s tolerance), and required raw frontmatter fields (`source_url`, `type`, `captured_at`, `contributor`) are always validated.
 - `data/wiki/` pages must always list their `sources:` in frontmatter.
 - Keep `data/log.md` updated for `data/` repo operations only: raw ingest, wiki page creation/update, handoff creation/update, promotion/rejection, cron/report outputs, and data lint results.
 - Keep outer repo changes in `CHANGELOG.md`: source code, scripts, docs, skills, templates, config, schemas, and workflow contract changes.
 - Do not write outer repo implementation details to `data/log.md`; reference the data artefact or handoff only if the operation created one.
-- Lint must pass (0 errors) before committing wiki changes.
-- Handoff documents are stored in `data/handoffs/` and tracked via git.
 - Use uv for package management
 
 ## Change Records
 
-Use two separate records because this repository has two git histories:
-
 - `CHANGELOG.md` is for the outer repo. Update it when a change affects maintainers/operators or changes runtime behavior, CLI behavior, cron wrappers, skills, docs contracts, schemas, templates, or setup instructions.
-- `data/log.md` is for the nested local data repo. Update it when a run creates or changes `data/wiki/`, `data/handoffs/`, `data/ops/`, `data/rejected/`, or records lint/cron/report outcomes.
-- If one task changes both layers, update both records with layer-appropriate details. `CHANGELOG.md` says what changed in the product/workflow; `data/log.md` says what data artefacts were created or updated.
-- Do not duplicate full changelog entries into `data/log.md`.
-- Do not commit the nested `data/` repo unless the user explicitly asks for a data commit. Cron jobs and memory/approval workflows normally create and manage data changes for later user review.
-- Exception: the `kb-cron-wrapup` workflow is expected to commit its own nested `data/` repo outputs after successful lint. The separate global morning digest is read-only: it reads the committed cron-wrapup artefact and sends a report, but does not create, edit, or commit KB data. `kb-cron-wrapup` must not push from within its AI session and must never commit the outer repo.
+- Do not write outer repo implementation details to `data/log.md`; reference the data artefact or handoff only if the operation created one.
 - If outer-repo work produces or adjusts `data/` artefacts for verification, leave those `data/` changes uncommitted unless the user specifically asks to handle them.
 
 ## Privacy
 
-`data/` is a nested git repository scoped to private storage. It is never pushed to the outer repo's remote. It may be pushed to a dedicated private remote scoped to `data/` only — see `docs/data-sync.md`.
+`data/` is a generated export directory. `data/db/state.db` is the canonical store. See `docs/db-canonical.md`.
 
 - Outer `.gitignore` excludes `data/`
-- `data/.git` is independent from outer repo
 - All raw sources and wiki pages stay private
 - Handoff documents (which may contain sensitive decisions) stay private
-- AI sessions do not push. The `kb-cron-wrapup.sh` shell wrapper publishes the committed work branch through the private PR workflow outside the AI session.
 
-Never commit `data/` contents to the outer repository. Never set `data/`'s remote to the outer repo's URL or any public host.
+Never commit `data/` contents to the outer repository.
 
 ## Skills
 
 Project skills live under `.claude/skills/`, auto-load by description match, and are the source of truth for workflow behavior.
 
-- `knowledgebase-initialize` — initialize `data/`, verify tooling, and propose cron jobs for approval.
+- `knowledgebase-initialize` — initialize `data/`, create DB (`data/db/state.db`), verify tooling, and propose cron jobs for approval.
 - `wiki-approval` — promote, approve, reject, or TTL-sweep wiki pages through the `review_status` lifecycle; runtime contract for wiki-promote cron.
 - `wiki-authoring` — create or update source-backed `data/wiki/` pages with valid schemas, paths, wikilinks, templates, and lint order.
 - `usage-report-setup` — select and wire source-specific OpenCode/Hermes/Claude Code usage report jobs.
@@ -121,12 +116,12 @@ The cron job runs KB cron jobs directly. The script delegates LLM work to `openc
 | Pattern | Used by | Mechanism |
 |---------|---------|-----------|
 | **LLM-Driven** | memory-daily/weekly/monthly, wiki-promote, cron-wrapup | skill-driven + opencode run  `opencode run --model anthropic/claude-sonnet-4-6` |
-| **Deterministic** (no LLM) | opencode/hermes/claude-code daily reports, wiki-ttl-sweep, ingest-papers | `uv run kb-*-daily-report --date --lint`, `uv run kb-wiki-review ttl-sweep --days 7`, `uv run python scripts/ingest-daily-papers.py` |
+| **Deterministic** (no LLM) | opencode/hermes/claude-code daily reports, wiki-ttl-sweep, ingest-papers | `uv run kb-*-daily-report --date --lint`, `uv run kb-db-ttl-sweep --days 7`, `uv run python scripts/ingest-daily-papers.py` |
 
 ### Pipeline schedule (KST)
 
 ```
-00:30  kb-wiki-ttl-sweep          deterministic
+00:30  kb-db-ttl-sweep            deterministic
 03:10  kb-opencode-daily-report   deterministic
 03:15  kb-hermes-daily-report     deterministic
 03:20  kb-claude-code-daily-report deterministic
@@ -160,7 +155,7 @@ All run logs go to `data/raw/ops/cron/{YYYY}/{MM}/{date}_{job}.log`.
 - [Workflows](docs/workflows.md) — at-a-glance diagram map (nightly pipeline, review lifecycle, data sync); skills own the execution detail
 - [Frontmatter Conventions](docs/reference/frontmatter.md) — schema reference; `wiki-authoring` and `handoff-document` carry runtime rules
 - [Wiki Categories](docs/reference/wiki-categories.md) — category reference; use `wiki-authoring` at runtime
-- [Commands](docs/reference/commands.md) — kb-lint-wiki, kb-lint-handoff, kb-wiki-index
+- [Commands](docs/reference/commands.md) — kb-lint, kb-db-ttl-sweep, kb-submit-cron-run, daily report CLIs, kb-web
 
 ## Linting
 

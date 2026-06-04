@@ -1,69 +1,74 @@
 # Commands
 
-Updated: 2026-05-18
+Updated: 2026-06-04
 
 ## 1. Synopsis
 
-- **Purpose**: KnowledgeBase CLI commands for validating wiki/handoff content and generating reports.
-- **I/O**: Shell command → lint report (exit 0 = pass, non-zero = fail).
+- **Purpose**: KnowledgeBase CLI commands for DB-backed validation, daily usage reports, TTL sweep, and API server.
+- **I/O**: Shell command → DB API transactions or lint reports (exit 0 = pass, non-zero = fail).
 - **Runtime**: Workflow ordering lives in `.claude/skills/`; this document is command reference.
 
 ## 2. Core Logic
 
-### kb-lint-wiki
+### kb-lint
 
-Validate wiki pages.
-
-```bash
-kb-lint-wiki                      # errors only
-kb-lint-wiki --strict             # errors + warnings (auto-enables --check-immutability)
-kb-lint-wiki --check-immutability # enforce raw file immutability
-```
-
-### kb-lint-handoff
-
-Validate handoff documents.
+DB-backed lint for wiki pages and handoff documents.
 
 ```bash
-kb-lint-handoff
+kb-lint          # Run wiki + handoff (default)
+kb-lint wiki     # Wiki only
+kb-lint handoff  # Handoff only
+kb-lint --strict # Treat warnings as errors
 ```
 
-### kb-wiki-index
+### kb-db-ttl-sweep
 
-Regenerate `data/wiki/INDEX.md`, the auto-built table of contents grouping all
-wiki pages by category. Idempotent — running on an unchanged wiki rewrites
-nothing. `kb-lint-wiki` will ERROR if INDEX.md is stale. Only `approved`
-pages appear in `INDEX.md`.
+Auto-reject stale unprocessed wiki pages via DB API.
 
 ```bash
-kb-wiki-index
+kb-db-ttl-sweep           # Default 7-day window
+kb-db-ttl-sweep --days 7
 ```
 
-### kb-wiki-review
+### kb-submit-cron-run
 
-Manage wiki page approval lifecycle. Applies to 6 in-scope types only
-(`entity`, `concept`, `decision`, `improvement`, `checklist`, `question`).
+Submit a cron run log to the DB API.
 
 ```bash
-kb-wiki-review list [--status STATUS] [--counts]   # default --status pending_for_approve
-kb-wiki-review promote <stem>                       # not_processed → pending_for_approve
-kb-wiki-review approve <stem> [--feedback "..."]   # pending_for_approve → approved
-kb-wiki-review reject  <stem> [--feedback "..."]   # pending_for_approve → rejected (git mv to data/rejected/)
-kb-wiki-review ttl-sweep [--days 7]                 # cron only — auto-reject stale not_processed
+kb-submit-cron-run --job-name <name> --target <date> --status {success,failed} \
+  --log-file <path> [--exit-code N] [--log-path <path>]
 ```
 
-`<stem>` is the filename without `.md`. STATUS ∈ `not_processed | pending_for_approve | approved | all`.
-Empty `--feedback` (or empty interactive input) skips the `## User Feedback` line append.
+### kb-opencode-daily-report
 
-Use `.claude/skills/wiki-approval/SKILL.md` for the full lifecycle.
+Deterministic OpenCode daily usage report generator.
+
+```bash
+kb-opencode-daily-report --date YYYY-MM-DD [--dry-run] [--lint]
+```
+
+### kb-hermes-daily-report
+
+Deterministic Hermes daily usage report generator.
+
+```bash
+kb-hermes-daily-report --date YYYY-MM-DD [--dry-run] [--lint]
+```
+
+### kb-claude-code-daily-report
+
+Deterministic Claude Code daily usage report generator.
+
+```bash
+kb-claude-code-daily-report --date YYYY-MM-DD [--dry-run] [--lint]
+```
 
 ### kb-web
 
-Start the local FastAPI review console server.
+FastAPI DB-canonical API server with Bearer auth.
 
 ```bash
-./scripts/dev-web.sh        # API :8765 + Vite :5173 — use this during development
-kb-web --reload --port 8765 # API only, with auto-reload
+kb-web [--reload] [--host HOST] [--port PORT]
 ```
 
 Environment variables:
@@ -71,10 +76,30 @@ Environment variables:
 | Variable | Default | Purpose |
 |---|---|---|
 | `KB_DATA_DIR` | `<repo>/data` | Path to the local data tree |
-| `KB_WEB_PORT` | `8765` | FastAPI port |
-| `VITE_PORT` | `5173` | Vite dev server port |
+| `KB_WEB_HOST` | `127.0.0.1` | Bind address |
+| `KB_WEB_PORT` | `8765` | Listen port |
+| `KB_API_TOKEN` | | Bearer auth token (required for write endpoints) |
 
-API endpoints: `GET /api/queue`, `GET /api/pages/{stem}`, `GET /api/dashboard?window={4,8,12,24}`, `POST /api/pages/{stem}/approve`, `POST /api/pages/{stem}/reject`. Swagger UI at `/api/docs`.
+### API Endpoints (write)
+
+All write endpoints require `Authorization: Bearer $KB_API_TOKEN`.
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/pages` | Create wiki page |
+| `PATCH` | `/api/pages/{slug}` | Update wiki page |
+| `POST` | `/api/pages/{slug}/promote` | not_processed → pending_for_approve |
+| `POST` | `/api/pages/{slug}/approve` | pending_for_approve → approved |
+| `POST` | `/api/pages/{slug}/reject` | Reject wiki page |
+| `POST` | `/api/pages/ttl-sweep` | Auto-reject stale unprocessed pages |
+| `POST` | `/api/raw-sources` | Create raw source |
+| `POST` | `/api/handoffs` | Create handoff document |
+| `POST` | `/api/operation-logs` | Create operation log |
+| `POST` | `/api/cron-runs` | Create cron run record |
+| `POST` | `/api/metrics` | Create metrics record |
+| `POST` | `/api/export/markdown` | Export all Markdown from DB |
+
+Swagger UI at `/api/docs`.
 
 ## 3. Usage
 
@@ -91,24 +116,9 @@ Use this file to look up command names and flags. Use `.claude/skills/` for comm
 
 ## Appendix
 
-### A. Troubleshooting
+### A. PatchNote
 
-**kb-lint-wiki errors on dead wikilink**
-Fix the link or use plain text instead of a wikilink.
-
-**kb-lint-wiki --check-immutability fails**
-A raw file was modified. Revert the raw file to its original state.
-
-**kb-lint-handoff fails on missing frontmatter field**
-Add the missing field to the handoff document frontmatter.
-
-### B. PatchNote
-
+- 2026-06-04: DB-canonical rewrite — replaced kb-lint-wiki/kb-lint-handoff/kb-wiki-index/kb-wiki-review with kb-lint/kb-db-ttl-sweep/kb-submit-cron-run + daily report CLIs + kb-web + API endpoint reference.
 - 2026-05-20: Added `kb-web` command and `dev-web.sh` for the local FastAPI + Vite review console.
-- 2026-05-20: Routed workflow ordering to project skills; this doc remains command reference.
-- 2026-05-20: Removed links to deleted workflow docs.
 - 2026-05-19: Added `kb-wiki-review` CLI (5 subcommands) for `review_status` lifecycle.
-- 2026-05-18: Added kb-wiki-index — generates `data/wiki/INDEX.md`. Enforced by `kb-lint-wiki`.
-- 2026-05-18: Removed kb-mcp (MCP server retired in favor of direct CLI usage by Claude Code agents).
-- 2026-05-18: Added pointer to periodic memory workflow for cron agents.
-- 2026-05-08: Initial split from CLAUDE.md and restructured to follow docs/CLAUDE.md Standard Document Structure.
+- 2026-05-18: Added kb-wiki-index, removed kb-mcp.

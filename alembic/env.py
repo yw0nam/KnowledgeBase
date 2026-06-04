@@ -15,7 +15,7 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from kb import REPO_ROOT
-from kb.db import Base, db_path
+from kb.db import Base, db_url
 
 config = context.config
 
@@ -25,7 +25,7 @@ if config.config_file_name is not None:
 
 def _resolve_url() -> str:
     data_dir = Path(os.environ.get("KB_DATA_DIR", REPO_ROOT / "data")).resolve()
-    return f"sqlite:///{db_path(data_dir)}"
+    return db_url(data_dir)
 
 
 config.set_main_option("sqlalchemy.url", _resolve_url())

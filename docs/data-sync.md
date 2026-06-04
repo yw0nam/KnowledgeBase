@@ -1,5 +1,8 @@
 # data/ Private Remote Sync
 
+> **DEPRECATED**: This document describes the legacy git-based sync model.
+> The KnowledgeBase is now DB-canonical. See [docs/db-canonical.md](db-canonical.md).
+
 Updated: 2026-05-29
 
 ## 1. Synopsis
@@ -134,10 +137,17 @@ web UI or a direct push to `master`. Treat both as prohibited operator actions.
 
 ## Appendix C — State DB (`data/db/`)
 
-`data/db/` is excluded by `data/.gitignore` and is not synced via git. The current memory workflow keeps markdown frontmatter as the source of truth; `state.db` is derivable per-machine. A future migration to "DB as source of truth" will require a separate sync mechanism (rsync, litestream, etc.).
+`data/db/` is excluded by `data/.gitignore` and is not synced via git. The
+legacy memory workflow keeps markdown frontmatter as the source of truth, but
+the target architecture promotes `state.db` to the canonical memory store. See
+`docs/db-canonical.md`.
+
+Once DB-canonical reads/writes are enabled, this PR-based Git workflow should be
+treated as a Markdown export/backup path only. It is not a DB sync mechanism.
 
 ## Appendix D — PatchNote
 
+- 2026-06-04: Reframed `data/` Git sync as legacy/export-only once DB-canonical memory is enabled.
 - 2026-06-01: Bootstrapped the reference machine onto the work-branch model and documented the existing-local-commits migration recipe (Appendix E). `merge-data-pr.sh` requires a modern `gh` (uses `gh pr checks --watch`, `gh pr view --json headRefOid`, `gh pr merge --match-head-commit`); these are unsupported on `gh` 2.4.0.
 - 2026-06-01: Adapted merge enforcement for GitHub Free private repositories. Added `merge-data-pr.sh`; remote lint is verified by the supported merge helper because server-side protected branches require a paid plan.
 - 2026-05-29: Rewrote for the work-branch → PR → merge-commit model. `setup-data-remote.sh` moved into the `data-sync` skill; added `setup-data-ci.sh` and `setup-data-workbranch.sh`; daily PR via `kb-cron-wrapup`; remote CI lint; mandatory local lint gate.

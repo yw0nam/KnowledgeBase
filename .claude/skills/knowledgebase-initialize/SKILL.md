@@ -5,23 +5,27 @@ description: Use on a fresh clone, new machine, or new profile to create or repa
 
 # KnowledgeBase Initialize
 
+> **DB-Canonical Override**: The KnowledgeBase is now DB-backed. Do NOT create a nested `data/.git` repo or run `setup-data-remote.sh`/`setup-data-ci.sh`/`setup-data-workbranch.sh`. Initialize only the DB (`data/db/state.db`) and verify the API is reachable.
+
 Use this skill as the runtime contract for repository setup. Do not load `docs/` during execution; docs are design reference only.
 
 ## Rules
 
 - Treat the current directory as the KnowledgeBase root.
-- `data/` is a nested private git repository. Never add it to the outer repo. It may have its own private remote — see `docs/data-sync.md`.
+- `data/` is a generated export directory. `data/db/state.db` is the canonical store. Never add `data/` to the outer repo.
 - Never modify existing files under `data/raw/`.
 - Preserve existing `data/` contents; create only missing directories/files.
 - Do not install or edit crontab until the user approves the exact entries.
 - Memory cron jobs run lint and leave changes uncommitted for manual review.
-- Wiki promotion may commit inside the nested `data/` repo after promoting pages. It does not push from the AI session — push to a private `data/` remote (if configured — see `docs/data-sync.md`) is handled outside the AI session.
+- Wiki promotion writes through the DB API; it does not commit or push from the AI session.
 - Prefer relative paths from repo root. Do not hard-code machine-specific absolute paths except when showing final crontab examples.
 
 ## Required Data Layout
 
 ```text
 data/
+  db/
+    state.db
   raw/
     github/
       claude-md/
@@ -59,12 +63,11 @@ Check:
 
 ```bash
 test -d data
-test -d data/.git
+test -f data/db/state.db
 test -f data/log.md
 uv --version
-uv run kb-lint-wiki --help
-uv run kb-lint-handoff --help
-uv run kb-wiki-review list --counts
+uv run kb-lint --help
+uv run kb-db-ttl-sweep --help
 find scripts/cron -maxdepth 1 -type f -name 'kb-*.sh' | sort
 ```
 
@@ -78,31 +81,17 @@ If `uv sync` needs network and fails due sandbox/network restrictions, ask for a
 
 ## Phase 2: Initialize Data Repo
 
-If `data/` already exists with a `.git/`, skip this phase. Otherwise, **ask the
-user whether they already have a private `data/` repository to clone** (e.g.
-from a previous machine):
+If `data/db/state.db` already exists, skip this phase. Otherwise, create the
+database and run migrations:
 
-- **Yes** → clone it. Its `origin` becomes the private remote that everything
-  else derives from — no repo URL is hardcoded anywhere:
+```bash
+mkdir -p data/db
+uv run alembic upgrade head
+```
 
-  ```bash
-  git clone <private-git-url> data
-  ```
+This creates `data/db/state.db` with the current schema.
 
-  The URL must be a private repo scoped to `data/` only — never the outer repo's
-  URL or any public host. The remote is now attached, so **skip Phase 2.5** and
-  continue at Phase 2.6.
-
-- **No** (fresh start) → create an empty nested repo:
-
-  ```bash
-  mkdir -p data
-  git -C data init
-  ```
-
-  Attach a private remote later via Phase 2.5 when you want to sync.
-
-Create missing required directories with `.gitkeep` only when an empty directory must be tracked by the nested repo.
+Create missing required directories (no `.gitkeep` needed — the DB owns structure).
 
 Initialize `data/log.md` if missing:
 
@@ -114,60 +103,19 @@ Append-only operation record.
 
 Do not create raw source files during initialization.
 
-## Phase 2.5: Configure Private Data Remote (optional)
-
-Skip this phase if Phase 2 cloned an existing private repo (the remote is already attached).
-
-If `data/` was freshly initialized and the user wants to sync it across machines, ask whether to attach a private remote now. If yes:
-
-```bash
-bash .claude/skills/data-sync/scripts/setup-data-remote.sh <git-url>
-```
-
-- The URL must be a private repository scoped to `data/` only.
-- Never point it at the outer repo's URL or any public host.
-- See the `data-sync` skill (`docs/data-sync.md`) for the full workflow and conflict recovery.
-
-Skip this phase on machines that won't sync. The script is idempotent and can be run later.
-
-## Phase 2.6: Install Data CI Workflow
-
-Run while `data/` is **on `master`** (before the work-branch checkout):
-
-```bash
-bash .claude/skills/data-sync/scripts/setup-data-ci.sh <pin>
-```
-
-`<pin>` is the tag or SHA of the outer repo that includes the `KB_DATA_DIR` change (used to pin the CI workflow to a known-good version). See the `data-sync` skill as the runtime contract.
-GitHub Free private repos cannot enforce protected branches. After setup, merge
-data PRs only through `data-sync/scripts/merge-data-pr.sh`, which verifies the
-remote `lint` result and pins the reviewed head SHA.
-
-## Phase 2.7: Check Out Work Branch
-
-Migrate `data/` from `master` onto a work branch:
-
-```bash
-bash .claude/skills/data-sync/scripts/setup-data-workbranch.sh
-```
-
-After this, `data/` will be on `sync/<machine>-<date>-<rand>`. AI/cron sessions commit only to work branches. See the `data-sync` skill as the runtime contract.
-
-**If this machine's `data/` already has commits ahead of `origin/master`** (local
-`master` or a feature branch), do **not** run Phases 2.6–2.7 as-is: installing CI
-while `master` is ahead pushes those commits straight to `master`. Follow the
-migration recipe in `docs/data-sync.md` Appendix E (back up → reset master →
-CI → cherry-pick → work branch) instead.
-
 ## Phase 3: Verify Tooling
 
 Run from repo root:
 
 ```bash
-uv run kb-wiki-index
-uv run kb-lint-wiki --check-immutability
-uv run kb-lint-handoff
-uv run kb-wiki-review list --counts
+curl -fsS "$KB_API_URL/api/queue" -H "Authorization: Bearer $KB_API_TOKEN"
+uv run kb-lint --help
+```
+
+Verify DB API is reachable:
+
+```bash
+curl -fsS http://127.0.0.1:8765/api/docs
 ```
 
 Fresh empty data may produce no queue items. Structural errors are blockers; existing user-data lint errors must be reported rather than auto-rewritten.
@@ -242,7 +190,7 @@ Wrapper prompt policy:
 - Wiki promotion wrapper imports `.claude/skills/wiki-approval/SKILL.md`.
 - Cron wrap-up wrapper imports `.claude/skills/cron-wrapup/SKILL.md` and writes a Slack-digest-stable `wiki/summaries/.../{date}-cron-wrapup.md` plus run handoff.
 - Usage setup/import prompts use `.claude/skills/usage-report-setup/SKILL.md`.
-- TTL sweep may run `uv run kb-wiki-review ttl-sweep --days 7` directly.
+- TTL sweep runs `uv run kb-db-ttl-sweep --days 7` so status changes go through the DB API.
 
 Only after approval:
 
@@ -299,7 +247,7 @@ Include:
 Run:
 
 ```bash
-uv run kb-lint-handoff
+# Handoff validation is through DB API (POST /api/handoffs validates on submission)
 ```
 
 ## Phase 7: Log
@@ -310,7 +258,7 @@ Append to `data/log.md`:
 
 ## YYYY-MM-DD (knowledgebase initialize)
 
-- **data repo**: exists / created
+- **DB**: exists / created
 - **directories**: created <list> / already present
 - **tooling**: <lint command results>
 - **global skills**: symlinked <list> / skipped
@@ -321,7 +269,7 @@ Append to `data/log.md`:
 
 ## Done Criteria
 
-- `data/` exists and has `.git/`.
+- `data/db/state.db` exists and DB API is reachable.
 - Required directories and `data/log.md` exist.
 - CLI smoke tests ran or blockers are documented.
 - Global skills are symlinked into `~/.claude/skills/` or explicitly skipped.
