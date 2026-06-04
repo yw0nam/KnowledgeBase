@@ -1,15 +1,13 @@
-"""FastAPI app for the kb-web review console.
+"""FastAPI app for the kb-web DB-canonical API.
 
-Phase A scope: a single read-only endpoint that returns every wiki
-page currently in `review_status: pending_for_approve`, with full body
-and frontmatter so the frontend can render rail + detail without a
-second round-trip. Approve/reject endpoints land in Phase B.
+DB-canonical write surface with Bearer auth, plus Markdown export.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from alembic import command
 from alembic.config import Config as AlembicConfig
@@ -17,21 +15,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from kb import REPO_ROOT
-from kb.db import make_engine, make_session_factory
+from kb.db import db_url, make_engine, make_session_factory
 from kb.web import config
-from kb.web.routes import dashboard, decisions, dispatches, kanban, pages, queue
+from kb.web.routes import db_canonical
 
 logger = logging.getLogger(__name__)
 
 
 def _run_migrations(data_dir: os.PathLike[str]) -> None:
-    # alembic/env.py resolves the DB URL from KB_DATA_DIR, so set it here to
-    # guarantee migrations run against the same dir the app will open.
+    # alembic/env.py resolves DATABASE_URL first, then falls back to KB_DATA_DIR,
+    # so set KB_DATA_DIR here to keep the SQLite fallback aligned with the app.
     os.environ["KB_DATA_DIR"] = str(data_dir)
     cfg = AlembicConfig(str(REPO_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
     command.upgrade(cfg, "head")
-    logger.info("alembic upgrade head complete (data_dir=%s)", data_dir)
+    logger.info("alembic upgrade head complete (db_url=%s)", db_url(Path(data_dir)))
 
 
 def create_app() -> FastAPI:
@@ -49,18 +47,13 @@ def create_app() -> FastAPI:
         allow_origins=list(cfg.cors_origins),
         allow_credentials=False,
         allow_methods=["GET", "POST", "PATCH"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "Authorization"],
     )
     app.state.config = cfg
     _run_migrations(cfg.data_dir)
     app.state.engine = make_engine(cfg.data_dir)
     app.state.session_factory = make_session_factory(app.state.engine)
-    app.include_router(queue.router, prefix="/api")
-    app.include_router(pages.router, prefix="/api")
-    app.include_router(dashboard.router, prefix="/api")
-    app.include_router(kanban.router, prefix="/api")
-    app.include_router(dispatches.router, prefix="/api")
-    app.include_router(decisions.router, prefix="/api")
+    app.include_router(db_canonical.router, prefix="/api")
     return app
 
 

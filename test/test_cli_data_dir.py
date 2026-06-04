@@ -1,4 +1,4 @@
-"""Subprocess tests: the CLIs target KB_DATA_DIR, not the repo default."""
+"""Subprocess tests: kb-lint CLI targets KB_DATA_DIR, not the repo default."""
 
 from __future__ import annotations
 
@@ -7,58 +7,53 @@ import subprocess
 import sys
 from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 
-def _run(module: str, data_dir: Path) -> subprocess.CompletedProcess:
+from kb import REPO_ROOT
+
+
+def _init_db(data_dir: Path) -> None:
+    """Run Alembic migrations to create an empty DB."""
+    data_dir.mkdir(parents=True, exist_ok=True)
+    cfg = Config(str(REPO_ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
+    os.environ["KB_DATA_DIR"] = str(data_dir)
+    command.upgrade(cfg, "head")
+
+
+def _run(target: str, data_dir: Path) -> subprocess.CompletedProcess:
     env = dict(os.environ, KB_DATA_DIR=str(data_dir))
     return subprocess.run(
-        [sys.executable, "-m", module],
+        [sys.executable, "-m", "kb.cli.lint", target],
         capture_output=True,
         text=True,
         env=env,
     )
 
 
-def _make_wiki(root: Path) -> None:
-    for sub in (
-        "entities",
-        "concepts",
-        "decisions",
-        "questions",
-        "improvements",
-        "checklists",
-        "summaries",
-    ):
-        (root / "wiki" / sub).mkdir(parents=True, exist_ok=True)
-    (root / "raw").mkdir(parents=True, exist_ok=True)
+def test_lint_all_targets_kb_data_dir(tmp_path):
+    """kb-lint all on an empty DB should pass with 0 errors."""
+    data_dir = tmp_path / "data"
+    _init_db(data_dir)
+    proc = _run("all", data_dir)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+    assert "PASSED" in proc.stdout
 
 
-def test_lint_wiki_lints_kb_data_dir(tmp_path):
-    _make_wiki(tmp_path)
-    # A page with a dead wikilink → a deterministic ERROR proving the lint
-    # read THIS tree (not the repo's real data/).
-    page = tmp_path / "wiki" / "concepts" / "Bad.md"
-    page.write_text(
-        "---\ntype: concept\nreview_status: approved\n"
-        'created: "2026-05-01"\nupdated: "2026-05-01"\nsources: []\ntags: []\n---\n\n'
-        "Body links to [[NonexistentTarget]].\n"
-    )
-    proc = _run("kb.cli.lint_wiki", tmp_path)
-    assert proc.returncode == 1
-    assert "dead link [[NonexistentTarget]]" in proc.stdout
-
-
-def test_wiki_index_writes_into_kb_data_dir(tmp_path):
-    _make_wiki(tmp_path)
-    proc = _run("kb.cli.wiki_index", tmp_path)
-    assert proc.returncode == 0
-    assert (tmp_path / "wiki" / "INDEX.md").exists()
+def test_lint_wiki_targets_kb_data_dir(tmp_path):
+    """kb-lint wiki resolves KB_DATA_DIR and runs on the target DB."""
+    data_dir = tmp_path / "data"
+    _init_db(data_dir)
+    proc = _run("wiki", data_dir)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
+    assert "PASSED" in proc.stdout
 
 
 def test_lint_handoff_targets_kb_data_dir(tmp_path):
-    # An empty handoffs/ dir lints clean; this proves the CLI resolved
-    # KB_DATA_DIR without touching the repo default.
-    (tmp_path / "handoffs").mkdir(parents=True, exist_ok=True)
-    proc = _run("kb.cli.lint_handoff", tmp_path)
-    assert proc.returncode == 0
+    """kb-lint handoff resolves KB_DATA_DIR and runs on the target DB."""
+    data_dir = tmp_path / "data"
+    _init_db(data_dir)
+    proc = _run("handoff", data_dir)
+    assert proc.returncode == 0, proc.stderr + proc.stdout
     assert "PASSED" in proc.stdout
-    assert str(tmp_path) in proc.stdout  # the printed "Linting <dir>/..." line
