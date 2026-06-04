@@ -12,7 +12,7 @@ def now_iso_kst() -> str:
     """Return current KST time as ``YYYY-MM-DDTHH:MM:SS+09:00``.
 
     The format matches the SQL CHECK constraints on
-    ``dispatches.*_at`` and ``wiki_edits.edited_at``.
+    ``dispatches.*_at`` and other timestamp columns.
     """
     return datetime.datetime.now(KST).isoformat(timespec="seconds")
 
