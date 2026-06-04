@@ -5,46 +5,22 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import json
+
 import pytest
 import yaml
-from alembic import command
-from alembic.config import Config
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from kb import REPO_ROOT
 from kb.cli.db_api import markdown_page_payload
-from kb.db import make_engine, make_session_factory
-from kb.db.models import Handoff, OperationLog, Page, PageRevision
+from kb.db.models import (
+    Handoff,
+    MetricsRecord,
+    OperationLog,
+    Page,
+    PageRevision,
+)
 from kb.web.routes import db_canonical
-
-
-def _alembic_cfg() -> Config:
-    cfg = Config(str(REPO_ROOT / "alembic.ini"))
-    cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
-    return cfg
-
-
-@pytest.fixture()
-def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    d = tmp_path / "data"
-    d.mkdir()
-    monkeypatch.setenv("KB_DATA_DIR", str(d))
-    monkeypatch.setenv("KB_API_TOKEN", "test-token")
-    command.upgrade(_alembic_cfg(), "head")
-    return d
-
-
-@pytest.fixture()
-def session(data_dir: Path):
-    engine = make_engine(data_dir)
-    factory = make_session_factory(engine)
-    sess = factory()
-    try:
-        yield sess
-    finally:
-        sess.close()
-        engine.dispose()
 
 
 def _request(data_dir: Path, token: str | None = "test-token"):
@@ -104,6 +80,186 @@ def test_create_page_writes_db_revision_and_export(data_dir: Path, session) -> N
         select(PageRevision).where(PageRevision.page_id == page.id)
     ).scalar_one()
     assert revision.change_kind == "create"
+
+
+def test_create_page_accepts_cli_source(data_dir: Path, session) -> None:
+    payload = {
+        "slug": "cli-sourced-page",
+        "type": "summary",
+        "body_md": "\n# CLI Sourced\n\nWritten by a deterministic daily-report CLI job.\n",
+        "frontmatter": {
+            "type": "summary",
+            "created": "2026-06-04",
+            "updated": "2026-06-04",
+            "sources": [],
+            "tags": ["usage"],
+        },
+        "export_path": "wiki/summaries/2026/06/cli-sourced-page.md",
+        "source": "cli",
+    }
+    db_canonical.create_page(
+        db_canonical.PageCreateBody(**payload), _request(data_dir), session
+    )
+    page = session.execute(
+        select(Page).where(Page.slug == "cli-sourced-page")
+    ).scalar_one()
+    revision = session.execute(
+        select(PageRevision).where(PageRevision.page_id == page.id)
+    ).scalar_one()
+    assert revision.source == "cli"
+
+
+def test_create_page_upsert_replaces_existing_slug(data_dir: Path, session) -> None:
+    payload = {
+        "slug": "daily-usage",
+        "type": "summary",
+        "body_md": "\n# Daily Usage\n\nFirst body, long enough to clear the stub threshold easily.\n",
+        "frontmatter": {
+            "type": "summary",
+            "created": "2026-06-04",
+            "updated": "2026-06-04",
+            "sources": [],
+            "tags": ["usage"],
+        },
+        "export_path": "wiki/summaries/2026/06/daily-usage.md",
+        "source": "cli",
+    }
+    db_canonical.create_page(
+        db_canonical.PageCreateBody(**payload), _request(data_dir), session
+    )
+
+    payload2 = dict(payload)
+    payload2["body_md"] = (
+        "\n# Daily Usage\n\nSecond body, also comfortably past the stub threshold.\n"
+    )
+    resp = db_canonical.create_page(
+        db_canonical.PageCreateBody(**payload2), _request(data_dir), session
+    )
+    assert resp["export"]["status"] == "success"
+
+    pages = (
+        session.execute(select(Page).where(Page.slug == "daily-usage")).scalars().all()
+    )
+    assert len(pages) == 1
+    assert "Second body" in pages[0].body_md
+
+    revisions = (
+        session.execute(
+            select(PageRevision)
+            .where(PageRevision.page_id == pages[0].id)
+            .order_by(PageRevision.revision_number)
+        )
+        .scalars()
+        .all()
+    )
+    assert [r.change_kind for r in revisions] == ["create", "update"]
+    assert "body_md" in (revisions[1].changed_fields or {})
+
+    exported = (data_dir / payload["export_path"]).read_text()
+    assert "Second body" in exported
+
+
+def test_metrics_upsert_keeps_single_row_per_date_type(data_dir: Path, session) -> None:
+    first = db_canonical.MetricsBody(
+        report_date="2026-06-04",
+        report_type="opencode",
+        token_total=100,
+        metrics_json={"token_total": 100},
+    )
+    db_canonical.create_metrics(first, _request(data_dir), session)
+
+    second = db_canonical.MetricsBody(
+        report_date="2026-06-04",
+        report_type="opencode",
+        token_total=250,
+        metrics_json={"token_total": 250},
+    )
+    db_canonical.create_metrics(second, _request(data_dir), session)
+
+    rows = (
+        session.execute(
+            select(MetricsRecord).where(
+                MetricsRecord.report_date == "2026-06-04",
+                MetricsRecord.report_type == "opencode",
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].token_total == 250
+
+    exported = data_dir / "ops/reports/2026/06/2026-06-04-opencode-usage.metrics.json"
+    assert json.loads(exported.read_text()) == {"token_total": 250}
+
+
+def test_patch_preserves_columns_when_frontmatter_omits_keys(
+    data_dir: Path, session
+) -> None:
+    create = {
+        "slug": "patch-target",
+        "type": "summary",
+        "body_md": "\n# Patch Target\n\nA summary page with category and review_status set.\n",
+        "frontmatter": {
+            "type": "summary",
+            "category": "usage",
+            "review_status": "approved",
+            "created": "2026-06-04",
+            "updated": "2026-06-04",
+            "sources": [],
+            "tags": ["usage"],
+        },
+        "export_path": "wiki/summaries/2026/06/patch-target.md",
+    }
+    db_canonical.create_page(
+        db_canonical.PageCreateBody(**create), _request(data_dir), session
+    )
+
+    # PATCH with a valid frontmatter that omits category and review_status.
+    new_fm = {
+        "type": "summary",
+        "created": "2026-06-04",
+        "updated": "2026-06-05",
+        "sources": [],
+        "tags": ["usage"],
+    }
+    db_canonical.patch_page(
+        "patch-target",
+        db_canonical.PagePatchBody(frontmatter=new_fm),
+        _request(data_dir),
+        session,
+    )
+
+    page = session.execute(select(Page).where(Page.slug == "patch-target")).scalar_one()
+    assert page.category == "usage"
+    assert page.review_status == "approved"
+
+
+def test_ttl_sweep_rejects_stale_not_processed_page(data_dir: Path, session) -> None:
+    create = {
+        "slug": "stale-page",
+        "type": "concept",
+        "body_md": "\n# Stale Page\n\nA not_processed concept old enough to be swept by TTL.\n",
+        "frontmatter": {
+            "type": "concept",
+            "review_status": "not_processed",
+            "created": "2026-01-01",
+            "updated": "2026-01-01",
+            "sources": [],
+            "tags": ["stale"],
+        },
+        "export_path": "wiki/concepts/stale-page.md",
+    }
+    db_canonical.create_page(
+        db_canonical.PageCreateBody(**create), _request(data_dir), session
+    )
+
+    resp = db_canonical.ttl_sweep(_request(data_dir), days=7, session=session)
+    assert resp["swept"] == 1
+
+    page = session.execute(select(Page).where(Page.slug == "stale-page")).scalar_one()
+    assert page.review_status == "rejected"
+    assert page.export_path == "rejected/concepts/stale-page.md"
 
 
 def test_handoff_and_operation_log_export(data_dir: Path, session) -> None:

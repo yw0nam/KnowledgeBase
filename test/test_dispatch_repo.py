@@ -17,38 +17,9 @@ indexes all fire as they will in production.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-from alembic import command
-from alembic.config import Config
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-
-from kb import REPO_ROOT
-from kb.db import make_engine, make_session_factory
-
-
-def _alembic_cfg() -> Config:
-    cfg = Config(str(REPO_ROOT / "alembic.ini"))
-    cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
-    return cfg
-
-
-@pytest.fixture()
-def session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Session:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    monkeypatch.setenv("KB_DATA_DIR", str(data_dir))
-    command.upgrade(_alembic_cfg(), "head")
-    engine = make_engine(data_dir)
-    factory = make_session_factory(engine)
-    sess = factory()
-    try:
-        yield sess
-    finally:
-        sess.close()
-        engine.dispose()
 
 
 def _create(session: Session, **overrides):

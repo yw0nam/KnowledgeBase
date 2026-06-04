@@ -6,7 +6,7 @@ it for query/repo layers in later tasks.
 
 from __future__ import annotations
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -143,6 +143,9 @@ class ExportRecord(Base):
 
 class MetricsRecord(Base):
     __tablename__ = "metrics"
+    __table_args__ = (
+        UniqueConstraint("report_date", "report_type", name="uq_metrics_date_type"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     report_date: Mapped[str] = mapped_column(String, nullable=False)

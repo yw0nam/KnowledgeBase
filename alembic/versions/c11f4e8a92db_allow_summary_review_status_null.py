@@ -21,11 +21,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Allow summaries to retain their absent review_status as NULL."""
-    with op.batch_alter_table("pages") as batch:
-        batch.alter_column("review_status", existing_type=sa.Text(), nullable=True)
+    op.alter_column("pages", "review_status", existing_type=sa.Text(), nullable=True)
 
 
 def downgrade() -> None:
     """Restore non-null page review status."""
-    with op.batch_alter_table("pages") as batch:
-        batch.alter_column("review_status", existing_type=sa.Text(), nullable=False)
+    op.alter_column("pages", "review_status", existing_type=sa.Text(), nullable=False)

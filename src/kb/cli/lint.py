@@ -13,11 +13,23 @@ from __future__ import annotations
 import argparse
 import sys
 
-from kb import data_dir
 from kb.db import make_engine, make_session_factory
+from kb.lint.common import LintResult
 from kb.lint.wiki import validate_page_full
 from kb.lint.handoff import validate_handoff_create
 from kb.db.models import Handoff
+
+
+def _exit_code(results: list[LintResult], strict: bool) -> int:
+    """Resolve the process exit code from lint results.
+
+    Errors always fail. Under ``--strict``, warnings fail too.
+    """
+    if any(r.errors for r in results):
+        return 1
+    if strict and any(r.warnings for r in results):
+        return 1
+    return 0
 
 
 def _print_report(result, label: str) -> bool:
@@ -37,26 +49,26 @@ def _print_report(result, label: str) -> bool:
     return result.ok
 
 
-def cmd_wiki(session) -> bool:
+def cmd_wiki(session) -> LintResult:
     print("Linting wiki pages (DB-backed)...")
     result = validate_page_full(session)
-    return _print_report(result, "Wiki")
+    _print_report(result, "Wiki")
+    return result
 
 
-def cmd_handoff(session) -> bool:
+def cmd_handoff(session) -> LintResult:
     print("Linting handoffs (DB-backed)...")
-    from kb.lint.common import LintResult
-
     result = LintResult()
     handoffs = list(session.query(Handoff).all())
     if not handoffs:
         print("  No handoffs found.")
-        return True
+        return result
     for h in handoffs:
         r = validate_handoff_create(h.frontmatter, h.body_md)
         result.errors.extend(r.errors)
         result.warnings.extend(r.warnings)
-    return _print_report(result, "Handoffs")
+    _print_report(result, "Handoffs")
+    return result
 
 
 def main():
@@ -77,35 +89,28 @@ def main():
     )
     args = parser.parse_args()
 
-    data_root = data_dir()
-    engine = make_engine(data_root)
+    engine = make_engine()
     session_factory = make_session_factory(engine)
     session = session_factory()
 
-    ok = True
+    results: list[LintResult] = []
     try:
         if args.target in ("wiki", "all"):
-            if not cmd_wiki(session):
-                ok = False
-
+            results.append(cmd_wiki(session))
         if args.target in ("handoff", "all"):
-            if not cmd_handoff(session):
-                ok = False
+            results.append(cmd_handoff(session))
     finally:
         session.close()
 
-    summary = "PASSED" if ok else "FAILED"
-    if not ok:
-        print(f"\n{summary} — fix errors before committing.")
-        sys.exit(1)
-    elif args.strict and any(
-        r.warnings for r in []  # aggregated report already printed
-    ):
-        print("\nFAILED (--strict) — warnings treated as errors.")
-        sys.exit(1)
+    code = _exit_code(results, args.strict)
+    if code != 0:
+        if any(r.errors for r in results):
+            print("\nFAILED — fix errors before committing.")
+        else:
+            print("\nFAILED (--strict) — warnings treated as errors.")
     else:
-        print(f"\n{summary}")
-        sys.exit(0)
+        print("\nPASSED")
+    sys.exit(code)
 
 
 if __name__ == "__main__":

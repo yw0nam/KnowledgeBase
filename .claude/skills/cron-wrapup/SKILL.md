@@ -59,7 +59,7 @@ If the user manually invokes "Run the KB cron wrap-up for 2026-05-20", `TARGET =
 
 ```
 data/
-├── wiki/summaries/{YYYY}/{MM}/            # Accessed via DB API /api/pages?type=summary
+├── wiki/summaries/{YYYY}/{MM}/            # Exported markdown; or read pages via psql (see state-db-schema-reference)
 │   ├── {TARGET}-opencode-usage.md         # DB-backed (kb-opencode-daily-report posts to DB API)
 │   ├── {TARGET}-claude-code-usage.md      # DB-backed
 │   ├── {TARGET}-hermes-usage.md           # DB-backed

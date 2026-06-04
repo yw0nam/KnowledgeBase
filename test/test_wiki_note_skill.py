@@ -10,14 +10,7 @@ from __future__ import annotations
 
 import os
 import subprocess
-from pathlib import Path
 
-from alembic import command
-from alembic.config import Config
-from sqlalchemy.orm import Session
-
-from kb import REPO_ROOT
-from kb.db import make_engine, make_session_factory
 from kb.lint.wiki import validate_page_create
 
 RESOLVER = r"""
@@ -42,29 +35,13 @@ AUTHORED_FM = {
 }
 
 
-def _make_session(tmp_path: Path) -> Session:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    cfg = Config(str(REPO_ROOT / "alembic.ini"))
-    cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
-    import os as _os
-
-    _os.environ["KB_DATA_DIR"] = str(data_dir)
-    command.upgrade(cfg, "head")
-    engine = make_engine(data_dir)
-    session_factory = make_session_factory(engine)
-    return session_factory()
-
-
-def test_authored_page_with_empty_sources_lints_clean(tmp_path):
+def test_authored_page_with_empty_sources_lints_clean(session):
     """A first-party page (origin: authored, sources: []) must lint with 0 errors."""
-    session = _make_session(tmp_path)
     body = "# Local lint must mirror CI\n\nA pre-merge lint that checks the working tree is not a faithful proxy for CI that checks the committed tree. Gate on a clean, fully-committed tree.\n"
 
     result = validate_page_create(
         AUTHORED_FM, body, session, slug="local-lint-mirrors-ci"
     )
-    session.close()
 
     assert result.ok, f"expected 0 errors, got: {result.errors}"
 

@@ -6,8 +6,6 @@ DB-canonical write surface with Bearer auth, plus Markdown export.
 from __future__ import annotations
 
 import logging
-import os
-from pathlib import Path
 
 from alembic import command
 from alembic.config import Config as AlembicConfig
@@ -22,14 +20,11 @@ from kb.web.routes import db_canonical
 logger = logging.getLogger(__name__)
 
 
-def _run_migrations(data_dir: os.PathLike[str]) -> None:
-    # alembic/env.py resolves DATABASE_URL first, then falls back to KB_DATA_DIR,
-    # so set KB_DATA_DIR here to keep the SQLite fallback aligned with the app.
-    os.environ["KB_DATA_DIR"] = str(data_dir)
+def _run_migrations() -> None:
     cfg = AlembicConfig(str(REPO_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
     command.upgrade(cfg, "head")
-    logger.info("alembic upgrade head complete (db_url=%s)", db_url(Path(data_dir)))
+    logger.info("alembic upgrade head complete (db_url=%s)", db_url())
 
 
 def create_app() -> FastAPI:
@@ -50,8 +45,8 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
     app.state.config = cfg
-    _run_migrations(cfg.data_dir)
-    app.state.engine = make_engine(cfg.data_dir)
+    _run_migrations()
+    app.state.engine = make_engine()
     app.state.session_factory = make_session_factory(app.state.engine)
     app.include_router(db_canonical.router, prefix="/api")
     return app

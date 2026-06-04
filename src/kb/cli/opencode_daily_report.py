@@ -209,7 +209,7 @@ def write_outputs(
         markdown=report,
         export_path=export_path,
         slug=report_path.stem,
-        source="kb-opencode-daily-report",
+        source="cli",
     )
     oc = metrics.get("opencode", {})
     submit_metrics(

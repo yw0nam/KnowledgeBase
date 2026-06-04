@@ -20,3 +20,8 @@ def now_iso_kst() -> str:
 def today_kst() -> str:
     """Return today's date in KST as ``YYYY-MM-DD``."""
     return datetime.datetime.now(KST).date().isoformat()
+
+
+def date_from_iso(value: str) -> datetime.date:
+    """Parse an ISO ``YYYY-MM-DD`` string into a ``datetime.date``."""
+    return datetime.date.fromisoformat(value)

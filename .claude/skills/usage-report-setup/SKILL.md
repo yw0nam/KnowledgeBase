@@ -20,7 +20,7 @@ report command. `KB_API_URL` may override the default `http://127.0.0.1:8765`.
 | Hermes | `uv run kb-hermes-daily-report --date YYYY-MM-DD --lint` | Metrics POSTed to DB API; summary page created via `POST /api/pages` |
 | Claude Code | `uv run kb-claude-code-daily-report --date YYYY-MM-DD --lint` | Metrics POSTed to DB API; summary page created via `POST /api/pages` |
 
-Metrics are stored in DB via `POST /api/metrics`. No JSON files on disk.
+Metrics are canonical in the DB via `POST /api/metrics`; a derived `.metrics.json` is exported under `data/ops/reports/`, not authored by hand.
 
 ## Setup Workflow
 
@@ -100,10 +100,10 @@ For each enabled source:
 
 ```bash
 uv run kb-<source>-daily-report --date YYYY-MM-DD --lint
-# Verify DB metrics and summary page via API:
-curl -fsS "$KB_API_URL/api/pages?type=summary&date=YYYY-MM-DD" -H "Authorization: Bearer $KB_API_TOKEN"
-curl -fsS "$KB_API_URL/api/metrics?date=YYYY-MM-DD" -H "Authorization: Bearer $KB_API_TOKEN"
-uv run kb-submit-cron-run --help
+# DB is canonical and write-only (no read endpoints). The command prints
+# `export.status: success` on a good write; confirm the derived exports landed:
+ls data/wiki/summaries/YYYY/MM/*-<source>-usage.md
+ls data/ops/reports/YYYY/MM/*-usage.metrics.json
 ```
 
 Do not commit `data/`; it is generated export.

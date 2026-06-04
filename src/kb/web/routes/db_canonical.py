@@ -28,7 +28,7 @@ from kb.db.models import (
 )
 from kb.lint.handoff import validate_handoff_create
 from kb.lint.wiki import validate_page_create
-from kb.web._time import now_iso_kst, today_kst
+from kb.web._time import date_from_iso, now_iso_kst, today_kst
 from kb.web.auth import require_bearer
 from kb.web.export import export_all, record_export_failure
 
@@ -112,6 +112,16 @@ def _sync_page_frontmatter(page: Page, fields: dict) -> None:
         else:
             fm[key] = value
     page.frontmatter = fm
+
+
+def _diff_page_fields(page: Page, new: dict) -> dict:
+    """Return {field: {old, new}} for page columns whose value changes."""
+    changed: dict[str, dict] = {}
+    for field, value in new.items():
+        old = getattr(page, field)
+        if old != value:
+            changed[field] = {"old": old, "new": value}
+    return changed
 
 
 def _refresh_page_sources(session: Session, page: Page) -> None:
@@ -212,21 +222,13 @@ def create_page(
     review_status = body.review_status
     if review_status is None:
         review_status = body.frontmatter.get("review_status")
-    page = Page(
-        slug=body.slug,
-        title=body.title
+    title = (
+        body.title
         or body.frontmatter.get("title")
-        or _first_heading(body.body_md, body.slug),
-        type=body.type,
-        category=body.category or body.frontmatter.get("category"),
-        review_status=review_status,
-        origin=body.origin,
-        body_md=body.body_md,
-        frontmatter=body.frontmatter,
-        export_path=body.export_path,
-        created_at=body.created_at or now,
-        updated_at=body.updated_at or now,
+        or _first_heading(body.body_md, body.slug)
     )
+    category = body.category or body.frontmatter.get("category")
+
     lint_result = validate_page_create(
         body.frontmatter, body.body_md, session, slug=body.slug
     )
@@ -235,15 +237,55 @@ def create_page(
             status_code=422,
             detail={"errors": lint_result.errors, "warnings": lint_result.warnings},
         )
-    session.add(page)
-    try:
-        session.flush()
-    except IntegrityError as exc:
-        session.rollback()
-        raise HTTPException(status_code=409, detail="page already exists") from exc
+
+    fields = {
+        "title": title,
+        "type": body.type,
+        "category": category,
+        "review_status": review_status,
+        "origin": body.origin,
+        "body_md": body.body_md,
+        "frontmatter": body.frontmatter,
+        "export_path": body.export_path,
+    }
+
+    existing = session.execute(
+        select(Page).where(Page.slug == body.slug)
+    ).scalar_one_or_none()
+
+    if existing is None:
+        page = Page(
+            slug=body.slug,
+            created_at=body.created_at or now,
+            updated_at=body.updated_at or now,
+            **fields,
+        )
+        session.add(page)
+        try:
+            session.flush()
+        except IntegrityError as exc:
+            session.rollback()
+            raise HTTPException(status_code=409, detail="page already exists") from exc
+        _refresh_page_sources(session, page)
+        _append_revision(
+            session, page, change_kind="create", changed_fields=None, source=body.source
+        )
+        return _commit_export_or_500(
+            session, request.app.state.config.data_dir, {"page": _page_payload(page)}
+        )
+
+    page = existing
+    changed = _diff_page_fields(page, fields)
+    for field, value in fields.items():
+        setattr(page, field, value)
+    page.updated_at = now
     _refresh_page_sources(session, page)
     _append_revision(
-        session, page, change_kind="create", changed_fields=None, source=body.source
+        session,
+        page,
+        change_kind="update",
+        changed_fields=changed or None,
+        source=body.source,
     )
     return _commit_export_or_500(
         session, request.app.state.config.data_dir, {"page": _page_payload(page)}
@@ -281,8 +323,10 @@ def patch_page(
     if body.frontmatter is not None and body.frontmatter != page.frontmatter:
         changed["frontmatter"] = {"old": page.frontmatter, "new": body.frontmatter}
         page.frontmatter = body.frontmatter
-        page.category = body.frontmatter.get("category")
-        page.review_status = body.frontmatter.get("review_status")
+        if "category" in body.frontmatter:
+            page.category = body.frontmatter.get("category")
+        if "review_status" in body.frontmatter:
+            page.review_status = body.frontmatter.get("review_status")
     if body.category is not None and body.category != page.category:
         changed["category"] = {"old": page.category, "new": body.category}
         page.category = body.category
@@ -458,7 +502,7 @@ def ttl_sweep(
         created = str(page.frontmatter.get("created") or "")[:10]
         if not created:
             continue
-        age = (today_kst_date(today) - today_kst_date(created)).days
+        age = (date_from_iso(today) - date_from_iso(created)).days
         if age < days:
             continue
         old_status = page.review_status
@@ -485,12 +529,6 @@ def ttl_sweep(
     return _commit_export_or_500(
         session, request.app.state.config.data_dir, {"swept": swept}
     )
-
-
-def today_kst_date(value: str):
-    import datetime
-
-    return datetime.date.fromisoformat(value)
 
 
 class HandoffBody(BaseModel):
@@ -640,17 +678,24 @@ def create_metrics(
     session: Session = Depends(get_session),
 ) -> dict:
     require_bearer(request)
-    row = MetricsRecord(
-        report_date=body.report_date,
-        report_type=body.report_type,
-        session_count=body.session_count,
-        token_total=body.token_total,
-        cost_usd=body.cost_usd,
-        tool_error_count=body.tool_error_count,
-        metrics_json=body.metrics_json,
-        created_at=now_iso_kst(),
-    )
-    session.add(row)
+    row = session.execute(
+        select(MetricsRecord).where(
+            MetricsRecord.report_date == body.report_date,
+            MetricsRecord.report_type == body.report_type,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = MetricsRecord(
+            report_date=body.report_date,
+            report_type=body.report_type,
+            created_at=now_iso_kst(),
+        )
+        session.add(row)
+    row.session_count = body.session_count
+    row.token_total = body.token_total
+    row.cost_usd = body.cost_usd
+    row.tool_error_count = body.tool_error_count
+    row.metrics_json = body.metrics_json
     session.flush()
     return _commit_export_or_500(
         session, request.app.state.config.data_dir, {"id": row.id}

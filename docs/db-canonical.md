@@ -4,8 +4,8 @@ Updated: 2026-06-04
 
 ## 1. Synopsis
 
-- **Decision**: Promote `data/db/state.db` from operational sidecar to the
-  canonical knowledge store.
+- **Decision**: A **Postgres** database (reached via `DATABASE_URL`) is the sole
+  canonical knowledge store. SQLite has been removed.
 - **Role of Markdown**: Markdown remains an import/export format and human
   inspection surface, not the long-term source of truth once migration is
   complete.
@@ -36,21 +36,22 @@ DB row when the two disagree.
 1. ✅ Add canonical schema beside the current operational tables.
 2. ✅ Write an importer from the existing `data/raw/` and `data/wiki/` tree into the
    canonical tables.
-3. ✅ Move read endpoints from Markdown scans to DB queries via `/api/queue`,
-   `/api/pages/{slug}`, and `/api/dashboard`.
-4. ✅ Move mutation endpoints (approve/reject/frontmatter edits) into one DB
-   transaction that also appends `page_revisions`.
-5. ✅ Add Markdown export as an explicit command. Export is allowed to overwrite
+3. ✅ Reads go directly against Postgres (`psql`), not Markdown scans or read
+   endpoints — the web app is write-only. See
+   `docs/db_informations/state-db-schema-reference.md`.
+4. ✅ Move mutation endpoints (create/approve/reject/frontmatter edits) into one
+   DB transaction that also appends `page_revisions`, with write-time lint.
+5. ✅ Add Markdown export as an explicit step. Export is allowed to overwrite
    generated files because it is derived output.
 6. ✅ Retire the PR-based nested `data/` Git sync. Git-based sync is fully
    deprecated; `data/` is a generated export directory.
+7. ✅ Remove SQLite entirely; Postgres is the single source of truth.
 
 ## 4. Sync Direction
 
-The preferred production-like topology is a single writer-capable DB service
-(for example Postgres) accessed by all machines. Local SQLite remains useful for
-development and single-machine operation, but SQLite file replication is not a
-multi-writer sync design.
+The topology is a single writer-capable Postgres service accessed by all
+machines (the compose `db` service in dev). SQLite has been removed — there is
+no local-file fallback, so there is no file-replication sync problem.
 
 Offline-first sync is a separate product decision. If it becomes required, use
 an explicit event-log replication design rather than treating Git or Litestream
@@ -71,3 +72,4 @@ as conflict resolution for concurrent writers.
 ### A. PatchNote
 
 - 2026-06-04: Initial DB-canonical architecture decision.
+- 2026-06-04: Postgres made the sole source of truth; SQLite removed. Reads are direct `psql`; writes stay gated through the API. Added `docs/db_informations/state-db-schema-reference.md`.

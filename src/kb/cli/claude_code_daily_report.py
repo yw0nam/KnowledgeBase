@@ -616,7 +616,7 @@ def write_outputs(
         markdown=report,
         export_path=export_path,
         slug=report_path.stem,
-        source="kb-claude-code-daily-report",
+        source="cli",
     )
     cc = metrics.get("claude_code", {})
     submit_metrics(

@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 
+# Load host environment (DATABASE_URL, KB_API_URL, KB_API_TOKEN) when present.
+# Sourced by every cron wrapper after KB_ROOT is set.
+if [[ -n "${KB_ROOT:-}" && -f "$KB_ROOT/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$KB_ROOT/.env"
+  set +a
+fi
+
 kb_finish_cron_run() {
   local job_name="$1"
   local target="$2"

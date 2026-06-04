@@ -79,19 +79,23 @@ uv sync
 
 If `uv sync` needs network and fails due sandbox/network restrictions, ask for approval to rerun with network access.
 
-## Phase 2: Initialize Data Repo
+## Phase 2: Initialize the Database
 
-If `data/db/state.db` already exists, skip this phase. Otherwise, create the
-database and run migrations:
+Postgres is the sole source of truth. Bring up the compose Postgres and run
+migrations (copy `.env.example` → `.env` first so `DATABASE_URL` is set):
 
 ```bash
-mkdir -p data/db
+cp -n .env.example .env
+docker compose up -d db
+set -a; . ./.env; set +a
 uv run alembic upgrade head
 ```
 
-This creates `data/db/state.db` with the current schema.
+`kb-web` (the `api` service) also runs `alembic upgrade head` on startup, so
+`docker compose up -d` is sufficient in deployment. `data/` remains as the
+Markdown export tree (`KB_DATA_DIR`), not the canonical store.
 
-Create missing required directories (no `.gitkeep` needed — the DB owns structure).
+Create missing required directories under `data/` (export tree only).
 
 Initialize `data/log.md` if missing:
 
@@ -108,17 +112,18 @@ Do not create raw source files during initialization.
 Run from repo root:
 
 ```bash
-curl -fsS "$KB_API_URL/api/queue" -H "Authorization: Bearer $KB_API_TOKEN"
+# Direct Postgres read smoke test (reads need no API):
+psql "${DATABASE_URL/+psycopg/}" -tAc "SELECT count(*) FROM pages;"
 uv run kb-lint --help
 ```
 
-Verify DB API is reachable:
+Verify the DB API is reachable (writes go through it):
 
 ```bash
 curl -fsS http://127.0.0.1:8765/api/docs
 ```
 
-Fresh empty data may produce no queue items. Structural errors are blockers; existing user-data lint errors must be reported rather than auto-rewritten.
+Fresh empty data may produce zero rows. Structural errors are blockers; existing user-data lint errors must be reported rather than auto-rewritten.
 
 ## Phase 3.5: Expose Global Skills
 

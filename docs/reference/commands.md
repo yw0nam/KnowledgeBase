@@ -75,10 +75,17 @@ Environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `KB_DATA_DIR` | `<repo>/data` | Path to the local data tree |
+| `DATABASE_URL` | | Postgres URL (**required**) — also needed by host `kb-lint`, `alembic`, and `psql` reads |
+| `KB_DATA_DIR` | `<repo>/data` | Markdown export tree (not the canonical store) |
 | `KB_WEB_HOST` | `127.0.0.1` | Bind address |
 | `KB_WEB_PORT` | `8765` | Listen port |
 | `KB_API_TOKEN` | | Bearer auth token (required for write endpoints) |
+
+Postgres is the sole source of truth. **Reads** go directly to the DB
+(`psql "$DATABASE_URL" -c "…"`); see
+[state DB schema reference](../db_informations/state-db-schema-reference.md).
+**Writes** go through the API endpoints below. Copy `.env.example` → `.env` to
+set `DATABASE_URL` for host-run tools.
 
 ### API Endpoints (write)
 
@@ -86,8 +93,8 @@ All write endpoints require `Authorization: Bearer $KB_API_TOKEN`.
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/pages` | Create wiki page |
-| `PATCH` | `/api/pages/{slug}` | Update wiki page |
+| `POST` | `/api/pages` | Create or replace a wiki page (upsert by slug; re-runs append an `update` revision) |
+| `PATCH` | `/api/pages/{slug}` | Partial update of a wiki page |
 | `POST` | `/api/pages/{slug}/promote` | not_processed → pending_for_approve |
 | `POST` | `/api/pages/{slug}/approve` | pending_for_approve → approved |
 | `POST` | `/api/pages/{slug}/reject` | Reject wiki page |
@@ -96,7 +103,7 @@ All write endpoints require `Authorization: Bearer $KB_API_TOKEN`.
 | `POST` | `/api/handoffs` | Create handoff document |
 | `POST` | `/api/operation-logs` | Create operation log |
 | `POST` | `/api/cron-runs` | Create cron run record |
-| `POST` | `/api/metrics` | Create metrics record |
+| `POST` | `/api/metrics` | Upsert a metrics record (one per `report_date` + `report_type`) |
 | `POST` | `/api/export/markdown` | Export all Markdown from DB |
 
 Swagger UI at `/api/docs`.
@@ -118,6 +125,8 @@ Use this file to look up command names and flags. Use `.claude/skills/` for comm
 
 ### A. PatchNote
 
+- 2026-06-04: Postgres is the sole source of truth (SQLite removed). `DATABASE_URL` is required; reads use `psql` (see schema reference), writes use the API.
+- 2026-06-04: `POST /api/pages` and `POST /api/metrics` are now idempotent upserts (re-runs/backfills replace in place rather than 409 or duplicate); `kb-lint --strict` now actually fails on warnings.
 - 2026-06-04: DB-canonical rewrite — replaced kb-lint-wiki/kb-lint-handoff/kb-wiki-index/kb-wiki-review with kb-lint/kb-db-ttl-sweep/kb-submit-cron-run + daily report CLIs + kb-web + API endpoint reference.
 - 2026-05-20: Added `kb-web` command and `dev-web.sh` for the local FastAPI + Vite review console.
 - 2026-05-19: Added `kb-wiki-review` CLI (5 subcommands) for `review_status` lifecycle.

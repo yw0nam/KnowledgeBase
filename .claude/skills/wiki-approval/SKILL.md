@@ -30,11 +30,18 @@ Applies only to wiki page types `entity`, `concept`, `decision`, `improvement`, 
 
 ## Commands
 
-Use the DB write API with `Authorization: Bearer $KB_API_TOKEN`:
+**Reads** go directly to Postgres (set `DATABASE_URL`; schema + recipes in
+`docs/db_informations/state-db-schema-reference.md`):
+
+```bash
+psql "${DATABASE_URL/+psycopg/}" -tAc \
+  "SELECT slug, type, created_at FROM pages WHERE review_status='not_processed' ORDER BY updated_at DESC;"
+```
+
+**Writes** go through the DB API with `Authorization: Bearer $KB_API_TOKEN`:
 
 ```bash
 KB_API_URL="${KB_API_URL:-http://127.0.0.1:8765}"
-curl -fsS "$KB_API_URL/api/queue"
 curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/promote" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"","source":"agent"}'
 curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/approve" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"","source":"user"}'
 curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/reject" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"","source":"user"}'
@@ -51,10 +58,10 @@ curl -fsS -X POST "$KB_API_URL/api/pages/ttl-sweep?days=7" -H "Authorization: Be
 
 Use this for the daily `wiki-promote` cron or a manual promotion run.
 
-1. Check the recent DB-backed queue/output first:
+1. List the not_processed queue (direct Postgres read):
    ```bash
-   curl -fsS -X POST "$KB_API_URL/api/pages" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"type":"wiki","status":"not_processed"}'
-   # Or use: uv run kb-lint wiki
+   psql "${DATABASE_URL/+psycopg/}" -tAc \
+     "SELECT slug, type, created_at FROM pages WHERE review_status='not_processed' ORDER BY updated_at DESC;"
    ```
 2. Prioritize recent `not_processed` pages.
 3. Promote only when all are true:
@@ -75,9 +82,10 @@ Use this for the daily `wiki-promote` cron or a manual promotion run.
 
 For user-requested page review:
 
-1. List pending pages:
+1. List pending pages (direct Postgres read):
    ```bash
-   curl -fsS "$KB_API_URL/api/queue"
+   psql "${DATABASE_URL/+psycopg/}" -tAc \
+     "SELECT slug, type FROM pages WHERE review_status='pending_for_approve';"
    ```
 2. Read the page and its `sources:` files.
 3. Approve when the page is correct and useful:

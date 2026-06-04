@@ -2,7 +2,7 @@
 
 Personal LLM wiki backed by handoff system. Raw sources go in, LLM writes wiki pages, lint validates.
 
-**DB-Canonical**: `data/db/state.db` is the Source of Truth. Markdown files under `data/` are generated exports, not the canonical state.
+**DB-Canonical**: A **Postgres** database (the compose `db` service, reached via `DATABASE_URL`) is the Source of Truth. Markdown files under `data/` are generated exports, not the canonical state. Reads go directly to Postgres (`psql`); writes go through the API so lint runs. See `docs/db_informations/state-db-schema-reference.md`.
 
 ## Overview
 
@@ -47,9 +47,7 @@ KnowledgeBase/                    # Outer repo: code, lint, templates, docs
 │       └── wiki-categories.md    # Wiki categories
 └── .gitignore                    # Excludes data/
 
-data/                             # Generated data export (DB-canonical; see docs/db-canonical.md)
-├── db/
-│   └── state.db                  # Canonical SQLite database (Source of Truth)
+data/                             # Generated Markdown export tree (KB_DATA_DIR); canonical state is Postgres
 ├── raw/
 │   ├── github/
 │   │   ├── claude-md/            # CLAUDE.md files ({owner}_{repo}_CLAUDE.md)
@@ -87,7 +85,7 @@ data/                             # Generated data export (DB-canonical; see doc
 
 ## Privacy
 
-`data/` is a generated export directory. `data/db/state.db` is the canonical store. See `docs/db-canonical.md`.
+`data/` is a generated Markdown export directory. The canonical store is Postgres (reached via `DATABASE_URL`). See `docs/db-canonical.md`.
 
 - Outer `.gitignore` excludes `data/`
 - All raw sources and wiki pages stay private
@@ -99,7 +97,7 @@ Never commit `data/` contents to the outer repository.
 
 Project skills live under `.claude/skills/`, auto-load by description match, and are the source of truth for workflow behavior.
 
-- `knowledgebase-initialize` — initialize `data/`, create DB (`data/db/state.db`), verify tooling, and propose cron jobs for approval.
+- `knowledgebase-initialize` — bring up Postgres (compose `db`), run migrations, verify tooling, and propose cron jobs for approval.
 - `wiki-approval` — promote, approve, reject, or TTL-sweep wiki pages through the `review_status` lifecycle; runtime contract for wiki-promote cron.
 - `wiki-authoring` — create or update source-backed `data/wiki/` pages with valid schemas, paths, wikilinks, templates, and lint order.
 - `usage-report-setup` — select and wire source-specific OpenCode/Hermes/Claude Code usage report jobs.

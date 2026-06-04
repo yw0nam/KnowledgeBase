@@ -172,7 +172,7 @@ def write_outputs(
         markdown=report,
         export_path=export_path,
         slug=report_path.stem,
-        source="kb-hermes-daily-report",
+        source="cli",
     )
     he = metrics.get("hermes", {})
     submit_metrics(

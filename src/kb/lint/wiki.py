@@ -42,9 +42,6 @@ def validate_page_create(
 
     fm = parse_frontmatter_dict(fm)
 
-    if fm is None:
-        result.error(identifier, "missing or invalid frontmatter (must be a dict)")
-        return result
     if not fm:
         result.error(identifier, "missing or empty frontmatter")
         return result
