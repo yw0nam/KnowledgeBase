@@ -1,6 +1,6 @@
 # Architecture
 
-Updated: 2026-05-18
+Updated: 2026-06-04
 
 ## 1. Synopsis
 
@@ -11,12 +11,12 @@ Updated: 2026-05-18
 
 ### Repository Boundary
 
-KnowledgeBase has two git repositories:
+KnowledgeBase has one git repository and one generated data directory:
 
 | Repo | Path | Purpose | Push Policy |
 |---|---|---|---|
 | Outer repo | `KnowledgeBase/` | Code, docs, templates, lint tools | Public-safe |
-| Nested repo | `data/` | Raw sources, wiki, handoffs, logs | Local-only |
+| Generated export | `data/` | Raw sources, wiki, handoffs, logs (DB-canonical; `data/db/state.db` is SoT) | Local-only |
 
 Never commit `data/` contents to the outer repository. The outer `.gitignore` excludes `data/`.
 
@@ -27,7 +27,7 @@ Never commit `data/` contents to the outer repository. The outer `.gitignore` ex
 | Raw | `data/raw/` | Captured source evidence | Create only; never edit existing files |
 | Handoffs | `data/handoffs/` | Operational state and agent handoff | Update during tasks and periodic runs |
 | Wiki | `data/wiki/` | Durable long-term knowledge | Update only with source-backed frontmatter |
-| Rejected | `data/rejected/` | Wiki pages rejected during review (audit trail) | Populated only by `kb-wiki-review reject`; mirrors `wiki/` tree |
+| Rejected | `data/rejected/` | Wiki pages rejected during review (audit trail) | Populated through DB API reject endpoint; mirrors `wiki/` tree |
 | Log | `data/log.md` | Append-only operation history | Append every operation |
 | Skill templates | `.claude/skills/*/reference/templates` | Runtime file skeletons bundled with skills | Update in outer repo |
 | Raw templates | `docs/raw/` | Raw source frontmatter skeletons | Update in outer repo |
@@ -48,29 +48,33 @@ data/wiki/
   summaries/      # daily, weekly, monthly, migration rollups
 ```
 
-Six of the seven types (`entity`, `concept`, `decision`, `improvement`, `checklist`, `question`) carry a `review_status` field (`not_processed` → `pending_for_approve` → `approved`) managed via `kb-wiki-review`. Summaries are exempt. Only `approved` pages appear in `INDEX.md`. Runtime approval work uses `.claude/skills/wiki-approval/SKILL.md`.
+Six of the seven types (`entity`, `concept`, `decision`, `improvement`, `checklist`, `question`) carry a `review_status` field (`not_processed` → `pending_for_approve` → `approved`) managed through DB API (promote/approve/reject endpoints). Summaries are exempt. Only `approved` pages appear in `INDEX.md`. Runtime approval work uses `.claude/skills/wiki-approval/SKILL.md`.
 
 ### Operating Flow
 
-The default flow is:
+The DB-canonical flow is:
 
 ```text
-data/raw/ -> data/wiki/ -> data/log.md -> lint -> data repo commit
+data/raw/ -> DB write (state.db) -> data/wiki/ (Markdown export) -> data/log.md -> lint
 ```
 
-Handoffs sit beside the flow as the operational state board. They record what was processed, what is blocked, and what the next agent should do.
+Writes go through the DB API; Markdown files under `data/wiki/` are generated exports
+synced from `data/db/state.db`. Handoffs sit beside the flow as the operational state
+board. They record what was processed, what is blocked, and what the next agent should do.
 
-### Web Review Console
+`data/db/state.db` is the canonical memory store — it owns pages, frontmatter, raw
+sources, citations, and revisions. See `docs/db-canonical.md`.
 
-A local-only FastAPI server and React SPA that expose the same `data/` tree as a browser review surface.
+### DB-Canonical API Server
+
+A local-only FastAPI server that serves wiki pages and review operations from
+`data/db/state.db` via Bearer-auth REST API. Markdown files under `data/wiki/`
+are generated exports, not read surfaces.
 
 | Component | Path | Role |
 |---|---|---|
-| FastAPI server | `src/kb/web/` | HTTP API over `data/wiki/` and `data/rejected/`; approve/reject go through `kb-wiki-review` machinery |
-| React SPA | `frontend/` | Browser UI — review queue and weekly-read dashboard |
-| Dev script | `scripts/dev-web.sh` | Start FastAPI (`:8765`) + Vite (`:5173`) together |
-
-The web layer reads the same markdown files as the CLI — no separate database. Runtime: local-only, never deployed.
+| FastAPI server | `src/kb/web/` | REST API over `data/db/state.db`; read/write endpoints (queue, pages, dashboard, promote/approve/reject) |
+| Dev script | `scripts/dev-web.sh` | Start FastAPI (`:8765`) |
 
 ## 3. Usage
 
@@ -92,6 +96,7 @@ When deciding where information belongs:
 
 ### A. PatchNote
 
+- 2026-06-04: Added DB-canonical target direction; Markdown/Git flow is now documented as legacy/current rather than the end state.
 - 2026-05-20: Removed workflow docs from the active documentation map; project skills are the runtime workflow layer.
 - 2026-05-20: Reframed workflow docs as design references and `.claude/skills/` as runtime operating instructions.
 - 2026-05-20: Added Web Review Console section (FastAPI + React SPA, `src/kb/web/`, `frontend/`, `scripts/dev-web.sh`).

@@ -8,6 +8,10 @@ dependencies = [
     "alembic>=1.13",
     "black>=26.3.1",
     "fastapi>=0.115",
+    "google-api-python-client>=2.197.0",
+    "google-auth-httplib2>=0.4.0",
+    "google-auth-oauthlib>=1.4.0",
+    "psycopg[binary]>=3.2",
     "pyyaml>=6.0",
     "ruff>=0.15.12",
     "sqlalchemy>=2.0",
@@ -39,13 +43,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-kb-lint-wiki = "kb.cli.lint_wiki:main"
-kb-lint-handoff = "kb.cli.lint_handoff:main"
-kb-wiki-index = "kb.cli.wiki_index:main"
-kb-wiki-review = "kb.cli.wiki_review:main"
-kb-tool-trace-parse = "kb.cli.tool_trace_parse:main"
+kb-lint = "kb.cli.lint:main"
 kb-opencode-daily-report = "kb.cli.opencode_daily_report:main"
 kb-hermes-daily-report = "kb.cli.hermes_daily_report:main"
 kb-claude-code-daily-report = "kb.cli.claude_code_daily_report:main"
 kb-web = "kb.web.main:main"
-kb-migrate-kanban-dispatches = "kb.cli.migrate_kanban_dispatches:main"
+kb-submit-cron-run = "kb.cli.db_api:main"
+kb-db-ttl-sweep = "kb.cli.db_ttl_sweep:main"

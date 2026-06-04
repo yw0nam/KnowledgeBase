@@ -1,20 +1,29 @@
 ---
 name: handoff-document
-description: Use when writing or updating a handoff document under data/handoffs/ — covers file path, filename grammar, canonical body sections, README index update, and the lint command that gates committing.
+description: Use when writing or updating a DB-backed handoff document — covers export path, filename grammar, canonical body sections, and DB API submission.
 ---
 
 # handoff-document
 
+## DB-Canonical Override
+
+Handoffs are DB rows. Submit handoffs through `POST /api/handoffs` with
+`Authorization: Bearer $KB_API_TOKEN`. Markdown under `data/handoffs/` is
+generated export. If any older instruction below says to write files or update README as a write gate,
+prefer the DB API.
+
 ## Overview
 
-Handoffs are this repo's operational state board. Every task that crosses an agent boundary, a session, or a workday ends with a handoff under `data/handoffs/YYYY/MM/<task-slug>/`. This skill produces handoffs that pass `kb-lint-handoff` on the first try.
+Handoffs are this repo's operational state board. Every task that crosses an
+agent boundary, a session, or a workday writes a handoff row through the DB API.
+Markdown under `data/handoffs/` is generated export.
 
 **Bundled reference (self-contained — do not consult docs/ at runtime):**
 - `reference/templates/task.md` — handoff template (copy this when starting a new handoff)
 - `reference/templates/final.md` — task-close `<slug>_final.md` template
 - `reference/templates/readme.md` — task `README.md` template
 
-The schema, enum values, and lint rules below are the canonical operational summary. If anything contradicts the lint code (`src/kb/cli/handoff/validators.py`), the lint code wins — file an issue and update this skill.
+The schema, enum values, and lint rules below are the canonical operational summary. If anything contradicts the lint code (`src/kb/lint/handoff.py`), the lint code wins — file an issue and update this skill.
 
 ## Step 0 — Resolve the KB root (run from any repo)
 
@@ -174,19 +183,21 @@ When you add a new handoff file, append a row to the index table. Bundled templa
 2. Determine role from your agent identity (claude_code|opencode|hermes)
 3. Find max <NN> for your role in the folder → use NN+1
 4. Pick subject (always required if role contains underscore; otherwise null)
-5. Copy reference/templates/task.md → rename per grammar above
+5. Build a JSON payload with frontmatter, body_md, and export_path
 6. Fill frontmatter with KST dates and matching handoff_id
-7. Fill all 10 body sections (short is fine; missing is WARN)
-8. status: draft while writing; flip to ready when done
-9. Append row to README.md "## Handoff index" if it exists
-10. Run: uv run kb-lint-handoff   # MUST pass (0 errors)
+7. Fill all 10 body sections
+8. status: draft while writing; submit ready when done
+9. POST the row to `/api/handoffs` with Bearer auth
+10. Confirm the API response reports `export.status: success`
 ```
 
 ## Validation
 
 ```bash
-uv run kb-lint-handoff           # errors gate the commit
-uv run kb-lint-handoff --strict  # warnings also gate
+curl -fsS -X POST "$KB_API_URL/api/handoffs" \
+  -H "Authorization: Bearer $KB_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data @handoff.json
 ```
 
 Fix all ERRORs before considering the handoff complete. WARNs are negotiable — missing canonical sections, uncommon role values, on-disk files not in README index.
@@ -239,7 +250,7 @@ promotion: null
 …
 ```
 
-Then flip `status: draft` → `ready` when done, run `uv run kb-lint-handoff`, append README row.
+Then flip `status: draft` → `ready` when done. Validation is through DB API (POST /api/handoffs validates on submission). Append README row.
 
 ## Red Flags — stop and re-check
 

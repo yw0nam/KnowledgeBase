@@ -5,6 +5,14 @@ description: Use when running the daily, weekly, or monthly memory workflow — 
 
 # memory-report
 
+## DB-Canonical Override
+
+DB rows are the source of truth. Write summaries, pages, handoffs, and operation
+logs through the HTTP DB API with `Authorization: Bearer $KB_API_TOKEN`.
+Markdown under `data/` is generated export. If any older instruction below says
+to write files, lint as a write gate, or commit `data/`,
+ignore that instruction and use the DB API instead.
+
 ## Overview
 
 One skill, three periods. The agent receives a target (`YYYY-MM-DD`, `YYYY-WNN`, or `YYYY-MM`) and produces a period summary + zero-or-more wiki pages + one handoff, all lint-clean and uncommitted.
@@ -19,7 +27,7 @@ This SKILL replaces the doc-load pattern where each cron agent re-read 6 markdow
 
 For new atomic wiki pages, import `wiki-authoring` as the canonical page-authoring contract. Handoff authoring is delegated to `handoff-document` — invoke that skill for the period handoff. This skill does not duplicate handoff schema.
 
-If anything below contradicts the lint code (`src/kb/cli/wiki/validators.py`), the lint code wins — file an issue and update this skill.
+If anything below contradicts the lint code (`src/kb/lint/wiki.py`), the lint code wins — file an issue and update this skill.
 
 ## Period Dispatch — find your period BEFORE reading sections
 
@@ -157,28 +165,18 @@ tags: []
 ```
 Body **must** contain `## Items` section with `- [ ] ...` task-list syntax. Lint enforces this.
 
-## Lint Order — DO THIS, the past runs failed by skipping step 1
+## DB Write Order
 
-```bash
-# 1. Regenerate INDEX.md before linting. Lint will ERROR with
-#    "INDEX.md: stale" if you created a wiki page without regenerating.
-uv run kb-wiki-index
-
-# 2. Wiki lint
-uv run kb-lint-wiki --check-immutability   # daily/weekly
-uv run kb-lint-wiki --strict               # monthly (warnings → errors)
-
-# 3. Handoff lint
-uv run kb-lint-handoff
-```
-
-All lint commands must exit 0 (errors=0). Warnings are OK to leave (orphan/stub for not-yet-approved pages is normal).
+1. Submit the summary page through `POST /api/pages`.
+2. Submit any new or updated evidence-derived wiki pages through `POST /api/pages`.
+3. Submit the run handoff through `POST /api/handoffs`.
+4. Submit the operation note through `POST /api/operation-logs`.
+5. Confirm every response reports `export.status: success`.
 
 ## Common Lint Failures (preemptive fixes)
 
 | ERROR pattern | Cause | Fix before lint |
 |---|---|---|
-| `INDEX.md: stale — run kb-wiki-index` | Created a wiki page, didn't regen index | Run `uv run kb-wiki-index` first |
 | `source file not found: wiki/summaries/daily/...` | Cited a legacy path. Daily summaries live at `wiki/summaries/{YYYY}/{MM}/`, not `wiki/summaries/daily/` | Use the partitioned path |
 | `source file not found: data/raw/...` | `sources:` paths must be relative to `data/`, not `data/data/` | Drop the `data/` prefix |
 | `missing frontmatter field: kind` (improvement) | Used base template, didn't fill improvement-specific fields | All 6 extra fields required |
@@ -191,7 +189,7 @@ All lint commands must exit 0 (errors=0). Warnings are OK to leave (orphan/stub 
 
 Every run writes one handoff. Use the `handoff-document` skill for filename grammar, frontmatter, body sections, and lint. This skill only specifies the **task folder name** and **content focus** per period (see each period section).
 
-## Log Format (append to data/log.md, all periods)
+## Log Format (submit through `POST /api/operation-logs`, all periods)
 
 ```markdown
 
@@ -202,16 +200,16 @@ Every run writes one handoff. Use the `handoff-document` skill for filename gram
   - 출력: wiki/summaries/YYYY/MM/<output>.md (신규)
 - **fill**: <new wiki pages, one per line>
 - **handoff**: <handoff path>
-- **lint**: kb-lint-wiki + kb-lint-handoff PASSED (errors 0, warnings N)
+- **db_write**: pages + handoff + operation log exported successfully
 - Note: commit은 사용자가 수동으로 review 후 진행
 ```
 
 ## Workflow Discipline (all periods)
 
 - **One target per run.** Never extend scope implicitly to "and also yesterday/last week".
-- **Never edit raw files.** Immutability violations are external — log in handoff §8.
+- **Never edit raw files.** Raw sources are DB rows; add new raw evidence through `/api/raw-sources`.
 - **Do not auto-promote** wiki pages to `pending_for_approve` — that's the wiki-promote cron's job.
-- **Do not git commit.** Wrapper contract is uncommitted handoff for manual review.
+- **Do not git commit.** Markdown is generated export from DB rows.
 - **If blocked**, write the handoff with `status: ready`, list the blocker in §8, and exit non-zero.
 
 ---
@@ -251,8 +249,8 @@ Do NOT walk `data/raw/<subdir>` directory-by-directory.
    — leave uncertain items in handoff "Promotion Candidates"
 5. Mark prior daily handoff status: consumed IF its open items were handled
 6. Write new handoff via `handoff-document` under wiki-daily-build/
-7. Append to data/log.md
-8. Run Lint Order (kb-wiki-index → kb-lint-wiki --check-immutability → kb-lint-handoff)
+7. Submit operation log through `POST /api/operation-logs`
+8. Confirm API export success for every write
 9. STOP. Do NOT git commit.
 ```
 
@@ -302,8 +300,8 @@ Sanity check: expect 7 daily memory files. Document any missing day in the hando
 5. Mark consumed daily handoffs as status: consumed ONLY for items actually handled
 6. Write new handoff via `handoff-document` under wiki-weekly-build/
 7. Note monthly candidates in handoff §10 (which patterns are monthly-worthy)
-8. Append to data/log.md
-9. Run Lint Order (kb-wiki-index → kb-lint-wiki --check-immutability → kb-lint-handoff)
+8. Submit operation log through `POST /api/operation-logs`
+9. Confirm API export success for every write
 10. STOP. Do NOT git commit.
 ```
 
@@ -339,7 +337,7 @@ ls data/wiki/summaries/$YEAR/$MONTH/*-weekly.md 2>/dev/null
 grep -l "status: ready" data/handoffs/*/*/wiki-monthly-maintenance/*.md 2>/dev/null
 
 # Cleanup signal — orphan/stub pages flagged by lint
-uv run kb-lint-wiki 2>&1 | grep -E "orphan page|stub page" | head -20
+uv run kb-lint wiki
 ```
 
 ## Monthly Workflow (11 steps)
@@ -357,8 +355,8 @@ uv run kb-lint-wiki 2>&1 | grep -E "orphan page|stub page" | head -20
 7. Mark consumed weekly handoffs as status: consumed for items handled
 8. Write monthly handoff via `handoff-document` under wiki-monthly-maintenance/
    — flag reusable automation as promotion: skill_candidate
-9. Append to data/log.md
-10. Run Lint Order with --strict (warnings → errors): kb-wiki-index → kb-lint-wiki --strict → kb-lint-handoff
+9. Submit operation log through `POST /api/operation-logs`
+10. Confirm API export success for every write
 11. STOP. Do NOT git commit.
 ```
 
@@ -374,10 +372,10 @@ uv run kb-lint-wiki 2>&1 | grep -E "orphan page|stub page" | head -20
 # Red Flags — STOP and re-check
 
 - About to `Read data/raw/<subdir>` for the 3rd time → use Step 0 find command for your period
-- About to create a wiki page but haven't checked `sources:` path is `data/`-relative → check before lint
+- About to create a wiki page but haven't checked `sources:` path is `data/`-relative → check before DB submit
 - About to write improvement page from `reference/templates/improvement.md` without filling the 6 extra fields → fill them or downgrade to entity/concept
-- About to run `kb-lint-wiki` without first running `kb-wiki-index` → run index first
-- About to `git commit` → STOP. None of the three crons commit; wrapper contract is uncommitted handoff for manual review
+- About to lint exported markdown files instead of using DB API → STOP. Submit through the DB API.
+- About to `git commit` → STOP. Markdown is generated export from DB rows.
 - Lint ERRORs on raw immutability → not your run's fault, log it in handoff §8 and PASS the run
 - About to mix periods in one run (e.g. "and also catch up last week's") → STOP. Run one period at a time
 - Weekly run with <7 daily summaries → document missing days in handoff; do not synthesize phantom days

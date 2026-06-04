@@ -1,9 +1,17 @@
 ---
 name: wiki-approval
-description: Use when promoting AI-authored wiki pages from not_processed to pending_for_approve — approving or rejecting pages, running TTL sweep, updating approved pages, writing wiki-promote handoffs/logs, or configuring the wiki approval cron.
+description: Use when promoting DB-backed wiki pages from not_processed to pending_for_approve — approving or rejecting pages, running TTL sweep, updating approved pages, and writing wiki-promote handoffs/logs through the DB API.
 ---
 
 # Wiki Approval
+
+## DB-Canonical Override
+
+Approval state lives in DB pages. Use the HTTP DB API with
+`Authorization: Bearer $KB_API_TOKEN` for promote/approve/reject/TTL sweep,
+handoffs, and operation logs. Markdown under `data/` is generated export. If
+any older instruction below says to lint as a write gate or commit `data/`,
+prefer the DB API.
 
 Use this skill as the runtime contract for the KnowledgeBase review lifecycle. Do not look for a workflow doc during execution; this skill is the complete operating surface.
 
@@ -22,17 +30,22 @@ Applies only to wiki page types `entity`, `concept`, `decision`, `improvement`, 
 
 ## Commands
 
-Run from the outer repo root:
+**Reads** go directly to Postgres (set `DATABASE_URL`; schema + recipes in
+`docs/db_informations/state-db-schema-reference.md`):
 
 ```bash
-uv run kb-wiki-review list [--status not_processed|pending_for_approve|approved|all] [--counts]
-uv run kb-wiki-review promote <stem>
-uv run kb-wiki-review approve <stem> [--feedback "..."]
-uv run kb-wiki-review reject <stem> [--feedback "..."]
-uv run kb-wiki-review ttl-sweep --days 7
-uv run kb-wiki-index
-uv run kb-lint-wiki --check-immutability
-uv run kb-lint-handoff
+psql "${DATABASE_URL/+psycopg/}" -tAc \
+  "SELECT slug, type, created_at FROM pages WHERE review_status='not_processed' ORDER BY updated_at DESC;"
+```
+
+**Writes** go through the DB API with `Authorization: Bearer $KB_API_TOKEN`:
+
+```bash
+KB_API_URL="${KB_API_URL:-http://127.0.0.1:8765}"
+curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/promote" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"","source":"agent"}'
+curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/approve" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"","source":"user"}'
+curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/reject" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"","source":"user"}'
+curl -fsS -X POST "$KB_API_URL/api/pages/ttl-sweep?days=7" -H "Authorization: Bearer $KB_API_TOKEN"
 ```
 
 `<stem>` is the filename without `.md`.
@@ -45,63 +58,55 @@ uv run kb-lint-handoff
 
 Use this for the daily `wiki-promote` cron or a manual promotion run.
 
-1. Check the recent daily build output first:
+1. List the not_processed queue (direct Postgres read):
    ```bash
-   git -C data status --short
-   uv run kb-wiki-review list --status not_processed
+   psql "${DATABASE_URL/+psycopg/}" -tAc \
+     "SELECT slug, type, created_at FROM pages WHERE review_status='not_processed' ORDER BY updated_at DESC;"
    ```
-2. Prioritize newly uncommitted wiki pages, then older `not_processed` pages.
+2. Prioritize recent `not_processed` pages.
 3. Promote only when all are true:
    - source paths are clear, real, and verifiable
    - future lookup value exists
    - page is durable knowledge, not a raw event dump
 4. Promote worthy pages:
    ```bash
-   uv run kb-wiki-review promote <stem>
+   curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/promote" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"","source":"agent"}'
    ```
 5. Leave borderline pages untouched. Do not reject manually from an agent promotion run.
-6. Run validation:
-   ```bash
-   uv run kb-wiki-index
-   uv run kb-lint-wiki --check-immutability
-   uv run kb-lint-handoff
-   ```
-7. Write a promotion handoff and append `data/log.md`.
-8. If at least one page was promoted, commit only the nested `data/` repo:
-   ```bash
-   cd data
-   git add wiki rejected handoffs log.md
-   git commit -m "promote: YYYY-MM-DD wiki promotion"
-   ```
-   Do not push from this skill — push/PR (via the `data-sync` skill's `sync-data.sh`) is handled outside the AI session.
+6. Confirm each API response reports `export.status: success`.
+7. Write a promotion handoff via `POST /api/handoffs`.
+8. Append the operation note via `POST /api/operation-logs`.
+9. Do not commit `data/`; it is generated export.
 
 ## Human Approval / Rejection
 
 For user-requested page review:
 
-1. List pending pages:
+1. List pending pages (direct Postgres read):
    ```bash
-   uv run kb-wiki-review list --status pending_for_approve
+   psql "${DATABASE_URL/+psycopg/}" -tAc \
+     "SELECT slug, type FROM pages WHERE review_status='pending_for_approve';"
    ```
 2. Read the page and its `sources:` files.
 3. Approve when the page is correct and useful:
    ```bash
-   uv run kb-wiki-review approve <stem> --feedback "..."
+   curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/approve" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"...","source":"user"}'
    ```
 4. Reject only when the user has decided it should not enter the wiki:
    ```bash
-   uv run kb-wiki-review reject <stem> --feedback "..."
+   curl -fsS -X POST "$KB_API_URL/api/pages/<slug>/reject" -H "Authorization: Bearer $KB_API_TOKEN" -H "Content-Type: application/json" --data '{"feedback":"...","source":"user"}'
    ```
-5. Regenerate index and lint.
+5. Confirm the API response reports `export.status: success`.
 
-Rejected pages move to `data/rejected/<original wiki path>` with `review_status: rejected`, `rejected_at`, and `rejected_by`.
+Rejected pages are marked in DB with `review_status: rejected`, `rejected_at`,
+and `rejected_by`; export writes them under `data/rejected/...`.
 
 ## TTL Sweep
 
 Cron-safe deterministic cleanup:
 
 ```bash
-uv run kb-wiki-review ttl-sweep --days 7
+curl -fsS -X POST "$KB_API_URL/api/pages/ttl-sweep?days=7" -H "Authorization: Bearer $KB_API_TOKEN"
 ```
 
 It rejects `not_processed` pages older than the threshold with `rejected_by: auto_ttl`. The wrapper may run this directly without an agent because no judgment is needed.
@@ -127,7 +132,7 @@ Promotion runs write under:
 data/handoffs/YYYY/MM/wiki-promote/
 ```
 
-Use a filename that passes `kb-lint-handoff`, for example:
+Use a filename that passes DB API handoff validation (POST /api/handoffs validates on submission), for example:
 
 ```text
 wiki-promote_opencode_handoff_01.md
@@ -185,13 +190,12 @@ Append to `data/log.md`:
 - **promoted**: <stems or none>
 - **left**: <borderline stems or none>
 - **handoff**: handoffs/YYYY/MM/wiki-promote/<file>.md
-- **lint**: kb-wiki-index + kb-lint-wiki + kb-lint-handoff PASSED
-- **commit**: <hash or "none">
+- **db_write**: promoted pages + handoff + operation log exported successfully
 ```
 
 ## Red Flags
 
 - About to reject during promotion run: stop. Agents promote or leave; users reject.
 - About to use `## User Feedback` as authored content: rename the heading.
-- About to commit from the outer repo: stop. Promotion commits only inside `data/`.
+- About to commit from the outer repo: stop. Do not commit data/; DB is canonical.
 - About to approve without reading sources: read the cited files first.

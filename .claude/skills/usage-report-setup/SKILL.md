@@ -10,18 +10,17 @@ Use this skill as the runtime contract for source-specific usage report setup. D
 ## Policy
 
 Generate separate reports by source. Do not create a combined usage report in this layer; daily memory synthesis may read multiple source reports and write one combined memory summary later.
+Reports are written through the DB API. Markdown under `data/wiki/` is generated
+export, not the source of truth. Set `KB_API_TOKEN` before running any non-dry-run
+report command. `KB_API_URL` may override the default `http://127.0.0.1:8765`.
 
-| Source | Command | Markdown output |
+| Source | Command | DB Output |
 |---|---|---|
-| OpenCode | `uv run kb-opencode-daily-report --date YYYY-MM-DD --lint` | `data/wiki/summaries/YYYY/MM/YYYY-MM-DD-opencode-usage.md` |
-| Hermes | `uv run kb-hermes-daily-report --date YYYY-MM-DD --lint` | `data/wiki/summaries/YYYY/MM/YYYY-MM-DD-hermes-usage.md` |
-| Claude Code | `uv run kb-claude-code-daily-report --date YYYY-MM-DD --lint` | `data/wiki/summaries/YYYY/MM/YYYY-MM-DD-claude-code-usage.md` |
+| OpenCode | `uv run kb-opencode-daily-report --date YYYY-MM-DD --lint` | Metrics POSTed to DB API; summary page created via `POST /api/pages` |
+| Hermes | `uv run kb-hermes-daily-report --date YYYY-MM-DD --lint` | Metrics POSTed to DB API; summary page created via `POST /api/pages` |
+| Claude Code | `uv run kb-claude-code-daily-report --date YYYY-MM-DD --lint` | Metrics POSTed to DB API; summary page created via `POST /api/pages` |
 
-Metrics JSON belongs under:
-
-```text
-data/ops/reports/YYYY/MM/
-```
+Metrics are canonical in the DB via `POST /api/metrics`; a derived `.metrics.json` is exported under `data/ops/reports/`, not authored by hand.
 
 ## Setup Workflow
 
@@ -41,7 +40,7 @@ data/ops/reports/YYYY/MM/
 4. Ensure usage report jobs run before daily memory build.
 5. Propose crontab entries. Do not install them unless the user explicitly approves installation.
 6. Run a manual dry run only for selected sources.
-7. Verify markdown output, metrics JSON output, and lint result.
+7. Verify DB API write success, generated markdown export, and metrics JSON output.
 
 ## Cron Schedule
 
@@ -66,7 +65,8 @@ Each wrapper must:
 4. Compute target date in KST as yesterday.
 5. Compute `LOG_FILE="$KB_ROOT/data/raw/ops/cron/$(TZ=Asia/Seoul date -d "$TARGET_DATE" +%Y/%m)/${TARGET_DATE}_kb-<source>-daily-report.log"` and `mkdir -p` its parent.
 6. Run the source-specific report command with `--lint`, redirecting stdout/stderr to `$LOG_FILE`.
-7. Exit non-zero if the report command fails.
+7. Submit the completed wrapper log through `uv run kb-submit-cron-run`.
+8. Exit non-zero if the report command or DB log submission fails.
 
 Example command inside a wrapper:
 
@@ -81,7 +81,7 @@ If a selected source is not installed or has no database/telemetry:
 - do not fail unrelated source report jobs
 - do not generate a misleading empty success report unless the user requested empty-day reports
 - write a clear wrapper log entry
-- if an agent is involved, write a handoff or append `data/log.md` with `skipped`
+- if an agent is involved, write a handoff or operation log through the DB API
 
 ## Output Rules
 
@@ -92,7 +92,7 @@ Daily usage report markdown must:
 - set `date`, `created`, and `updated`
 - use `sources: []` for local DB/telemetry inputs
 - avoid dollar signs; write `N USD`
-- pass `uv run kb-lint-wiki`
+- be accepted by `POST /api/pages`; the API exports Markdown after the DB write
 
 ## Validation
 
@@ -100,17 +100,13 @@ For each enabled source:
 
 ```bash
 uv run kb-<source>-daily-report --date YYYY-MM-DD --lint
-test -f data/wiki/summaries/YYYY/MM/YYYY-MM-DD-<source>-usage.md
-uv run kb-lint-wiki
+# DB is canonical and write-only (no read endpoints). The command prints
+# `export.status: success` on a good write; confirm the derived exports landed:
+ls data/wiki/summaries/YYYY/MM/*-<source>-usage.md
+ls data/ops/reports/YYYY/MM/*-usage.metrics.json
 ```
 
-Then inspect:
-
-```bash
-git -C data status --short
-```
-
-Do not commit unless the user explicitly asks.
+Do not commit `data/`; it is generated export.
 
 ## Red Flags
 

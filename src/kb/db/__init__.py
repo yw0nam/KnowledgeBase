@@ -1,57 +1,70 @@
-"""Operational state DB foundation.
+"""State DB foundation.
 
-Exposes the engine factory, session factory, and FastAPI dependency for
-``data/db/state.db``. Connection-time PRAGMAs (WAL, foreign_keys,
-busy_timeout, synchronous=NORMAL) are wired to each engine returned by
-``make_engine`` via a per-engine ``connect`` listener so other SQLAlchemy
-engines in-process (e.g. a future non-SQLite consumer) are not affected.
+Exposes the engine factory, session factory, and FastAPI dependency.
+Postgres is the sole source of truth; the SQLAlchemy URL comes from
+``DATABASE_URL`` and is required (there is no SQLite fallback).
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
-from pathlib import Path
 
 from fastapi import Request
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from kb.db.models import Base, Dispatch, WikiEdit
+from kb.db.models import (
+    Base,
+    CronRun,
+    Dispatch,
+    ExportRecord,
+    Handoff,
+    MetricsRecord,
+    OperationLog,
+    Page,
+    PageRevision,
+    PageSource,
+    RawSource,
+)
 
 __all__ = [
     "Base",
+    "CronRun",
     "Dispatch",
-    "WikiEdit",
-    "db_path",
+    "ExportRecord",
+    "Handoff",
+    "MetricsRecord",
+    "OperationLog",
+    "Page",
+    "PageRevision",
+    "PageSource",
+    "RawSource",
+    "db_url",
     "make_engine",
     "make_session_factory",
     "get_session",
 ]
 
 
-def db_path(data_dir: Path) -> Path:
-    """Return ``data_dir/db/state.db``, creating the parent dir if needed."""
-    db_dir = data_dir / "db"
-    db_dir.mkdir(parents=True, exist_ok=True)
-    return db_dir / "state.db"
+def db_url() -> str:
+    """Return the SQLAlchemy URL from ``DATABASE_URL``.
+
+    Postgres is the sole backend. ``DATABASE_URL`` is required; there is no
+    SQLite fallback.
+    """
+    configured = os.environ.get("DATABASE_URL")
+    if not configured:
+        raise RuntimeError(
+            "DATABASE_URL is required (Postgres is the sole source of truth)"
+        )
+    return configured
 
 
-def _set_sqlite_pragmas(dbapi_connection, connection_record):  # noqa: ARG001
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode = WAL")
-    cursor.execute("PRAGMA synchronous = NORMAL")
-    cursor.execute("PRAGMA foreign_keys = ON")
-    cursor.execute("PRAGMA busy_timeout = 5000")
-    cursor.close()
-
-
-def make_engine(data_dir: Path) -> Engine:
-    """Create a SQLAlchemy engine bound to ``data_dir/db/state.db``."""
-    url = f"sqlite:///{db_path(data_dir)}"
-    engine = create_engine(url, future=True)
-    event.listen(engine, "connect", _set_sqlite_pragmas)
-    return engine
+def make_engine() -> Engine:
+    """Create a SQLAlchemy engine bound to ``DATABASE_URL``."""
+    return create_engine(db_url(), future=True)
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

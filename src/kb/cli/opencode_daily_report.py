@@ -4,13 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import json
-import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from kb import REPO_ROOT as BASEDIR
+from kb.cli.db_api import submit_markdown_page, submit_metrics
 from kb.cli.usage_reports.collect import (
     DEFAULT_OPENCODE_DB,
     DEFERRED_METRICS,
@@ -197,21 +196,46 @@ def _write_policy(report_path: Path, metrics_path: Path, report: str) -> dict[st
     }
 
 
-def write_outputs(metrics: dict[str, Any], base_dir: Path = BASEDIR) -> dict[str, Path]:
+def write_outputs(
+    metrics: dict[str, Any], base_dir: Path = BASEDIR
+) -> dict[str, object]:
     d = metrics["date"]
     report_path = _summary_dir(base_dir, d) / f"{d}-opencode-usage.md"
-    metrics_path = _metrics_dir(base_dir, d) / f"{d}-opencode-usage.metrics.json"
     report = render_report(metrics)
-    metrics["policy_compliance"] = _write_policy(report_path, metrics_path, report)
+    metrics["policy_compliance"] = _write_policy(report_path, report_path, report)
     report = render_report(metrics)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    metrics_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(report, encoding="utf-8")
-    metrics_path.write_text(
-        json.dumps(metrics, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    export_path = report_path.relative_to(base_dir / "data").as_posix()
+    submit_markdown_page(
+        markdown=report,
+        export_path=export_path,
+        slug=report_path.stem,
+        source="cli",
     )
-    return {"report": report_path, "metrics": metrics_path}
+    oc = metrics.get("opencode", {})
+    submit_metrics(
+        report_date=d,
+        report_type="opencode",
+        metrics=metrics,
+        session_count=_int_or_none(oc.get("sessions", {}).get("total")),
+        token_total=_int_or_none(oc.get("tokens", {}).get("total")),
+        cost_usd=_float_or_none(oc.get("cost", {}).get("recorded_usd")),
+        tool_error_count=_int_or_none(oc.get("error_rate", {}).get("tool_errors")),
+    )
+    return {"report": report_path, "metrics": "db"}
+
+
+def _int_or_none(val: Any) -> int | None:
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _float_or_none(val: Any) -> float | None:
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
 
 
 def _default_target_date() -> str:
@@ -236,15 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     for key, path in outputs.items():
         print(f"- {key}: {path}")
     if args.lint:
-        index_result = subprocess.run(
-            ["uv", "run", "kb-wiki-index"], cwd=args.base_dir, text=True
-        )
-        if index_result.returncode != 0:
-            return index_result.returncode
-        result = subprocess.run(
-            ["uv", "run", "kb-lint-wiki"], cwd=args.base_dir, text=True
-        )
-        return result.returncode
+        print("lint: skipped; DB API validates and exports Markdown on write")
     return 0
 
 

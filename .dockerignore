@@ -1,0 +1,14 @@
+.git
+.pytest_cache
+.ruff_cache
+.venv
+.worktrees
+data
+
+node_modules
+__pycache__
+*.pyc
+*.pyo
+*.sqlite
+*.db
+*.log

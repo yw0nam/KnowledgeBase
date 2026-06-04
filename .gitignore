@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# Local host environment (DB credentials, API token)
+.env
+
 # Obsidian
 .obsidian/
 

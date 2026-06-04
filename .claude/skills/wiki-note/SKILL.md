@@ -5,10 +5,17 @@ description: Use when you (a human) want to capture a first-party note, insight,
 
 # wiki-note
 
+## DB-Canonical Override
+
+Wiki notes are DB pages. Submit first-party notes through `POST /api/pages` with
+`Authorization: Bearer $KB_API_TOKEN`. Markdown under `data/wiki/` is generated
+export. If any older instruction below says to write files or lint as a write gate,
+prefer the DB API.
+
 ## Overview
 
 Capture **first-party** knowledge — something you concluded while working, with no
-external `data/raw` evidence behind it — straight into the KnowledgeBase `data/wiki/`.
+external `data/raw` evidence behind it — into the DB-backed KnowledgeBase wiki.
 
 Normal wiki pages must cite `sources:`. That rule exists to **ground LLM-generated
 content in evidence**. A note you author yourself has different, valid provenance:
@@ -67,12 +74,13 @@ All `uv run kb-*` below now run inside the KB project.
 | `improvement` | `data/wiki/improvements/YYYY-MM/<stem>.md` | `reference/templates/improvement.md` |
 
 Use a stable ASCII kebab-case slug. To keep KB-specific notes grouped, a subfolder is
-fine (e.g. `data/wiki/concepts/knowledgebase/<stem>.md`) — `kb-wiki-index` finds nested
-pages and lint does not require concepts to be flat.
+fine (e.g. `data/wiki/concepts/knowledgebase/<stem>.md`) — DB-backed lint finds nested
+pages and does not require concepts to be flat.
 
-## Step 3 — Write the page
+## Step 3 — Write the page through the DB API
 
-Copy the matching `reference/templates/<type>.md` (one per supported type) and fill it.
+Use the matching `reference/templates/<type>.md` as the schema reference and submit
+the final page through `POST /api/pages`.
 Every template already carries the first-party frontmatter — set the dates and `tags`,
 keep the rest:
 
@@ -103,31 +111,32 @@ Rules:
 - Write real content in the body — a one-line stub trips the stub warning, and an empty
   `## Related` (no bullets) trips an empty-section warning, so fill it or drop it.
 
-## Step 4 — Regenerate index + lint (both must be 0 errors)
+## Step 4 — Submit + verify export
 
 ```bash
-uv run kb-wiki-index
-uv run kb-lint-wiki --check-immutability
+curl -fsS -X POST "$KB_API_URL/api/pages" \
+  -H "Authorization: Bearer $KB_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data @page.json
 ```
 
-`kb-wiki-index` must run before lint (an `approved` page must appear in `INDEX.md`).
+The API appends the revision and exports Markdown immediately.
 
 ## Step 5 — Log (optional)
 
-Append to `data/log.md`:
+Submit to `POST /api/operation-logs`:
 
 ```markdown
 
 ## YYYY-MM-DD (wiki note — first-party)
 
 - **authored**: wiki/<type>/<stem>.md  (origin: authored, sources: [])
-- **lint**: kb-wiki-index + kb-lint-wiki PASSED
+- **db_write**: page export succeeded
 ```
 
 ## Commit & approval
 
-- Leave the new `data/` page **uncommitted** — it syncs through the normal `data-sync`
-  flow (or your manual commit), like any other data change.
+- Do not commit `data/`; it is generated export.
 - `wiki-promote` (cron) will not touch an already-`approved` page, so first-party notes
   bypass the promotion ladder by design.
 
@@ -139,6 +148,5 @@ Append to `data/log.md`:
 | `sources: []` but you actually have a source | Cite it via `wiki-authoring`; don't mark authored |
 | `improvement` enum left blank/invalid | Fill `kind`/`domain`/`severity`/`issue_status` per template comments |
 | links scattered inline instead of `## Related` | Collect them as `- [[stem]] — why` in `## Related` |
-| lint before `kb-wiki-index` | Run `kb-wiki-index` first |
 | dead `[[wikilink]]` | Link an existing stem or use plain text |
 | `decision` filename without date | Rename to `YYYY-MM-DD-<slug>.md` |

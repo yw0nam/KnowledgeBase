@@ -1,17 +1,19 @@
 ---
 name: wiki-authoring
-description: Use when creating or updating source-backed pages under data/wiki — selecting entity/concept/decision/question/improvement/checklist/summary types, applying frontmatter schemas, copying wiki templates, validating wikilinks, regenerating INDEX.md, or fixing wiki lint failures.
+description: Use when creating or updating source-backed DB wiki pages — selecting entity/concept/decision/question/improvement/checklist/summary types, applying frontmatter schemas, validating wikilinks, and submitting writes through the DB API.
 ---
 
 # Wiki Authoring
 
-Use this skill as the runtime contract for raw-to-wiki authoring. Do not look for a workflow doc during execution; this skill is the complete operating surface. Use `docs/reference/` only for human-oriented lookup, not for runtime rules.
+Use this skill as the runtime contract for raw-to-wiki authoring. DB rows are the
+source of truth; Markdown under `data/` is generated export. Do not look for a
+workflow doc during execution; this skill is the complete operating surface.
 
 > **Evidence-derived only.** This skill is for pages grounded in a `data/raw` source — including all LLM/cron authoring, which MUST cite real sources. For a **first-party human note** with no external source, use the `wiki-note` skill (`origin: authored`, `sources: []`); do not fake a citation here.
 
 ## Rules
 
-- Never modify existing files under `data/raw/`.
+- Never modify existing exported files under `data/raw/`.
 - Every wiki page must cite `sources:` paths relative to `data/`, for example `raw/github/issues/repo_42.md`.
 - Never use `data/raw/...` or absolute paths in `sources:`.
 - Use wikilinks only to existing file stems. `aliases:` do not satisfy lint.
@@ -43,9 +45,9 @@ Daily summaries do not need a separate template; use the summary schema below.
 2. Choose wiki type and path
 3. Copy or follow the matching template
 4. Fill frontmatter and body from sources only
-5. Update data/log.md
-6. Run kb-wiki-index before lint
-7. Run wiki lint
+5. Submit `POST /api/pages` or `PATCH /api/pages/{slug}` with Bearer auth
+6. Submit `POST /api/operation-logs` for the operation note
+7. Confirm the API response reports `export.status: success`
 ```
 
 ## Type And Path
@@ -58,7 +60,7 @@ Daily summaries do not need a separate template; use the summary schema below.
 | `question` | `data/wiki/questions/<stem>.md` | reusable Q&A |
 | `improvement` | `data/wiki/improvements/YYYY-MM/<stem>.md` | open issue, proposal, improvement |
 | `checklist` | `data/wiki/checklists/<stem>.md` | repeatable procedure |
-| `summary` | `data/wiki/summaries/YYYY/MM/<period>-<kind>.md` | daily/weekly/monthly rollup |
+| `summary` | export path `wiki/summaries/YYYY/MM/<period>-<kind>.md` | daily/weekly/monthly rollup |
 
 Use stable ASCII slugs unless an existing local convention requires otherwise.
 
@@ -176,26 +178,27 @@ Create an atomic wiki page only when the content has durable future value. Other
 | improvement | unresolved actionable work exists |
 | checklist | procedure should be repeated |
 
-## Validation
+## DB Write Contract
 
-Always regenerate the index before linting:
-
-```bash
-uv run kb-wiki-index
-uv run kb-lint-wiki --check-immutability
-```
-
-For monthly cleanup or release-quality passes:
+Use the local API unless the environment specifies another base URL:
 
 ```bash
-uv run kb-lint-wiki --strict
+KB_API_URL="${KB_API_URL:-http://127.0.0.1:8765}"
+curl -fsS -X POST "$KB_API_URL/api/pages" \
+  -H "Authorization: Bearer $KB_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data @page.json
 ```
+
+`page.json` must include `slug`, `type`, `frontmatter`, `body_md`, and
+`export_path`. The API appends a revision and exports Markdown immediately.
+Do not manually regenerate `INDEX.md`; it is generated export from the DB.
 
 Common fixes:
 
 | Error | Fix |
 |---|---|
-| `INDEX.md: stale` | run `uv run kb-wiki-index` |
+| `INDEX.md: stale` | DB export owns generated files; INDEX.md is regenerated on DB write |
 | source not found | remove `data/` prefix; verify path exists under `data/` |
 | dead wikilink | link to exact file stem or use plain text |
 | improvement missing fields | fill all six improvement-specific fields |
@@ -204,7 +207,7 @@ Common fixes:
 
 ## Log Format
 
-Append to `data/log.md`:
+Submit to `POST /api/operation-logs`:
 
 ```markdown
 
@@ -213,7 +216,7 @@ Append to `data/log.md`:
 - **sources**: raw/...
 - **created/updated**: wiki/...
 - **review_status**: not_processed
-- **lint**: kb-wiki-index + kb-lint-wiki PASSED
+- **db_write**: page export succeeded
 ```
 
 ## Red Flags
@@ -221,4 +224,4 @@ Append to `data/log.md`:
 - About to author from memory without a cited source path.
 - About to create a wikilink to a page that does not exist.
 - About to write an improvement without `kind`, `observed_at`, `domain`, `severity`, `issue_status`, and `related`.
-- About to lint before regenerating `INDEX.md`.
+- About to lint before DB write — DB API validates on submission; INDEX.md is regenerated automatically.

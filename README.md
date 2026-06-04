@@ -7,7 +7,7 @@ Personal LLM wiki. Raw sources go in, LLM writes wiki pages, lint keeps them hon
 KnowledgeBase separates code from data:
 
 - **Outer repo** (`KnowledgeBase/`) — Code, lint tools, templates, documentation. Public-safe.
-- **Nested repo** (`data/`) — Raw sources, wiki pages, handoff documents. Kept private; may sync to its dedicated private remote.
+- **Generated data export** (`data/`) — Raw sources, wiki pages, handoff documents. DB-canonical; `data/db/state.db` is the source of truth.
 
 ```
 KnowledgeBase/
@@ -24,7 +24,9 @@ KnowledgeBase/
 ├── README.md                     This file
 └── .gitignore                    Excludes data/
 
-data/                             Nested private git repo
+data/                             Generated data export (DB-canonical; see docs/db-canonical.md)
+├── db/
+│   └── state.db                  Canonical SQLite database (Source of Truth)
 ├── raw/
 │   ├── github/                   CLAUDE.md, Issues, PRs
 │   ├── conversations/            Desktop Chatbot history
@@ -40,7 +42,7 @@ data/                             Nested private git repo
 │   ├── improvements/             Open-ended improvements
 │   ├── checklists/               Operational checklists
 │   └── summaries/                Time/subject rollups
-├── rejected/                     Rejected wiki pages (created by `kb-wiki-review reject`)
+├── rejected/                     Rejected wiki pages (created by DB API)
 └── log.md                        Operation record
 ```
 
@@ -50,9 +52,8 @@ Project workflows live in `.claude/skills/`. Use `wiki-authoring` for source-bac
 
 ## Privacy
 
-`data/` is private. It must never be pushed to the outer repository or a public remote.
-For multi-machine use, it may sync to its dedicated private repository through
-the PR-based workflow in `docs/data-sync.md`.
+`data/` is private and must never be pushed to the outer repository or a public remote.
+`data/db/state.db` is the canonical store — see `docs/db-canonical.md` for the architecture.
 
 - Outer `.gitignore` excludes `data/`
 - All raw sources and wiki pages stay private
@@ -79,41 +80,13 @@ Use `.claude/skills/wiki-authoring/SKILL.md`; read `data/raw/` and write source-
 ### Validate
 
 ```bash
-kb-lint-wiki
-kb-lint-handoff
+kb-lint
 ```
 
 ### Commit
 
-```bash
-cd data
-git add raw/ wiki/ log.md
-git commit -m "ingest: [source] description"
-```
-
-### Review console (web UI)
-
-Local-only web app for reviewing `pending_for_approve` wiki pages.
-See [PRODUCT.md](PRODUCT.md) and [DESIGN.md](DESIGN.md) for the
-strategic and visual specs.
-
-![KnowledgeBase review console](docs/assets/review-console.png)
-
-```bash
-# First run only — install JS deps. The script also does this for you
-# if frontend/node_modules is missing.
-(cd frontend && npm install)
-
-# Run FastAPI + Vite together. Ctrl-C cleans up both.
-./scripts/dev-web.sh
-
-# Optional: point at a non-default data tree (handy in a worktree
-# created from the main branch, where `data/` is not present).
-KB_DATA_DIR=/path/to/data ./scripts/dev-web.sh
-```
-
-Open <http://127.0.0.1:5173>. The empty queue is honestly empty;
-the UI does not fabricate placeholder content.
+Writes go through the DB API — Markdown files under `data/` are generated exports.
+Changes to the outer repo (code, docs, skills) are committed as usual.
 
 ## Files
 
@@ -121,9 +94,9 @@ the UI does not fabricate placeholder content.
 |---|---|
 | `CLAUDE.md` | LLM entry point and project skill map |
 | `scripts/ingest-github.sh` | GitHub source collection |
-| `src/kb/cli/lint_wiki.py` | Wiki validation |
-| `src/kb/cli/lint_handoff.py` | Handoff validation |
-| `src/kb/cli/wiki_review/` | Wiki page approval CLI (`kb-wiki-review`) |
+| `src/kb/cli/lint.py` | Wiki + handoff validation |
+| `src/kb/cli/db_ttl_sweep.py` | Auto-reject stale unprocessed pages |
+| `src/kb/web/` | DB-canonical API server (`kb-web`) |
 | `data/log.md` | Operation record |
 | `data/raw/` | Immutable sources |
 | `data/wiki/` | LLM-generated pages |
