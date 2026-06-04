@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="4" fill="oklch(58% 0.18 235)"/>
-  <text x="50%" y="50%" text-anchor="middle" dominant-baseline="central"
-    font-family="ui-sans-serif, system-ui, Inter, sans-serif"
-    font-weight="600" font-size="16" fill="oklch(99% 0.004 240)">kb</text>
-</svg>
