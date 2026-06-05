@@ -181,7 +181,7 @@ Include these body sections:
 
 ## Log Format
 
-Append to `data/log.md`:
+Submit through `POST /api/operation-logs` (export may update `data/log.md`, but the DB row is canonical):
 
 ```markdown
 

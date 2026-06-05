@@ -13,7 +13,7 @@ mkdir -p "$LOG_DIR" "$LOCK_DIR"
 
 RUN_EXIT=0
 flock -n "$LOCK_DIR/wiki-ttl-sweep.lock" \
-    bash -lc "cd '$KB_ROOT' && uv run kb-db-ttl-sweep --days 7" \
+    bash -lc "cd '$KB_ROOT' && env -u VIRTUAL_ENV uv run kb-db-ttl-sweep --days 7" \
     >> "$LOG_FILE" 2>&1 || RUN_EXIT=$?
 if [[ "$RUN_EXIT" -ne 0 ]]; then
   echo "[$(date -Iseconds)] ERROR: kb-wiki-ttl-sweep failed" >&2

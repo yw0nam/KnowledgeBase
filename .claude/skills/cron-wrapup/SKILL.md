@@ -57,7 +57,7 @@ If the user manually invokes "Run the KB cron wrap-up for 2026-05-20", `TARGET =
 
 ## Repo Layout & read model
 
-Postgres is the source of truth; `data/` is a human-readable export. Read the wiki/handoff inputs from the DB with `psql` (schema + recipes in `docs/db_informations/state-db-schema-reference.md`) — never open `data/**/*.md`. The only file reads are the per-run cron logs under `data/raw/ops/cron/` (raw operational evidence).
+Postgres is the source of truth; `data/` is a human-readable export. Read wiki, handoff, metrics, and cron-run inputs from the DB with `psql` (schema + recipes in `docs/db_informations/state-db-schema-reference.md`) — never open `data/**/*.md` during normal operation. Per-run cron evidence lives in `cron_runs.log_body`; archived files under `data/raw/ops/cron/` are export/debug copies only, not the source of truth.
 
 ```bash
 TARGET="$1"; psql_kb() { psql "${DATABASE_URL/+psycopg/}" -tAc "$1"; }
@@ -222,10 +222,9 @@ Late-start detection: per-run logs do not contain wrapper-side start timestamps,
 | `pages` slug `{T}-memory`             | key events, promotion candidates, open items, next-run notes; **do not copy the whole narrative** |
 | `handoffs` task_slug=`wiki-daily-build`, status=`ready` | new pages count from §6 Outputs, risks, next handoff instructions |
 | `handoffs` task_slug=`wiki-promote`, status=`ready`     | promoted count, rejected count, expired count |
-| `raw/ops/cron/{Y}/{M}/{T}_kb-wiki-ttl-sweep.log` (file) | swept count + exit code |
-| `raw/ops/cron/{Y}/{M}/{T}_*.log` (files; no `kb-cron-wrapup.log` here) | non-zero exit lines, `ERROR:` lines, `Lock` skip lines |
+| `cron_runs` rows for target `T` | per-job status, exit code, timestamps, `log_body` diagnostics such as `ERROR:`, lock skips, and TTL sweep counts |
 
-Read each input at most once. Never use lint as a discovery source, never re-render existing summaries. The wrap-up MUST NOT read `data/raw/` other than `raw/ops/cron/{Y}/{M}/{TARGET}_*.log`. The wrap-up may extract concise insights/actions from the daily memory and handoffs, but must not duplicate the memory page's full content narrative.
+Read each input at most once. Never use lint as a discovery source, never re-render existing summaries. The wrap-up MUST NOT read `data/raw/` or other `data/` exports for discovery; use `cron_runs.log_body` instead. Archived log files are debug copies only if DB submission itself is broken. The wrap-up may extract concise insights/actions from the daily memory and handoffs, but must not duplicate the memory page's full content narrative.
 
 ## DB Write Order
 

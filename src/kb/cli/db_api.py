@@ -153,7 +153,7 @@ def submit_markdown_page(
     markdown: str,
     export_path: str,
     slug: str,
-    origin: str = "generated",
+    origin: str = "ingested",
     source: str = "cli",
 ) -> dict[str, Any]:
     return post_json(

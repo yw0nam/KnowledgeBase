@@ -19,7 +19,7 @@ flock -n "$LOCK_DIR/monthly.lock" bash -lc "
     --model anthropic/claude-sonnet-4-6 \
     --dangerously-skip-permissions \
     --dir '$KB_ROOT' \
-    'Run the monthly memory workflow for $TARGET_MONTH. Import and follow .claude/skills/memory-report/SKILL.md §Monthly as the runtime contract. Import .claude/skills/wiki-authoring/SKILL.md for wiki cleanup/page edits and .claude/skills/handoff-document/SKILL.md for the handoff. Do not read docs as runtime instructions. Write durable state through the DB API only. Do not run git or edit data/ as source of truth. If blocked, write a handoff with status: ready and submit an operation log before exiting.'
+    'Run the monthly memory workflow for $TARGET_MONTH. Import and follow .claude/skills/memory-report/SKILL.md §Monthly as the runtime contract. Import .claude/skills/wiki-authoring/SKILL.md for wiki cleanup/page edits and .claude/skills/handoff-document/SKILL.md for the handoff. Do not read docs as runtime instructions. Read canonical state from Postgres and write durable state through the DB API only. Do not run git or edit data/ as source of truth. If blocked, write a handoff with status: ready and submit an operation log through the DB API before exiting.'
 " >> "$LOG_FILE" 2>&1 || RUN_EXIT=$?
 kb_finish_cron_run "kb-memory-monthly" "$TARGET_MONTH" "$RUN_EXIT" "$LOG_FILE"
 exit $?

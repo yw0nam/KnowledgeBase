@@ -15,7 +15,7 @@ RUN_EXIT=0
 flock -n "$LOCK_DIR/hermes-report.lock" \
     bash -lc "
       cd '$KB_ROOT'
-      uv run kb-hermes-daily-report --date '$TARGET_DATE' --lint
+      env -u VIRTUAL_ENV uv run kb-hermes-daily-report --date '$TARGET_DATE' --lint
     " >> "$LOG_FILE" 2>&1 || RUN_EXIT=$?
 if [[ "$RUN_EXIT" -ne 0 ]]; then
   echo "[$(date -Iseconds)] ERROR: kb-hermes-daily-report failed for $TARGET_DATE" >&2

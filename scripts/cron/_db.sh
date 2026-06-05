@@ -2,6 +2,11 @@
 
 # Load host environment (DATABASE_URL, KB_API_URL, KB_API_TOKEN) when present.
 # Sourced by every cron wrapper after KB_ROOT is set.
+
+# Hermes cron may run with a minimal PATH. Keep all wrappers able to find uv,
+# opencode, psql, and user-local shims without relying on an interactive shell.
+export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$HOME/anaconda3/bin:$HOME/.bun/bin:$HOME/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 if [[ -n "${KB_ROOT:-}" && -f "$KB_ROOT/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -40,7 +45,7 @@ kb_finish_cron_run() {
 
   (
     cd "$KB_ROOT"
-    uv run kb-submit-cron-run "${args[@]}"
+    env -u VIRTUAL_ENV uv run kb-submit-cron-run "${args[@]}"
   ) || submit_exit=$?
 
   if [[ "$run_exit" -ne 0 ]]; then

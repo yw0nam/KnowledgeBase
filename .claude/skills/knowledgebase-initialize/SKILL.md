@@ -163,7 +163,7 @@ Scheduler backend guidance:
 
 - **Tested scheduler**: Hermes cron, using scheduler-local dispatcher scripts that call the repo wrappers.
 - **Compatible but not yet tested here**: OpenClaw cron, native Unix crontab, systemd timers, or any equivalent scheduler that can run the wrapper scripts on the documented schedule.
-- Actual job registration state belongs to the chosen scheduler backend. Run evidence belongs in `data/raw/ops/cron/{YYYY}/{MM}/` (per-run log files), `data/handoffs/`, `data/log.md`, and cron wrap-up summaries.
+- Actual job registration state belongs to the chosen scheduler backend. Run evidence belongs in DB tables (`cron_runs`, `handoffs`, `operation_logs`, and summary `pages`); `data/raw/ops/cron/{YYYY}/{MM}/`, `data/handoffs/`, `data/log.md`, and wrap-up markdown are generated export/debug copies.
 
 Show the exact list before making cron changes:
 
@@ -255,7 +255,7 @@ Run:
 
 ## Phase 7: Log
 
-Append to `data/log.md`:
+Submit the setup note through `POST /api/operation-logs` (the generated export may update `data/log.md`):
 
 ```markdown
 

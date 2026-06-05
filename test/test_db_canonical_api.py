@@ -321,7 +321,7 @@ Body.
         markdown=markdown,
         export_path="wiki/summaries/2026/06/2026-06-04-usage.md",
         slug="2026-06-04-usage",
-        origin="generated",
+        origin="ingested",
         source="test",
     )
     assert payload["frontmatter"] == {
