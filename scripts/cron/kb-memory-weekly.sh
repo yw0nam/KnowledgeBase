@@ -13,10 +13,10 @@ LOG_FILE="$LOG_DIR/${TARGET_DATE}_kb-memory-weekly.log"
 mkdir -p "$LOG_DIR" "$LOCK_DIR"
 
 RUN_EXIT=0
-flock -n "$LOCK_DIR/weekly.lock" bash -lc "
+flock -n "$LOCK_DIR/weekly.lock" bash -c "
   cd '$KB_ROOT'
-  opencode run \
-    --model anthropic/claude-sonnet-4-6 \
+  "$OPENCODE_BIN" run \
+    --model "$KB_OPENCODE_MODEL" \
     --dangerously-skip-permissions \
     --dir '$KB_ROOT' \
     'Run the weekly memory workflow for $TARGET_WEEK. Import and follow .claude/skills/memory-report/SKILL.md §Weekly as the runtime contract. Import .claude/skills/wiki-authoring/SKILL.md for any wiki page edits and .claude/skills/handoff-document/SKILL.md for the handoff. Do not read docs as runtime instructions. Read canonical state from Postgres and write durable state through the DB API only. Do not run git or edit data/ as source of truth. If blocked, write a handoff with status: ready and submit an operation log through the DB API before exiting.'

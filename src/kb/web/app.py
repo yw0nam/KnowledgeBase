@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import logging
 
+import os
+from pathlib import Path
+
 from alembic import command
 from alembic.config import Config as AlembicConfig
 from fastapi import FastAPI
@@ -45,6 +48,15 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
     app.state.config = cfg
+
+    # Fail-fast: verify KB_DATA_DIR is writable
+    data_dir = Path(cfg.data_dir)
+    if data_dir.exists() and not os.access(data_dir, os.W_OK):
+        raise RuntimeError(
+            f"KB_DATA_DIR {data_dir} is not writable "
+            f"(uid={os.getuid()}, gid={os.getgid()}, mode={oct(data_dir.stat().st_mode)})"
+        )
+
     _run_migrations()
     app.state.engine = make_engine()
     app.state.session_factory = make_session_factory(app.state.engine)

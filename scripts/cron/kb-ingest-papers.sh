@@ -13,10 +13,10 @@ mkdir -p "$LOG_DIR" "$LOCK_DIR"
 
 RUN_EXIT=0
 flock -n "$LOCK_DIR/ingest-papers.lock" \
-    bash -lc "
-      cd '$KB_ROOT'
-      env -u VIRTUAL_ENV uv run python scripts/ingest-daily-papers.py
-    " >> "$LOG_FILE" 2>&1 || RUN_EXIT=$?
+    bash -c '
+      cd "$1"
+      env -u VIRTUAL_ENV "$UV_BIN" run python scripts/ingest-daily-papers.py
+    ' bash "$KB_ROOT" >> "$LOG_FILE" 2>&1 || RUN_EXIT=$?
 if [[ "$RUN_EXIT" -ne 0 ]]; then
   echo "[$(date -Iseconds)] ERROR: kb-ingest-papers failed for $TARGET_DATE" >&2
 fi

@@ -22,7 +22,7 @@ flock -n "$LOCK_DIR/cron-wrapup.lock" bash -c '
   ARCHIVE_LOG_DIR="$5"; ARCHIVE_LOG="$6"
   rc=0
   cd "$KB_ROOT"
-  opencode run --model anthropic/claude-sonnet-4-6 --dangerously-skip-permissions \
+  "$OPENCODE_BIN" run --model "$KB_OPENCODE_MODEL" --dangerously-skip-permissions \
     --dir "$KB_ROOT" "$PROMPT" >> "$INFLIGHT_LOG" 2>&1 || rc=$?
 
   # Archive the completed run log as generated export evidence; DB is canonical.

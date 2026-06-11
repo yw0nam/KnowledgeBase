@@ -13,10 +13,10 @@ mkdir -p "$LOG_DIR" "$LOCK_DIR"
 
 RUN_EXIT=0
 flock -n "$LOCK_DIR/claude-code-report.lock" \
-    bash -lc "
-      cd '$KB_ROOT'
-      env -u VIRTUAL_ENV uv run kb-claude-code-daily-report --date '$TARGET_DATE' --lint
-    " >> "$LOG_FILE" 2>&1 || RUN_EXIT=$?
+    bash -c '
+      cd "$1"
+      env -u VIRTUAL_ENV "$UV_BIN" run kb-claude-code-daily-report --date "$2" --lint
+    ' bash "$KB_ROOT" "$TARGET_DATE" >> "$LOG_FILE" 2>&1 || RUN_EXIT=$?
 if [[ "$RUN_EXIT" -ne 0 ]]; then
   echo "[$(date -Iseconds)] ERROR: kb-claude-code-daily-report failed for $TARGET_DATE" >&2
 fi

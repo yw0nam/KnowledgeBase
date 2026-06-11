@@ -11,7 +11,7 @@ services:
       timeout: 5s
       retries: 20
     volumes:
-      - kb-postgres-data:/var/lib/postgresql/data
+      - /data2/db/knowledgebase:/var/lib/postgresql/data
     ports:
       - "15432:5432"
 
@@ -19,6 +19,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    user: "${COMPOSE_UID:-0}:${COMPOSE_GID:-0}"
     environment:
       DATABASE_URL: postgresql+psycopg://knowledgebase:knowledgebase@db:5432/knowledgebase
       KB_API_TOKEN: knowledgebase-dev-token
@@ -33,5 +34,3 @@ services:
     ports:
       - "8765:8765"
 
-volumes:
-  kb-postgres-data:
