@@ -7,7 +7,6 @@ requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.13",
     "black>=26.3.1",
-    "fastapi>=0.115",
     "fastmcp>=3.2.4",
     "google-api-python-client>=2.197.0",
     "google-auth-httplib2>=0.4.0",
@@ -16,7 +15,6 @@ dependencies = [
     "pyyaml>=6.0",
     "ruff>=0.15.12",
     "sqlalchemy>=2.0",
-    "uvicorn[standard]>=0.30",
 ]
 
 [dependency-groups]
@@ -48,7 +46,6 @@ kb-lint = "kb.cli.lint:main"
 kb-opencode-daily-report = "kb.cli.opencode_daily_report:main"
 kb-hermes-daily-report = "kb.cli.hermes_daily_report:main"
 kb-claude-code-daily-report = "kb.cli.claude_code_daily_report:main"
-kb-web = "kb.web.main:main"
 kb-submit-cron-run = "kb.cli.submit_cron_run:main"
 kb-db-ttl-sweep = "kb.cli.db_ttl_sweep:main"
 kb-mcp = "kb.mcp.server:main"
