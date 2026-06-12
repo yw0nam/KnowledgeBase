@@ -87,6 +87,8 @@ def upsert_metrics(
 
     If a row already exists for the given (report_date, report_type) pair it is
     updated in place; otherwise a new row is created.  Latest values always win.
+    On update, all scalar columns are overwritten — passing None for a field
+    clears it.
     """
     row = session.execute(
         select(MetricsRecord).where(

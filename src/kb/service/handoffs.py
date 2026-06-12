@@ -37,13 +37,19 @@ def create_handoff(
 ) -> dict:
     """Insert a new Handoff row; run lint before writing.
 
-    Order mirrors the route handler:
-    1. Build the row.
-    2. Validate with lint — raise ``ServiceError("lint_failed", ...)`` if not ok.
+    Order mirrors the route handler's intent:
+    1. Validate with lint — raise ``ServiceError("lint_failed", ...)`` if not ok.
+    2. Build the row.
     3. ``session.add``; ``flush`` — raise ``ServiceError("conflict", ...)`` on
        IntegrityError.
     4. ``commit_and_export`` and return its result.
     """
+    lint_result = validate_handoff_create(frontmatter, body_md)
+    if not lint_result.ok:
+        raise ServiceError(
+            "lint_failed",
+            {"errors": lint_result.errors, "warnings": lint_result.warnings},
+        )
     now = now_iso_kst()
     row = Handoff(
         handoff_id=handoff_id,
@@ -58,12 +64,6 @@ def create_handoff(
         created_at=created_at or now,
         updated_at=updated_at or now,
     )
-    lint_result = validate_handoff_create(frontmatter, body_md)
-    if not lint_result.ok:
-        raise ServiceError(
-            "lint_failed",
-            {"errors": lint_result.errors, "warnings": lint_result.warnings},
-        )
     session.add(row)
     try:
         session.flush()

@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from sqlalchemy import select
 
-from kb.db.models import CronRun, MetricsRecord, OperationLog
+from kb.db.models import CronRun, ExportRecord, MetricsRecord, OperationLog
+from kb.service.errors import ServiceError
 
 # --------------------------------------------------------------------------- #
 # OperationLog tests                                                            #
@@ -204,6 +206,41 @@ def test_upsert_metrics_keeps_single_row_per_date_type(data_dir: Path, session) 
     assert json.loads(exported.read_text()) == {"token_total": 250}
 
 
+def test_upsert_metrics_update_nulls_omitted_field(data_dir: Path, session) -> None:
+    """On update, omitting a scalar field (default None) clears it in the DB.
+
+    Documents the deliberate full-overwrite semantics: callers send a complete
+    payload, so an omitted field is interpreted as a NULL write.
+    """
+    from kb.service.ops import upsert_metrics
+
+    upsert_metrics(
+        session,
+        data_dir,
+        report_date="2026-06-04",
+        report_type="opencode",
+        token_total=100,
+        metrics_json={"token_total": 100},
+    )
+
+    # Second upsert omits token_total (defaults to None) → clears the column.
+    upsert_metrics(
+        session,
+        data_dir,
+        report_date="2026-06-04",
+        report_type="opencode",
+        metrics_json={"note": "no token total this time"},
+    )
+
+    row = session.execute(
+        select(MetricsRecord).where(
+            MetricsRecord.report_date == "2026-06-04",
+            MetricsRecord.report_type == "opencode",
+        )
+    ).scalar_one()
+    assert row.token_total is None
+
+
 def test_upsert_metrics_different_types_separate_rows(data_dir: Path, session) -> None:
     """Different report_type values create separate rows."""
     from kb.service.ops import upsert_metrics
@@ -258,3 +295,31 @@ def test_export_markdown_after_operation_log(data_dir: Path, session) -> None:
     result = export_markdown(session, data_dir)
     assert result["status"] == "success"
     assert result["written"] >= 1
+
+
+def test_export_markdown_records_failure_and_raises(
+    data_dir: Path, session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On export failure, records an ExportRecord and raises export_failed.
+
+    Fault injection: force export_all to raise, then verify the error path
+    records the failure and surfaces ServiceError("export_failed", ...).
+    """
+    from kb.service.ops import export_markdown
+
+    monkeypatch.setattr(
+        "kb.service.ops.export_all",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    with pytest.raises(ServiceError) as exc_info:
+        export_markdown(session, data_dir)
+
+    assert exc_info.value.code == "export_failed"
+
+    failed = (
+        session.execute(select(ExportRecord).where(ExportRecord.status == "failed"))
+        .scalars()
+        .all()
+    )
+    assert len(failed) >= 1
