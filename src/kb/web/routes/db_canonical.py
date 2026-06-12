@@ -28,9 +28,9 @@ from kb.db.models import (
 )
 from kb.lint.handoff import validate_handoff_create
 from kb.lint.wiki import validate_page_create
-from kb.web._time import date_from_iso, now_iso_kst, today_kst
+from kb.service._time import date_from_iso, now_iso_kst, today_kst
 from kb.web.auth import require_bearer
-from kb.web.export import export_all, record_export_failure
+from kb.service.export import export_all, record_export_failure
 
 router = APIRouter(tags=["db-canonical"])
 
