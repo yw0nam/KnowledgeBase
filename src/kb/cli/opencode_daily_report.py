@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from kb import REPO_ROOT as BASEDIR
-from kb.cli.db_api import submit_markdown_page, submit_metrics
+from kb.cli._submit import submit_page_and_metrics
 from kb.cli.usage_reports.collect import (
     DEFAULT_OPENCODE_DB,
     DEFERRED_METRICS,
@@ -205,14 +205,11 @@ def write_outputs(
     metrics["policy_compliance"] = _write_policy(report_path, report_path, report)
     report = render_report(metrics)
     export_path = report_path.relative_to(base_dir / "data").as_posix()
-    submit_markdown_page(
-        markdown=report,
+    oc = metrics.get("opencode", {})
+    submit_page_and_metrics(
+        report=report,
         export_path=export_path,
         slug=report_path.stem,
-        source="cli",
-    )
-    oc = metrics.get("opencode", {})
-    submit_metrics(
         report_date=d,
         report_type="opencode",
         metrics=metrics,

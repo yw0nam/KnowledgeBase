@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import argparse
 
-from kb.cli.db_api import post_json
+from kb.service import pages as service_pages
+from kb.service.session import session_scope
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--days", type=int, default=7)
     args = parser.parse_args(argv)
-    response = post_json(f"/pages/ttl-sweep?days={args.days}", {})
-    print(f"swept: {response.get('swept', 0)}")
+    with session_scope() as (session, data_dir):
+        result = service_pages.ttl_sweep(session, data_dir, days=args.days)
+    print(f"swept: {result.get('swept', 0)}")
     return 0
 
 

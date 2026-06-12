@@ -31,7 +31,10 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
-from kb.cli.db_api import DbApiError, submit_raw_source
+from kb.cli._payloads import raw_source_payload
+from kb.service import sources as service_sources
+from kb.service.errors import ServiceError
+from kb.service.session import session_scope
 
 KB_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = KB_ROOT / "data" / "raw" / "web" / "huggingface"
@@ -291,9 +294,11 @@ def ingest(dry_run: bool, force: bool, allow_non_today: bool) -> int:
         return 0
 
     try:
-        submit_raw_source(markdown=content, source_key=source_key, source_type="web_article")
-    except DbApiError as exc:
-        if exc.status_code == 409 and not force:
+        payload = raw_source_payload(markdown=content, source_key=source_key, source_type="web_article")
+        with session_scope() as (session, data_dir):
+            service_sources.create_raw_source(session, data_dir, **payload)
+    except ServiceError as exc:
+        if exc.code == "conflict" and not force:
             print(f"Skipping already ingested digest in DB: {paper_date_str}")
             return 0
         raise
