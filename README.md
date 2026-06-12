@@ -40,7 +40,7 @@ data/                             Generated Markdown export tree (Postgres is ca
 │   ├── improvements/             Open-ended improvements
 │   ├── checklists/               Operational checklists
 │   └── summaries/                Time/subject rollups
-├── rejected/                     Rejected wiki pages (created by DB API)
+├── rejected/                     Rejected wiki pages (created on reject via kb-mcp/service layer)
 └── log.md                        Operation record
 ```
 

@@ -74,7 +74,7 @@ data/                             # Generated Markdown export tree (KB_DATA_DIR)
 
 ## Important Rules
 
-- Never modify files in `data/raw/`. They are immutable after creation. Use `kb-lint` to enforce (via DB API): git-status must not show modifications, `captured_at` must be ≤ file mtime (60s tolerance), and required raw frontmatter fields (`source_url`, `type`, `captured_at`, `contributor`) are always validated.
+- Never modify files in `data/raw/`. They are immutable after creation. Use `kb-lint` to enforce (via the `kb.service` layer): git-status must not show modifications, `captured_at` must be ≤ file mtime (60s tolerance), and required raw frontmatter fields (`source_url`, `type`, `captured_at`, `contributor`) are always validated.
 - `data/wiki/` pages must always list their `sources:` in frontmatter.
 - Keep `data/log.md` updated for `data/` repo operations only: raw ingest, wiki page creation/update, handoff creation/update, promotion/rejection, cron/report outputs, and data lint results.
 - Keep outer repo changes in `CHANGELOG.md`: source code, scripts, docs, skills, templates, config, schemas, and workflow contract changes.

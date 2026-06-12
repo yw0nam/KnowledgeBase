@@ -23,7 +23,7 @@ kb-lint --strict # Treat warnings as errors
 
 ### kb-db-ttl-sweep
 
-Auto-reject stale unprocessed wiki pages via DB API.
+Auto-reject stale unprocessed wiki pages via the `kb.service` layer (in-process).
 
 ```bash
 kb-db-ttl-sweep           # Default 7-day window
