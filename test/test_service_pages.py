@@ -73,18 +73,6 @@ def _upsert_concept(session, data_dir, *, slug="test-concept", fm=None, body_md=
     )
 
 
-def _upsert_summary(session, data_dir, *, slug="test-summary", fm=None, body_md=None):
-    return upsert_page(
-        session,
-        data_dir,
-        slug=slug,
-        type="summary",
-        body_md=body_md or f"\n# {slug.title()}\n\nBody.\n",
-        frontmatter=fm or dict(_SUMMARY_FM),
-        export_path=f"wiki/summaries/2026/06/{slug}.md",
-    )
-
-
 # ---------------------------------------------------------------------------
 # 1. create → export success, file on disk, DB row, create revision
 # ---------------------------------------------------------------------------
@@ -132,23 +120,10 @@ def test_create_exports_file_and_creates_revision(data_dir: Path, session) -> No
 
 
 def test_create_source_propagates_to_revision(data_dir: Path, session) -> None:
-    _upsert_summary(
-        session,
-        data_dir,
-        slug="cli-sourced-page",
-        fm={
-            "type": "summary",
-            "created": "2026-06-04",
-            "updated": "2026-06-04",
-            "sources": [],
-            "tags": ["usage"],
-        },
-    )
-    # call again with explicit source to get the revision
     upsert_page(
         session,
         data_dir,
-        slug="cli-sourced-page2",
+        slug="cli-sourced-page",
         type="summary",
         body_md="\n# CLI Sourced\n\nWritten by a deterministic daily-report CLI job.\n",
         frontmatter={
@@ -158,12 +133,12 @@ def test_create_source_propagates_to_revision(data_dir: Path, session) -> None:
             "sources": [],
             "tags": ["usage"],
         },
-        export_path="wiki/summaries/2026/06/cli-sourced-page2.md",
+        export_path="wiki/summaries/2026/06/cli-sourced-page.md",
         source="cli",
     )
 
     page = session.execute(
-        select(Page).where(Page.slug == "cli-sourced-page2")
+        select(Page).where(Page.slug == "cli-sourced-page")
     ).scalar_one()
     revision = session.execute(
         select(PageRevision).where(PageRevision.page_id == page.id)
@@ -261,6 +236,62 @@ def test_patch_preserves_columns_when_frontmatter_omits_keys(
     page = session.execute(select(Page).where(Page.slug == "patch-target")).scalar_one()
     assert page.category == "usage"
     assert page.review_status == "approved"
+
+
+def test_patch_records_true_old_values(data_dir: Path, session) -> None:
+    """changed_fields["category"]["old"] must be the pre-patch DB value, even
+    when both a frontmatter carrying a new category AND an explicit different
+    category= are passed in the same patch."""
+    fm = dict(_SUMMARY_FM_WITH_META)  # category: "usage"
+    upsert_page(
+        session,
+        data_dir,
+        slug="old-values",
+        type="summary",
+        body_md="\n# Old Values\n\nA summary page used to verify revision old values.\n",
+        frontmatter=fm,
+        export_path="wiki/summaries/2026/06/old-values.md",
+    )
+
+    # frontmatter sets category -> "concept-derived"; explicit category= sets
+    # it -> "final". The recorded old value must still be the original "usage".
+    new_fm = {
+        "type": "summary",
+        "category": "concept-derived",
+        "created": "2026-06-04",
+        "updated": "2026-06-05",
+        "sources": [],
+        "tags": ["usage"],
+    }
+    patch_page(
+        session,
+        data_dir,
+        slug="old-values",
+        frontmatter=new_fm,
+        category="final",
+    )
+
+    page = session.execute(select(Page).where(Page.slug == "old-values")).scalar_one()
+    revision = (
+        session.execute(
+            select(PageRevision)
+            .where(
+                PageRevision.page_id == page.id, PageRevision.change_kind == "update"
+            )
+            .order_by(PageRevision.revision_number.desc())
+        )
+        .scalars()
+        .first()
+    )
+    assert revision.changed_fields["category"]["old"] == "usage"
+    assert revision.changed_fields["category"]["new"] == "final"
+
+
+def test_patch_no_change_returns_skipped(data_dir: Path, session) -> None:
+    _upsert_concept(session, data_dir, slug="no-change")
+
+    result = patch_page(session, data_dir, slug="no-change")
+    assert result["export"]["status"] == "skipped"
 
 
 # ---------------------------------------------------------------------------

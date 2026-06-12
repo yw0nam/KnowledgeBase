@@ -7,6 +7,8 @@ replaces ``request.app.state.config.data_dir``.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -28,7 +30,7 @@ from kb.service.errors import ServiceError
 
 def upsert_page(
     session: Session,
-    data_dir,
+    data_dir: Path,
     *,
     slug: str,
     type: str,
@@ -109,7 +111,7 @@ def upsert_page(
 
 def patch_page(
     session: Session,
-    data_dir,
+    data_dir: Path,
     *,
     slug: str,
     title: str | None = None,
@@ -125,31 +127,40 @@ def patch_page(
     if page is None:
         raise ServiceError("not_found", "page not found")
 
+    # Snapshot pre-patch values once, before any attribute writes, so the
+    # revision's changed_fields["*"]["old"] reflect the true DB state (and
+    # don't alias the live SQLAlchemy frontmatter dict).
+    old_title = page.title
+    old_body = page.body_md
+    old_frontmatter = dict(page.frontmatter)
+    old_category = page.category
+    old_review_status = page.review_status
+
     changed: dict[str, dict] = {}
 
-    if title is not None and title != page.title:
-        changed["title"] = {"old": page.title, "new": title}
+    if title is not None and title != old_title:
+        changed["title"] = {"old": old_title, "new": title}
         page.title = title
 
-    if body_md is not None and body_md != page.body_md:
-        changed["body_md"] = {"old": page.body_md, "new": body_md}
+    if body_md is not None and body_md != old_body:
+        changed["body_md"] = {"old": old_body, "new": body_md}
         page.body_md = body_md
 
-    if frontmatter is not None and frontmatter != page.frontmatter:
-        changed["frontmatter"] = {"old": page.frontmatter, "new": frontmatter}
+    if frontmatter is not None and frontmatter != old_frontmatter:
+        changed["frontmatter"] = {"old": old_frontmatter, "new": frontmatter}
         page.frontmatter = frontmatter
         if "category" in frontmatter:
             page.category = frontmatter.get("category")
         if "review_status" in frontmatter:
             page.review_status = frontmatter.get("review_status")
 
-    if category is not None and category != page.category:
-        changed["category"] = {"old": page.category, "new": category}
+    if category is not None and category != old_category:
+        changed["category"] = {"old": old_category, "new": category}
         page.category = category
         _sync_page_frontmatter(page, {"category": category})
 
-    if review_status is not None and review_status != page.review_status:
-        changed["review_status"] = {"old": page.review_status, "new": review_status}
+    if review_status is not None and review_status != old_review_status:
+        changed["review_status"] = {"old": old_review_status, "new": review_status}
         page.review_status = review_status
         _sync_page_frontmatter(page, {"review_status": review_status})
 
@@ -177,7 +188,7 @@ def patch_page(
 
 def _transition_page(
     session: Session,
-    data_dir,
+    data_dir: Path,
     *,
     slug: str,
     expected: str,
@@ -216,7 +227,7 @@ def _transition_page(
 
 def promote_page(
     session: Session,
-    data_dir,
+    data_dir: Path,
     *,
     slug: str,
     feedback: str = "",
@@ -237,7 +248,7 @@ def promote_page(
 
 def approve_page(
     session: Session,
-    data_dir,
+    data_dir: Path,
     *,
     slug: str,
     feedback: str = "",
@@ -259,7 +270,7 @@ def approve_page(
 
 def reject_page(
     session: Session,
-    data_dir,
+    data_dir: Path,
     *,
     slug: str,
     feedback: str = "",
@@ -298,7 +309,7 @@ def reject_page(
     return commit_and_export(session, data_dir, {"page": _page_payload(page)})
 
 
-def ttl_sweep(session: Session, data_dir, *, days: int = 7) -> dict:
+def ttl_sweep(session: Session, data_dir: Path, *, days: int = 7) -> dict:
     """Reject all not_processed pages older than ``days`` days."""
     today = today_kst()
     swept = 0
