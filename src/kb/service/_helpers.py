@@ -7,20 +7,9 @@ teardown task removes them.
 
 from __future__ import annotations
 
-__all__ = [
-    "commit_and_export",
-    "_first_heading",
-    "_page_payload",
-    "_append_revision",
-    "_sync_page_frontmatter",
-    "_diff_page_fields",
-    "_refresh_page_sources",
-    "_next_revision_number",
-]
-
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from kb.db.models import Page, PageRevision, PageSource, RawSource
@@ -54,21 +43,30 @@ def _page_payload(row: Page) -> dict:
 
 
 def commit_and_export(session: Session, data_dir: Path, response: dict) -> dict:
-    """Commit the write, export Markdown, and annotate the response.
+    """Commit the write, export Markdown, and return a new annotated dict.
 
-    Generalizes the route's ``_commit_export_or_500``: on export failure,
-    records it and raises ``ServiceError("export_failed", ...)`` instead of
-    ``HTTPException(500)``.
+    Does not mutate ``response``; returns a fresh dict with an ``"export"``
+    key added.  Generalizes the route's ``_commit_export_or_500``: on export
+    failure, records it and raises ``ServiceError("export_failed", ...)`` with
+    a freshly-built detail dict instead of ``HTTPException(500)``.
     """
     session.commit()
     try:
         written = export_all(session, data_dir)
     except Exception as exc:  # noqa: BLE001
         record_export_failure(session, str(exc))
-        response["export"] = {"status": "failed", "db_written": True, "error": str(exc)}
-        raise ServiceError("export_failed", response)
-    response["export"] = {"status": "success", "written": written}
-    return response
+        raise ServiceError(
+            "export_failed",
+            {
+                **response,
+                "export": {
+                    "status": "failed",
+                    "db_written": True,
+                    "error": str(exc),
+                },
+            },
+        )
+    return {**response, "export": {"status": "success", "written": written}}
 
 
 def _next_revision_number(session: Session, page_id: int) -> int:
@@ -125,7 +123,7 @@ def _diff_page_fields(page: Page, new: dict) -> dict:
 
 
 def _refresh_page_sources(session: Session, page: Page) -> None:
-    session.query(PageSource).filter(PageSource.page_id == page.id).delete()
+    session.execute(delete(PageSource).where(PageSource.page_id == page.id))
     seen: set[str] = set()
     for source in page.frontmatter.get("sources") or []:
         citation = str(source)

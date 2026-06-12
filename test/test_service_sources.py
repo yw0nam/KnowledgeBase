@@ -23,13 +23,13 @@ def test_create_raw_source_returns_id_and_export(session, data_dir: Path) -> Non
     result = create_raw_source(
         session,
         data_dir,
-        source_key="raw/manual/x.md",
+        source_key="raw/manual/returns.md",
         source_type="manual",
         content_md="# Title\n\nbody",
     )
 
     assert isinstance(result["id"], int)
-    assert result["source_key"] == "raw/manual/x.md"
+    assert result["source_key"] == "raw/manual/returns.md"
     assert result["export"]["status"] == "success"
     assert isinstance(result["export"]["written"], int)
 
