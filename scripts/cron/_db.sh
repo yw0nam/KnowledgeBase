@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Load host environment (DATABASE_URL, KB_API_URL, KB_API_TOKEN) when present.
+# Load host environment (DATABASE_URL, KB_DATA_DIR) when present.
 # Sourced by every cron wrapper after KB_ROOT is set.
 
 # Hermes cron may run with a minimal PATH and a profile-scoped HOME
