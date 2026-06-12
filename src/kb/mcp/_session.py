@@ -31,5 +31,8 @@ def tool_session(ctx: object) -> Generator[tuple[Session, Path], None, None]:
     session: Session = factory()
     try:
         yield session, data_dir
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()

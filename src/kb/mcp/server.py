@@ -8,6 +8,7 @@ Reads via query_sql (read-only SQL) and get_schema.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -19,7 +20,7 @@ from alembic import command
 from alembic.config import Config as AlembicConfig
 from fastmcp import FastMCP
 
-from kb import REPO_ROOT, data_dir as _data_dir_fn
+from kb import REPO_ROOT, data_dir as resolve_data_dir
 from kb.db import make_engine, make_session_factory
 
 logger = logging.getLogger(__name__)
@@ -34,12 +35,12 @@ async def server_lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
     # Run Alembic migrations (idempotent — safe if already at head)
     cfg = AlembicConfig(str(REPO_ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(REPO_ROOT / "alembic"))
-    command.upgrade(cfg, "head")
+    await asyncio.to_thread(command.upgrade, cfg, "head")
     logger.info("alembic upgrade head complete")
 
     engine = make_engine()
     session_factory = make_session_factory(engine)
-    data_dir_path: Path = _data_dir_fn()
+    data_dir_path: Path = resolve_data_dir()
 
     logger.info("KnowledgeBase MCP server started (data_dir=%s)", data_dir_path)
 
