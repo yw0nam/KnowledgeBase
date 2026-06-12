@@ -76,9 +76,7 @@ mcp = FastMCP(
 
 def main() -> None:
     """Run the KnowledgeBase MCP server."""
-    from kb.mcp import tools_write  # noqa: F401  (registers write tools)
-
-    # tools_read will be imported here in the next task (Task 7)
+    from kb.mcp import tools_read, tools_write  # noqa: F401  (register all tools)
 
     parser = argparse.ArgumentParser(description="KnowledgeBase MCP server")
     parser.add_argument(

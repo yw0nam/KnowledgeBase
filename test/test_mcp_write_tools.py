@@ -251,7 +251,12 @@ def test_create_raw_source_round_trip(
 
 
 def test_all_expected_tool_names_registered() -> None:
-    """All 12 write tool names must be present in the mcp registry."""
+    """All 12 write tool names must be a subset of the mcp registry.
+
+    Subset (not exact-set) so the assertion stays correct as later tasks add
+    read tools (query_sql, get_schema) onto the same global ``mcp`` — pytest
+    imports every test module, which registers those extra tools too.
+    """
     tools = asyncio.run(mcp.list_tools())
     registered_names = {tool.name for tool in tools}
 
