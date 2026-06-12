@@ -24,7 +24,11 @@ def submit_page_and_metrics(
     metrics: dict[str, Any],
     **metric_fields: Any,
 ) -> None:
-    """Upsert the rendered report page + its metrics in one in-process transaction."""
+    """Upsert the rendered report page + its metrics in one session scope.
+
+    Two internal commits share the session (the page is committed before the
+    metrics), so this is not a single atomic transaction.
+    """
     payload = markdown_page_payload(
         markdown=report,
         export_path=export_path,

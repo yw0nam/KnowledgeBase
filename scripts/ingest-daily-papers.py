@@ -293,8 +293,8 @@ def ingest(dry_run: bool, force: bool, allow_non_today: bool) -> int:
         print(content[:4000])
         return 0
 
+    payload = raw_source_payload(markdown=content, source_key=source_key, source_type="web_article")
     try:
-        payload = raw_source_payload(markdown=content, source_key=source_key, source_type="web_article")
         with session_scope() as (session, data_dir):
             service_sources.create_raw_source(session, data_dir, **payload)
     except ServiceError as exc:
