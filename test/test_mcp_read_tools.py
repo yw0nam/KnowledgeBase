@@ -74,7 +74,7 @@ def _make_page(ctx, slug: str) -> None:
     assert result.get("export", {}).get("status") == "success", result
 
 
-def _page_count(database_url: str) -> int:
+def _page_count() -> int:
     engine = make_engine()
     factory = make_session_factory(engine)
     session = factory()
@@ -85,7 +85,7 @@ def _page_count(database_url: str) -> int:
         engine.dispose()
 
 
-def _operation_log_count(database_url: str) -> int:
+def _operation_log_count() -> int:
     engine = make_engine()
     factory = make_session_factory(engine)
     session = factory()
@@ -143,13 +143,13 @@ def test_query_sql_reads_real_data(
 def test_query_sql_prefix_guard_rejects_writes(
     database_url: str, tool_ctx: SimpleNamespace, sql: str
 ) -> None:
-    before = _page_count(database_url)
+    before = _page_count()
     _make_page(tool_ctx, "guard-sentinel")
     fn = _get_tool_fn("query_sql")
     result = fn(tool_ctx, sql=sql)
     assert result.get("code") == "read_only_violation", result
     # The sentinel page is the only change; the rejected write created nothing.
-    assert _page_count(database_url) == before + 1
+    assert _page_count() == before + 1
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ def test_query_sql_multi_statement_rejected(
 def test_query_sql_transaction_guard_blocks_writing_cte(
     database_url: str, tool_ctx: SimpleNamespace
 ) -> None:
-    before = _operation_log_count(database_url)
+    before = _operation_log_count()
     fn = _get_tool_fn("query_sql")
     sql = (
         "WITH x AS ("
@@ -185,7 +185,7 @@ def test_query_sql_transaction_guard_blocks_writing_cte(
     # Passes the prefix guard (starts with WITH) but blocked by the read-only TX.
     assert result.get("code") == "query_error", result
     assert "error" in result
-    assert _operation_log_count(database_url) == before, "no row may be written"
+    assert _operation_log_count() == before, "no row may be written"
 
 
 # ---------------------------------------------------------------------------

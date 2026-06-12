@@ -84,8 +84,10 @@ def query_sql(ctx: Context, sql: str | None = None, limit: int = 100) -> dict:
             "code": "read_only_violation",
             "detail": None,
         }
-    head = body[:6].lower()
-    if not (head.startswith("select") or head.startswith("with")):
+    # Cheap pre-filter only: a query that opens with a SQL comment (/* */, --) or
+    # a bare ( is intentionally rejected here — the read-only transaction below is
+    # the real guard, so we don't bother parsing past such openers.
+    if not body.lower().startswith(("select", "with")):
         return {
             "error": (
                 "읽기 전용 쿼리만 허용됩니다: SELECT 또는 WITH 로 시작해야 합니다."

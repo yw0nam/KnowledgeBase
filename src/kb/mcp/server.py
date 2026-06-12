@@ -67,8 +67,9 @@ mcp = FastMCP(
 )
 
 
-# ── Tool registrations (added in later tasks) ─────────────────────────────────
-# tools_read will be added in the next task (Task 7).
+# ── Tool registrations ────────────────────────────────────────────────────────
+# Write tools (tools_write) and read tools (tools_read) are imported in main()
+# so importing this module doesn't pull in the service layer at definition time.
 
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
