@@ -3,9 +3,8 @@
 These functions parse Markdown (with YAML frontmatter) into structured dicts
 suitable for passing to service-layer functions.  They have no I/O side effects.
 
-Extracted from ``kb.cli.db_api`` so that in-process consumers can import them
-without pulling in the HTTP client.  The original copies in ``db_api.py`` remain
-until that module is torn down (Task 9).
+Extracted from the now-removed ``kb.cli.db_api`` so that in-process consumers
+can import them without pulling in an HTTP client.
 """
 
 from __future__ import annotations

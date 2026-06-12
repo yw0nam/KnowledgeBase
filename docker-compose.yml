@@ -19,7 +19,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: kb-mcp --transport streamable-http --host 0.0.0.0 --port 8765
     user: "${COMPOSE_UID:-0}:${COMPOSE_GID:-0}"
     environment:
       DATABASE_URL: postgresql+psycopg://knowledgebase:knowledgebase@db:5432/knowledgebase
