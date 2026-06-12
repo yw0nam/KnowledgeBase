@@ -104,6 +104,8 @@ def test_require_returns_error_when_field_is_none() -> None:
     assert result is not None
     assert "error" in result
     assert "b" in result["error"]
+    assert result["code"] == "missing_args"
+    assert result["detail"] == ["b"]
 
 
 def test_require_returns_error_when_field_is_blank() -> None:
@@ -111,6 +113,8 @@ def test_require_returns_error_when_field_is_blank() -> None:
     assert result is not None
     assert "error" in result
     assert "a" in result["error"]
+    assert result["code"] == "missing_args"
+    assert result["detail"] == ["a"]
 
 
 def test_require_lists_all_missing_fields() -> None:
@@ -120,9 +124,13 @@ def test_require_lists_all_missing_fields() -> None:
     assert "x" in error_msg
     assert "y" in error_msg
     assert "z" not in error_msg
+    assert result["code"] == "missing_args"
+    assert set(result["detail"]) == {"x", "y"}
 
 
 def test_require_empty_string_treated_as_missing() -> None:
     result = require(field="")
     assert result is not None
     assert "field" in result["error"]
+    assert result["code"] == "missing_args"
+    assert result["detail"] == ["field"]

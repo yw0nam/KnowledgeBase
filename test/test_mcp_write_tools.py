@@ -18,6 +18,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from sqlalchemy import select
 
 import kb.mcp.tools_write  # noqa: F401 — registers all write tools
@@ -46,17 +47,23 @@ EXPECTED_TOOL_NAMES = {
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Fixtures
 # ---------------------------------------------------------------------------
 
 
-def _ctx(data_dir: Path) -> SimpleNamespace:
-    """Build a fake Context whose lifespan_context mimics the real server dict."""
+@pytest.fixture()
+def tool_ctx(data_dir: Path):
+    """Fake Context whose lifespan_context mimics the real server dict.
+
+    Yields the context and disposes the underlying engine on teardown.
+    """
     engine = make_engine()
     factory = make_session_factory(engine)
-    return SimpleNamespace(
+    ctx = SimpleNamespace(
         lifespan_context={"session_factory": factory, "data_dir": data_dir}
     )
+    yield ctx
+    engine.dispose()
 
 
 def _get_tool_fn(tool_name: str):
@@ -87,9 +94,11 @@ _CONCEPT_FM = {
 # ---------------------------------------------------------------------------
 
 
-def test_upsert_page_happy_path(database_url: str, data_dir: Path) -> None:
+def test_upsert_page_happy_path(
+    database_url: str, data_dir: Path, tool_ctx: SimpleNamespace
+) -> None:
     """upsert_page tool returns export.status == 'success', row in DB, file on disk."""
-    ctx = _ctx(data_dir)
+    ctx = tool_ctx
     fn = _get_tool_fn("upsert_page")
 
     result = fn(
@@ -129,10 +138,10 @@ def test_upsert_page_happy_path(database_url: str, data_dir: Path) -> None:
 
 
 def test_upsert_page_missing_slug_returns_error(
-    database_url: str, data_dir: Path
+    database_url: str, tool_ctx: SimpleNamespace
 ) -> None:
     """Omitting slug returns the require() error dict; DB is not touched."""
-    ctx = _ctx(data_dir)
+    ctx = tool_ctx
     fn = _get_tool_fn("upsert_page")
 
     result = fn(
@@ -167,11 +176,11 @@ def test_upsert_page_missing_slug_returns_error(
 
 
 def test_approve_page_on_not_processed_returns_conflict_dict(
-    database_url: str, data_dir: Path
+    database_url: str, tool_ctx: SimpleNamespace
 ) -> None:
     """approve_page on a not_processed page → ServiceError → dict with code='conflict'."""
     # First, create the page using the upsert tool so it's in not_processed state
-    ctx = _ctx(data_dir)
+    ctx = tool_ctx
     upsert_fn = _get_tool_fn("upsert_page")
     upsert_fn(
         ctx,
@@ -198,9 +207,11 @@ def test_approve_page_on_not_processed_returns_conflict_dict(
 # ---------------------------------------------------------------------------
 
 
-def test_create_raw_source_round_trip(database_url: str, data_dir: Path) -> None:
-    """create_raw_source tool inserts a DB row and exports a file."""
-    ctx = _ctx(data_dir)
+def test_create_raw_source_round_trip(
+    database_url: str, data_dir: Path, tool_ctx: SimpleNamespace
+) -> None:
+    """create_raw_source tool inserts a DB row, exports a file, and writes to disk."""
+    ctx = tool_ctx
     fn = _get_tool_fn("create_raw_source")
 
     result = fn(
@@ -214,6 +225,11 @@ def test_create_raw_source_round_trip(database_url: str, data_dir: Path) -> None
 
     assert isinstance(result, dict), f"Expected dict, got: {result}"
     assert "error" not in result, f"Got unexpected error: {result}"
+
+    # Verify the exported Markdown file was written to disk
+    assert (
+        data_dir / "test/raw/mcp-tool-test.md"
+    ).exists(), "Exported raw source file should exist on disk"
 
     # Verify DB row
     engine = make_engine()

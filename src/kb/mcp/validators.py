@@ -26,7 +26,11 @@ NullableList = Annotated[list[Any] | None, BeforeValidator(_coerce_none_string)]
 
 
 def require(**fields: Any) -> dict[str, Any] | None:
-    """Return a retryable error dict if any field is missing/blank, else None."""
+    """Return a retryable error dict if any field is missing/blank, else None.
+
+    On failure returns ``{"error": <Korean message>, "code": "missing_args",
+    "detail": <list of missing field names>}`` so callers can branch on ``code``.
+    """
     missing = [
         n
         for n, v in fields.items()
@@ -37,6 +41,8 @@ def require(**fields: Any) -> dict[str, Any] | None:
             "error": (
                 f"필수 인자가 누락되었습니다: {', '.join(missing)}."
                 " 값을 채워서 다시 호출하세요."
-            )
+            ),
+            "code": "missing_args",
+            "detail": missing,
         }
     return None

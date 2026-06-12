@@ -7,6 +7,17 @@ Every tool follows the same pattern:
   4. Catch ``ServiceError`` → return ``{"error", "code", "detail"}`` dict.
 
 Tools never raise; they always return a plain dict.
+
+Error shapes
+------------
+* Validation failure (missing required arg):
+  ``{"error": <Korean message>, "code": "missing_args", "detail": [<field>, ...]}``
+* Service failure (ServiceError):
+  ``{"error": <str>, "code": <code>, "detail": <any>}``
+  where ``code`` is one of: ``not_found``, ``conflict``, ``lint_failed``,
+  ``export_failed``.
+
+Callers can branch on ``result.get("code")`` to distinguish error types.
 """
 
 from __future__ import annotations
@@ -223,10 +234,11 @@ def reject_page(
     feedback: str = "",
     source: str = "console",
 ) -> dict:
-    """Reject a wiki page (any reviewable state → rejected).
+    """Reject a wiki page (pending_for_approve or not_processed → rejected).
 
     Required: slug. Optional: feedback (rejection reason), source.
-    Returns updated page dict with rewritten export_path under rejected/.
+    Returns the updated page dict with export_path rewritten under rejected/.
+    Raises a conflict error if the page is already approved or rejected.
     """
     missing = require(slug=slug)
     if missing:
@@ -247,6 +259,7 @@ def ttl_sweep_pages(
 ) -> dict:
     """Reject all not_processed pages older than `days` days (default 7).
 
+    Pass days=None or omit to use the 7-day default.
     Returns ``{"swept": int}`` with the number of pages rejected.
     """
     try:
