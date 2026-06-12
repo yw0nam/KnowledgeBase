@@ -6,7 +6,7 @@ Updated: 2026-06-04
 
 - **Purpose**: Let agents/skills **read** the canonical KnowledgeBase state directly. Postgres is the sole source of truth; `data/` is a generated human-readable export.
 - **I/O**: `psql "$DATABASE_URL" -tAc "<SELECT …>"` → rows. Reads are unrestricted. Discover sources here, never by scanning `data/`.
-- **Writes are NOT done here.** All writes go through the HTTP API (`kb-web`) so write-time lint runs. Never `INSERT`/`UPDATE`/`DELETE` directly — `raw_sources`, `page_revisions`, and `wiki_edits` have append-only triggers that abort.
+- **Writes are NOT done here.** All writes go through the `kb-mcp` server tools (or the in-process `kb.service` layer used by cron CLIs) so write-time lint runs. Never `INSERT`/`UPDATE`/`DELETE` directly — `raw_sources`, `page_revisions`, and `wiki_edits` have append-only triggers that abort.
 
 Connect with `DATABASE_URL` (see `.env.example`):
 `postgresql+psycopg://knowledgebase:knowledgebase@localhost:15432/knowledgebase`
@@ -43,7 +43,7 @@ Connect with `DATABASE_URL` (see `.env.example`):
 - `wiki_edits.field`: `review_status`, `type`, `category`, `tags`
 - `wiki_edits.source`: `console`, `migration`
 
-> **App-enforced (no DB CHECK):** `handoffs.status`/`role`, `operation_logs.category`, `cron_runs.status`, `exports.status`. Allowed values are owned by the API/lint and the relevant skills, not the database.
+> **App-enforced (no DB CHECK):** `handoffs.status`/`role`, `operation_logs.category`, `cron_runs.status`, `exports.status`. Allowed values are owned by the service layer/lint and the relevant skills, not the database.
 
 Review lifecycle: a page enters `not_processed`, is promoted to `pending_for_approve`, then `approved` or `rejected`. On reject/TTL-sweep the `export_path` moves `wiki/… → rejected/…`.
 
@@ -90,8 +90,9 @@ psql_kb "SELECT report_type, session_count, token_total, cost_usd FROM metrics W
 
 ### A. PatchNote
 
+- 2026-06-12: Updated write-path description to reflect `kb-mcp` tools / `kb.service` layer (replaced "HTTP API `kb-web`"). Updated app-enforced-enum note and `cron_runs` submit note accordingly.
 - 2026-06-04: Expanded to a full per-table reference (Appendix B), added the timestamp/timezone gotcha (`captured_at` is UTC, all other `*_at` are KST-checked), the `wiki_edits` enums, the app-enforced-enum note, and raw/date-range read recipes. Linked from the DB-touching skills.
-- 2026-06-04: Created. Postgres became the sole source of truth (SQLite removed); reads are direct `psql` against the schema above, writes stay gated through the API.
+- 2026-06-04: Created. Postgres became the sole source of truth (SQLite removed); reads are direct `psql` against the schema above, writes were gated through the FastAPI API (replaced 2026-06-12 by `kb-mcp` tools / `kb.service` layer).
 
 ### B. Full table reference
 
@@ -197,7 +198,7 @@ Index `(log_date, id)`.
 | `started_at` / `finished_at` | text | yes | KST-ISO when present |
 | `created_at` | text | no | KST-ISO CHECK |
 
-Index `(target, job_name)`. Submitted via `POST /api/cron-runs` after each wrapper exits.
+Index `(target, job_name)`. Submitted via the `create_cron_run` MCP tool / `kb-submit-cron-run` CLI after each wrapper exits.
 
 **`metrics`** — usage report metrics
 | Column | Type | Null | Notes |

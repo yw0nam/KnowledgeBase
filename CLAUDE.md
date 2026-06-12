@@ -2,7 +2,7 @@
 
 Personal LLM wiki backed by handoff system. Raw sources go in, LLM writes wiki pages, lint validates.
 
-**DB-Canonical**: A **Postgres** database (the compose `db` service, reached via `DATABASE_URL`) is the Source of Truth. Markdown files under `data/` are generated exports, not the canonical state. Reads go directly to Postgres (`psql`); writes go through the API so lint runs. See `docs/db_informations/state-db-schema-reference.md`.
+**DB-Canonical**: A **Postgres** database (the compose `db` service, reached via `DATABASE_URL`) is the Source of Truth. Markdown files under `data/` are generated exports, not the canonical state. Reads go directly to Postgres via the `query_sql` MCP tool or `psql`; writes go through the `kb-mcp` MCP server tools so lint runs. See `docs/db_informations/state-db-schema-reference.md`.
 
 ## Overview
 
@@ -12,21 +12,25 @@ KnowledgeBase is a memory-workflow system (v0) that captures knowledge from mult
 
 ```
 KnowledgeBase/                    # Outer repo: code, lint, templates, docs
-├── src/kb/                   # CLI tools + FastAPI web server
+├── src/kb/                   # CLI tools + FastMCP server + service layer
 │   ├── cli/
 │   │   ├── lint.py                   # kb-lint command (wiki + handoff validation)
 │   │   ├── db_ttl_sweep.py           # kb-db-ttl-sweep command
-│   │   ├── db_api.py                 # DB API client (shared lib)
 │   │   ├── opencode_daily_report.py  # kb-opencode-daily-report command
 │   │   ├── hermes_daily_report.py    # kb-hermes-daily-report command
 │   │   └── claude_code_daily_report.py  # kb-claude-code-daily-report command
-│   └── web/                      # FastAPI DB-canonical API server (kb-web)
-│       ├── app.py                #   FastAPI app factory
-│       ├── config.py             #   KB_DATA_DIR, port config
-│       ├── main.py               #   kb-web entrypoint
-│       ├── auth.py               #   Bearer token auth
-│       ├── export.py             #   Markdown + JSON export from DB
-│       └── routes/db_canonical.py  #   DB-canonical write endpoints
+│   ├── service/                  # DB-canonical write path (lint → DB → export)
+│   │   ├── pages.py              #   Wiki page operations
+│   │   ├── sources.py            #   Raw source ingest
+│   │   ├── handoffs.py           #   Handoff document operations
+│   │   ├── ops.py                #   Cron runs, metrics, operation logs, export
+│   │   ├── export.py             #   Markdown export
+│   │   └── session.py            #   SQLAlchemy session helpers
+│   └── mcp/                      # FastMCP server (kb-mcp)
+│       ├── server.py             #   FastMCP app + lifespan
+│       ├── tools_write.py        #   12 write tools
+│       ├── tools_read.py         #   query_sql + get_schema read tools
+│       └── validators.py         #   Input validators
 ├── src/CLAUDE.md                 # CLAUDE.md file for src/
 
 ├── scripts/
@@ -116,6 +120,8 @@ The cron job runs KB cron jobs directly. The script delegates LLM work to `openc
 | **LLM-Driven** | memory-daily/weekly/monthly, wiki-promote, cron-wrapup | skill-driven + opencode run  `opencode run --model anthropic/claude-sonnet-4-6` |
 | **Deterministic** (no LLM) | opencode/hermes/claude-code daily reports, wiki-ttl-sweep, ingest-papers | `uv run kb-*-daily-report --date --lint`, `uv run kb-db-ttl-sweep --days 7`, `uv run python scripts/ingest-daily-papers.py` |
 
+The deterministic CLIs call the `kb.service` layer **in-process** — they do **not** require a running `kb-mcp` server or any HTTP daemon. The LLM-driven cron jobs will use `kb-mcp` tools directly (skill wiring for that is a follow-on).
+
 ### Pipeline schedule (KST)
 
 ```
@@ -153,7 +159,7 @@ All run logs go to `data/raw/ops/cron/{YYYY}/{MM}/{date}_{job}.log`.
 - [Workflows](docs/workflows.md) — at-a-glance diagram map (nightly pipeline, review lifecycle); skills own the execution detail
 - [Frontmatter Conventions](docs/reference/frontmatter.md) — schema reference; `wiki-authoring` and `handoff-document` carry runtime rules
 - [Wiki Categories](docs/reference/wiki-categories.md) — category reference; use `wiki-authoring` at runtime
-- [Commands](docs/reference/commands.md) — kb-lint, kb-db-ttl-sweep, kb-submit-cron-run, daily report CLIs, kb-web
+- [Commands](docs/reference/commands.md) — kb-lint, kb-db-ttl-sweep, kb-submit-cron-run, daily report CLIs, kb-mcp
 
 ## Linting
 
