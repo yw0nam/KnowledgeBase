@@ -5,7 +5,7 @@ description: Use on a fresh clone, new machine, or new profile to create or repa
 
 # KnowledgeBase Initialize
 
-> **DB-Canonical Override**: The KnowledgeBase is DB-backed. `data/` is a generated Markdown export — do NOT create a nested `data/.git` repo or set up any Git sync for it. Bring up the Postgres `db` service (compose) and run migrations, and verify the `kb-mcp` server entrypoint resolves and Postgres is reachable.
+> **DB-Canonical Override**: The KnowledgeBase is DB-backed. `data/` is a generated Markdown export — do NOT create a nested `data/.git` repo or set up any Git sync for it. Bring up the Postgres `db` service and the `kb-mcp` daemon (both via compose), run migrations, and verify the `kb-mcp` daemon answers on `127.0.0.1:8765` and Postgres is reachable.
 
 Use this skill as the runtime contract for repository setup. Do not load `docs/` during execution; docs are design reference only.
 
@@ -79,19 +79,25 @@ If `uv sync` needs network and fails due sandbox/network restrictions, ask for a
 
 ## Phase 2: Initialize the Database
 
-Postgres is the sole source of truth. Bring up the compose Postgres and run
-migrations (copy `.env.example` → `.env` first so `DATABASE_URL` is set):
+Postgres is the sole source of truth and the `kb-mcp` daemon is the write
+surface. Bring up both compose services and set `DATABASE_URL` (copy
+`.env.example` → `.env` first):
 
 ```bash
 cp -n .env.example .env
-docker compose up -d db
 set -a; . ./.env; set +a
-uv run alembic upgrade head
+docker compose up -d --build        # starts db + the kb-mcp daemon (:8765)
 ```
 
-In Docker deployment the `kb-mcp` service also runs `alembic upgrade head` on
-startup, so `docker compose up -d` is sufficient. `data/` remains as the
-Markdown export tree (`KB_DATA_DIR`), not the canonical store.
+The `kb-mcp` daemon runs `alembic upgrade head` on startup, so the schema is
+applied automatically. To apply migrations host-side without the daemon, run
+`uv run alembic upgrade head`. Confirm the daemon is up:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8765/mcp   # expect 406 (server alive)
+```
+
+`data/` remains the Markdown export tree (`KB_DATA_DIR`), not the canonical store.
 
 Create missing required directories under `data/` (export tree only).
 
@@ -115,12 +121,12 @@ psql "${DATABASE_URL/+psycopg/}" -tAc "SELECT count(*) FROM pages;"
 uv run kb-lint --help
 ```
 
-Writes go through the kb-mcp tools / the `kb.service` layer; Postgres is the
-canonical store. Verify the kb-mcp server entrypoint resolves and the DB is
-reachable:
+Writes go through the kb-mcp tools / the `kb.service` layer; reads go through
+`psql` or the read-only `query_sql` tool. Verify the daemon is reachable and the
+DB answers:
 
 ```bash
-uv run kb-mcp --help
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8765/mcp   # expect 406
 psql "${DATABASE_URL/+psycopg/}" -tAc "select 1"
 ```
 
@@ -198,7 +204,28 @@ Wrapper prompt policy:
 - Usage setup/import prompts use `.claude/skills/usage-report-setup/SKILL.md`.
 - TTL sweep runs `uv run kb-db-ttl-sweep --days 7`, applying status changes in-process through the `kb.service` layer.
 
-LLM cron jobs (memory-*, wiki-promote, cron-wrapup) reach the write surface via kb-mcp tools, so the `kb-mcp` server must be registered in opencode as a local stdio MCP. In `~/.config/opencode/opencode.json` under `mcp`, add an entry with type `local`, command `["uv","run","--directory","<KB_ROOT>","kb-mcp","--transport","stdio"]`, and `environment` carrying `DATABASE_URL` and `KB_DATA_DIR`. Deterministic jobs need no server (they call `kb.service` in-process).
+### Register kb-mcp in agent runtimes (ask first)
+
+LLM/agent runtimes reach the write surface by connecting to the `kb-mcp` daemon over http. Before registering anything, **ask the user two things**:
+
+1. **Where is the kb-mcp daemon running?**
+   - the local default — `http://127.0.0.1:8765/mcp` (the compose `mcp` service from Phase 2), or
+   - a different address — e.g. the daemon runs on another host and this machine connects to it from outside. Ask for the full URL.
+
+   Use the answer as `<KB_MCP_URL>` below.
+
+2. **Which runtimes to register** — ask one at a time ("Register kb-mcp in opencode? in Claude Code?") and register only on an explicit yes.
+
+Recipes (use the confirmed `<KB_MCP_URL>`):
+
+- **opencode** — add under `mcp` in `~/.config/opencode/opencode.json`:
+  ```json
+  "kb-mcp": { "type": "remote", "url": "<KB_MCP_URL>", "enabled": true }
+  ```
+- **Claude Code** — `claude mcp add --transport http --scope user kb-mcp <KB_MCP_URL>`
+- **Other runtimes (e.g. Hermes)** — ask the user where their MCP config lives; add an http entry pointing at `<KB_MCP_URL>`.
+
+Deterministic jobs (`kb-db-ttl-sweep`, daily reports, ingest) need no registration — they call `kb.service` in-process. The daemon has no auth: if it must be reachable from other hosts, publish it on the appropriate interface (compose default `0.0.0.0:8765`); on a single host, host-loopback (`127.0.0.1:8765:8765`) is safer (see #41).
 
 Only after approval:
 
@@ -277,10 +304,11 @@ Write the setup note through the kb-mcp `create_operation_log` tool (the generat
 
 ## Done Criteria
 
-- Postgres `db` service is up (migrations applied) and the `kb-mcp` server entrypoint resolves.
+- Postgres `db` service is up (migrations applied) and the `kb-mcp` daemon is reachable on `:8765`.
 - Required directories and `data/log.md` exist.
 - CLI smoke tests ran or blockers are documented.
 - Global skills are symlinked into `~/.claude/skills/` or explicitly skipped.
+- kb-mcp is registered in the agent runtimes the user approved (or explicitly skipped).
 - Usage report mode is selected or explicitly skipped.
 - Cron entries are proposed or explicitly skipped.
 - Initialization handoff exists and passes lint.

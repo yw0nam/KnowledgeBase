@@ -120,7 +120,7 @@ The cron job runs KB cron jobs directly. The script delegates LLM work to `openc
 | **LLM-Driven** | memory-daily/weekly/monthly, wiki-promote, cron-wrapup | skill-driven + opencode run  `opencode run --model anthropic/claude-sonnet-4-6` |
 | **Deterministic** (no LLM) | opencode/hermes/claude-code daily reports, wiki-ttl-sweep, ingest-papers | `uv run kb-*-daily-report --date --lint`, `uv run kb-db-ttl-sweep --days 7`, `uv run python scripts/ingest-daily-papers.py` |
 
-The deterministic CLIs call the `kb.service` layer **in-process** — they do **not** require a running `kb-mcp` server or any HTTP daemon. The LLM-driven cron jobs use the `kb-mcp` tools directly: register `kb-mcp` in opencode as a `type: local` stdio MCP server (`uv run kb-mcp --transport stdio`, `environment` carrying `DATABASE_URL`/`KB_DATA_DIR`) so each `opencode run` session spawns it over stdio — no long-running daemon.
+The deterministic CLIs call the `kb.service` layer **in-process** — no server needed. The LLM-driven cron jobs connect to the `kb-mcp` http daemon (compose `mcp` service, `127.0.0.1:8765`); see `knowledgebase-initialize` for registering `kb-mcp` in each agent runtime.
 
 ### Pipeline schedule (KST)
 
