@@ -1,11 +1,11 @@
 ---
 name: knowledgebase-initialize
-description: Use on a fresh clone, new machine, or new profile to create or repair the local data repository — verifying CLI tooling, choosing usage report mode, proposing cron jobs, and writing initialization handoff/log output.
+description: Use on a fresh clone, new machine, or new profile to set up KnowledgeBase — choosing deployment mode (local compose bring-up vs connecting to a remote DB/daemon over an SSH tunnel), verifying CLI tooling, registering kb-mcp in agent runtimes, choosing usage report mode, proposing cron jobs, and writing initialization handoff/log output.
 ---
 
 # KnowledgeBase Initialize
 
-> **DB-Canonical Override**: The KnowledgeBase is DB-backed. `data/` is a generated Markdown export — do NOT create a nested `data/.git` repo or set up any Git sync for it. Bring up the Postgres `db` service and the `kb-mcp` daemon (both via compose), run migrations, and verify the `kb-mcp` daemon answers on `127.0.0.1:8765` and Postgres is reachable.
+> **DB-Canonical Override**: The KnowledgeBase is DB-backed. `data/` is a generated Markdown export — do NOT create a nested `data/.git` repo or set up any Git sync for it. The end state is the same in both deployment modes: the `kb-mcp` daemon answers on `:8765` and Postgres is reachable. **Phase 0 decides how you get there** — either bring up the Postgres `db` service and the `kb-mcp` daemon locally via compose (and run migrations), or connect this machine as a client to an already-running **remote** stack (no compose, no migrations). Ask before doing either.
 
 Use this skill as the runtime contract for repository setup. Do not load `docs/` during execution; docs are design reference only.
 
@@ -55,19 +55,47 @@ data/
 
 `data/rejected/` may be empty on a fresh install. It is populated by wiki rejection.
 
+## Phase 0: Choose Deployment Mode (ask FIRST)
+
+**Before any DB bring-up, ask where the Postgres DB and `kb-mcp` daemon live.** Do
+this before Phase 2 — do not run `docker compose up` on the assumption it is local.
+
+| Mode | Meaning | Phase 2 path |
+|---|---|---|
+| **Local bring-up** | Stand up `db` + `kb-mcp` on this machine via compose; this machine owns the stack. | Phase 2A |
+| **Remote connect** | DB + daemon already run on another host; this machine is a client (often over an SSH tunnel). | Phase 2B |
+
+If the user is unsure, probe first: is anything already listening on `:8765` /
+`:15432` locally, or does an SSH host already serve them? Then confirm the choice.
+
+The mode changes three things downstream: Phase 2 (bring up vs connect+tunnel),
+Phase 5 cron (a remote client usually **skips** cron — the remote host already runs
+the nightly pipeline; registering it here causes duplicate runs), and which
+`<KB_MCP_URL>` the runtimes register against.
+
 ## Phase 1: Inspect
 
-Check:
+Check (the DB read here only succeeds once Phase 2 has brought up / connected the
+stack — on a cold start it is expected to fail, that is fine):
 
 ```bash
 test -d data
-psql "${DATABASE_URL/+psycopg/}" -tAc "SELECT 1" >/dev/null && echo "DB reachable"
 test -f data/log.md
 uv --version
 uv run kb-lint --help
 uv run kb-db-ttl-sweep --help
 find scripts/cron -maxdepth 1 -type f -name 'kb-*.sh' | sort
 ```
+
+Mode-specific checks:
+
+- **Local bring-up** — confirm Docker is available: `docker info` (if the daemon is
+  off, start Docker Desktop / `dockerd` and wait, or ask the user to).
+- **Remote connect** — confirm the SSH host resolves and the remote services answer
+  (see `reference/remote-connection.md`); do **not** start Docker locally.
+
+`psql` may be absent on a client machine. That is not a blocker — reads can go
+through psycopg (the same path `kb.service` uses); see `reference/remote-connection.md`.
 
 If a command fails because dependencies are missing, run:
 
@@ -77,15 +105,22 @@ uv sync
 
 If `uv sync` needs network and fails due sandbox/network restrictions, ask for approval to rerun with network access.
 
-## Phase 2: Initialize the Database
+## Phase 2: Bring Up or Connect to the Database
 
-Postgres is the sole source of truth and the `kb-mcp` daemon is the write
-surface. Bring up both compose services and set `DATABASE_URL` (copy
-`.env.example` → `.env` first):
+Postgres is the sole source of truth and the `kb-mcp` daemon is the write surface.
+Copy `.env.example` → `.env` first in both modes, then follow **2A** or **2B** per
+the Phase 0 choice.
 
 ```bash
 cp -n .env.example .env
 set -a; . ./.env; set +a
+```
+
+### Phase 2A: Local bring-up
+
+Bring up both compose services:
+
+```bash
 docker compose up -d --build        # starts db + the kb-mcp daemon (:8765)
 ```
 
@@ -97,7 +132,21 @@ applied automatically. To apply migrations host-side without the daemon, run
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8765/mcp   # expect 406 (server alive)
 ```
 
-`data/` remains the Markdown export tree (`KB_DATA_DIR`), not the canonical store.
+### Phase 2B: Remote connect
+
+The DB + daemon already run elsewhere — **do not** `docker compose up` and **do not**
+run migrations (the remote stack is canonical and already migrated). Point `.env`'s
+`DATABASE_URL` at the remote (often `localhost:<port>` when tunnelled), set the
+remote `<KB_MCP_URL>`, and — if the remote is only reachable over SSH — bring up a
+**persistent auto-tunnel** (two forwarded ports: kb-mcp `8765` + Postgres). Full
+recipe (one-shot tunnel, launchd auto-tunnel template, verification) is in
+`reference/remote-connection.md`. A populated remote (non-zero `pages`) confirms you
+are a client of a live KB; skip schema/data init.
+
+---
+
+`data/` remains the Markdown export tree (`KB_DATA_DIR`), not the canonical store, in
+both modes.
 
 Create missing required directories under `data/` (export tree only).
 
@@ -116,18 +165,18 @@ Do not create raw source files during initialization.
 Run from repo root:
 
 ```bash
-# Direct Postgres read smoke test (reads go straight to psql):
-psql "${DATABASE_URL/+psycopg/}" -tAc "SELECT count(*) FROM pages;"
+# Postgres read smoke test — psql if present, else psycopg (the kb.service path):
+psql "${DATABASE_URL/+psycopg/}" -tAc "SELECT count(*) FROM pages;" 2>/dev/null \
+ || uv run python -c "import os,psycopg; c=psycopg.connect(os.environ['DATABASE_URL'].replace('+psycopg',''),connect_timeout=8); cur=c.cursor(); cur.execute('select count(*) from pages'); print('pages:',cur.fetchone()[0])"
 uv run kb-lint --help
 ```
 
 Writes go through the kb-mcp tools / the `kb.service` layer; reads go through
-`psql` or the read-only `query_sql` tool. Verify the daemon is reachable and the
-DB answers:
+`psql`, the psycopg fallback above, or the read-only `query_sql` tool. Verify the
+daemon is reachable and the DB answers:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8765/mcp   # expect 406
-psql "${DATABASE_URL/+psycopg/}" -tAc "select 1"
 ```
 
 Fresh empty data may produce zero rows. Structural errors are blockers; existing user-data lint errors must be reported rather than auto-rewritten.
@@ -165,6 +214,14 @@ Use the `usage-report-setup` skill if the user asks for detailed setup. For init
 Default recommendation: enable only sources the user actually runs. Do not create combined usage reports.
 
 ## Phase 5: Propose Cron Jobs
+
+> **Remote-client default: skip cron here.** If Phase 0 chose **Remote connect** and
+> the remote host already runs the nightly pipeline (check `cron_runs` — a populated
+> table means it does), registering the same jobs on this machine causes **duplicate
+> runs**. Default to *not* registering cron locally; treat this machine as an
+> interactive client. Only register here if the user explicitly wants this machine to
+> own (a subset of) the schedule. For a fresh **Local bring-up**, propose the full
+> list below as normal.
 
 KnowledgeBase owns the expected job contract and portable wrapper scripts under `scripts/cron/`; it does not require a specific scheduler backend.
 
@@ -206,15 +263,13 @@ Wrapper prompt policy:
 
 ### Register kb-mcp in agent runtimes (ask first)
 
-LLM/agent runtimes reach the write surface by connecting to the `kb-mcp` daemon over http. Before registering anything, **ask the user two things**:
+LLM/agent runtimes reach the write surface by connecting to the `kb-mcp` daemon over http.
 
-1. **Where is the kb-mcp daemon running?**
-   - the local default — `http://127.0.0.1:8765/mcp` (the compose `mcp` service from Phase 2), or
-   - a different address — e.g. the daemon runs on another host and this machine connects to it from outside. Ask for the full URL.
-
-   Use the answer as `<KB_MCP_URL>` below.
-
-2. **Which runtimes to register** — ask one at a time ("Register kb-mcp in opencode? in Claude Code?") and register only on an explicit yes.
+`<KB_MCP_URL>` is already decided by Phase 0/2: for **Local bring-up** it is
+`http://127.0.0.1:8765/mcp`; for **Remote connect** it is the remote URL (or
+`http://127.0.0.1:8765/mcp` when reached through the Phase 2B tunnel). Then **ask
+which runtimes to register** — one at a time ("Register kb-mcp in opencode? in Claude
+Code? in Hermes?") and register only on an explicit yes.
 
 Recipes (use the confirmed `<KB_MCP_URL>`):
 
@@ -222,8 +277,13 @@ Recipes (use the confirmed `<KB_MCP_URL>`):
   ```json
   "kb-mcp": { "type": "remote", "url": "<KB_MCP_URL>", "enabled": true }
   ```
-- **Claude Code** — `claude mcp add --transport http --scope user kb-mcp <KB_MCP_URL>`
-- **Other runtimes (e.g. Hermes)** — ask the user where their MCP config lives; add an http entry pointing at `<KB_MCP_URL>`.
+- **Claude Code** — `claude mcp add --transport http --scope user kb-mcp <KB_MCP_URL>`.
+  Note: a server added mid-session is **not** loaded into the *current* Claude Code
+  session — restart to use its tools in-session (see Phase 6).
+- **Hermes** — `hermes mcp add kb-mcp --url <KB_MCP_URL>`. It is **interactive**:
+  answer `n` to "Does this server require authentication?" (kb-mcp has no auth), then
+  `Y` to "Enable all N tools?". Drive it with a pty if running non-interactively.
+- **Other runtimes** — ask the user where their MCP config lives; add an http entry pointing at `<KB_MCP_URL>`.
 
 Deterministic jobs (`kb-db-ttl-sweep`, daily reports, ingest) need no registration — they call `kb.service` in-process. The daemon has no auth: if it must be reachable from other hosts, publish it on the appropriate interface (compose default `0.0.0.0:8765`); on a single host, host-loopback (`127.0.0.1:8765:8765`) is safer (see #41).
 
@@ -240,20 +300,28 @@ Only after approval:
 Write:
 
 ```text
-data/handoffs/YYYY/MM/kb-initialize/kb-initialize_<role>_handoff_01.md
+data/handoffs/YYYY/MM/kb-initialize/kb-initialize_<role>_handoff_<NN>.md
 ```
 
 Use role `opencode`, `claude_code`, `hermes`, or `user`. If the role contains an underscore, keep the `kb-initialize_` subject prefix.
 
-Frontmatter:
+**Pick `<NN>` / `handoff_seq` by checking what already exists** — `handoff_id` is
+UNIQUE in the DB, so a second init on the same KB with `:01` fails with a `conflict`.
+Query first and use the next sequence:
+
+```bash
+uv run python -c "import os,psycopg; c=psycopg.connect(os.environ['DATABASE_URL'].replace('+psycopg',''),autocommit=True); cur=c.cursor(); cur.execute(\"select handoff_id,handoff_seq from handoffs where task_slug='kb-initialize' order by handoff_seq\"); [print(r) for r in cur.fetchall()]"
+```
+
+Frontmatter (`<NN>` zero-padded, e.g. `02`):
 
 ```yaml
 ---
-handoff_id: "kb-initialize:kb-initialize:<role>:01"
+handoff_id: "kb-initialize:kb-initialize:<role>:<NN>"
 task_slug: "kb-initialize"
 subject: "kb-initialize"
 role: <role>
-handoff_seq: 1
+handoff_seq: <NN>
 created: "YYYY-MM-DD"
 updated: "YYYY-MM-DD"
 status: ready
@@ -263,6 +331,9 @@ security:
 promotion: null
 ---
 ```
+
+**`export_path` is relative to `KB_DATA_DIR`** — pass `handoffs/YYYY/MM/...`, **not**
+`data/handoffs/...`. Prefixing `data/` doubles the path into `data/data/...` on export.
 
 Include:
 
@@ -279,44 +350,66 @@ Include:
 ## 10. Promotion candidates
 ```
 
-Run:
+Submit through the kb-mcp `create_handoff` tool — handoff validation runs inside it
+(returns `code: lint_failed` on failure).
 
-```bash
-# Handoff validation runs inside the kb-mcp create_handoff tool (returns code: lint_failed on failure)
+**If the kb-mcp tools are not available in the current session** (e.g. you registered
+kb-mcp in Claude Code mid-session and have not restarted), submit via the in-process
+`kb.service` layer instead — it is the exact path the tool wraps (lint → DB → export):
+
+```python
+from kb.service.session import session_scope
+from kb.service.handoffs import create_handoff
+with session_scope() as (session, data_dir):
+    create_handoff(session, data_dir, handoff_id=..., task_slug="kb-initialize",
+                   role=..., handoff_seq=..., status="ready", frontmatter=fm,
+                   body_md=body, export_path="handoffs/YYYY/MM/kb-initialize/<file>.md",
+                   subject="kb-initialize", created_at=DATE, updated_at=DATE)
 ```
+
+(Requires `DATABASE_URL` and `KB_DATA_DIR` set in the env.)
 
 ## Phase 7: Log
 
-Write the setup note through the kb-mcp `create_operation_log` tool (the generated export may update `data/log.md`):
+Write the setup note through the kb-mcp `create_operation_log` tool — or, if the
+tools are not loaded in-session, `kb.service.ops.create_operation_log` via
+`session_scope()` (same in-process path). The generated export may update `data/log.md`:
 
 ```markdown
 
 ## YYYY-MM-DD (knowledgebase initialize)
 
-- **DB**: exists / created
+- **mode**: local bring-up / remote connect
+- **DB**: created / existing remote (pages=<n>, alembic head <rev>)
+- **tunnel**: <none / launchd com.local.kb-tunnel: 8765 + 15432>
 - **directories**: created <list> / already present
 - **tooling**: <lint command results>
 - **global skills**: symlinked <list> / skipped
+- **kb-mcp registration**: <runtimes> / skipped
 - **usage reports**: <selected modes>
-- **cron**: proposed / approved / skipped
+- **cron**: proposed / approved / skipped (remote owns pipeline)
 - **handoff**: handoffs/YYYY/MM/kb-initialize/<file>.md
 ```
 
 ## Done Criteria
 
-- Postgres `db` service is up (migrations applied) and the `kb-mcp` daemon is reachable on `:8765`.
+- Deployment mode was chosen with the user (Phase 0) before any DB bring-up.
+- The `kb-mcp` daemon is reachable on `:8765` and Postgres answers — whether via local
+  compose (migrations applied) or a remote connection (tunnel up if SSH-only).
 - Required directories and `data/log.md` exist.
 - CLI smoke tests ran or blockers are documented.
 - Global skills are symlinked into `~/.claude/skills/` or explicitly skipped.
 - kb-mcp is registered in the agent runtimes the user approved (or explicitly skipped).
 - Usage report mode is selected or explicitly skipped.
-- Cron entries are proposed or explicitly skipped.
-- Initialization handoff exists and passes lint.
+- Cron entries are proposed, registered, or explicitly skipped (skipped is the default for a remote client whose remote already runs the pipeline).
+- Initialization handoff exists (next free `handoff_seq`) and passes lint.
 - No existing `data/raw/` file was modified.
 
 ## Red Flags
 
 - About to write private data into the outer repo.
+- About to `docker compose up` before confirming the deployment mode (Phase 0).
+- About to register cron on a remote client whose remote already runs the pipeline (duplicate runs).
 - About to install crontab without explicit approval.
 - About to add auto-commit to daily/weekly/monthly memory wrappers.
 - About to rewrite existing user data to satisfy lint without instruction.
