@@ -7,7 +7,7 @@ Default behavior:
   (HuggingFace's digest for a paper date commonly arrives the next KST morning)
 - extracts paper titles + HuggingFace paper URLs
 - fetches each paper abstract from the arXiv API
-- submits one immutable raw source through the DB API
+- submits one immutable raw source through the kb.service layer
 - treats exported raw markdown, if present, as a duplicate hint
 
 This script intentionally performs INGEST only. The existing kb_update cron/job can

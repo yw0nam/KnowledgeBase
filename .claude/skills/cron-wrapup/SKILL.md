@@ -7,12 +7,12 @@ description: Use when running the nightly KB cron wrap-up — aggregating the pr
 
 ## DB-Canonical Override
 
-DB rows are the source of truth. Write the wrap-up summary, run handoff,
-operation log, and cron run log through the HTTP DB API with
-`Authorization: Bearer $KB_API_TOKEN`. Markdown under `data/` is generated
-export. If any older instruction below says to lint as a
+DB rows are the source of truth. Write the wrap-up summary and run handoff
+through the kb-mcp MCP tools (`upsert_page`, `create_handoff`), and write the
+operation log through the kb-mcp `create_operation_log` tool. Markdown under
+`data/` is generated export. If any older instruction below says to lint as a
 write gate or commit `data/`, ignore that instruction and use
-the DB API instead.
+the kb-mcp tools instead.
 
 ## Overview
 
@@ -76,10 +76,10 @@ The export tree below shows where the same data also lands as human-readable mar
 ```
 data/
 ├── wiki/summaries/{YYYY}/{MM}/            # generated export of the summary pages (read via psql, above)
-│   ├── {TARGET}-opencode-usage.md         # DB-backed (kb-opencode-daily-report posts to DB API)
+│   ├── {TARGET}-opencode-usage.md         # DB-backed (kb-opencode-daily-report writes via kb-mcp / service layer)
 │   ├── {TARGET}-claude-code-usage.md      # DB-backed
 │   ├── {TARGET}-hermes-usage.md           # DB-backed
-│   └── {TARGET}-memory.md                 # DB-backed (kb-memory-daily posts to DB API)
+│   └── {TARGET}-memory.md                 # DB-backed (kb-memory-daily writes via kb-mcp / service layer)
 ├── handoffs/{YYYY}/{MM}/
 │   ├── wiki-daily-build/{TARGET}_*_handoff_*.md   # run handoff for memory-daily
 │   └── wiki-promote/...                            # if wiki-promote ran (folder per wiki-approval)
@@ -97,7 +97,7 @@ data/
 ```
 
 > **Note:** `{TARGET}_kb-cron-wrapup.log` does not exist inside `data/` while the session is running.
-> The shell wrapper submits it through `POST /api/cron-runs` after the session exits.
+> The shell wrapper records the cron run via the `kb-submit-cron-run` CLI after the session exits (not your job).
 > Do not read or stage it during the session.
 
 `sources:` frontmatter paths are **relative to `data/`** (e.g. `wiki/summaries/...`, NOT `data/wiki/summaries/...`).
@@ -228,10 +228,10 @@ Read each input at most once. Never use lint as a discovery source, never re-ren
 
 ## DB Write Order
 
-1. Submit the wrap-up summary through `POST /api/pages`.
-2. Submit the handoff through `POST /api/handoffs`.
-3. Submit the operation note through `POST /api/operation-logs`.
-4. Confirm every response reports `export.status: success`.
+1. Write the wrap-up summary through the kb-mcp `upsert_page` tool (pass `type: summary`, structured `frontmatter`, `body_md` without the `---` fence, `slug`, and `export_path`).
+2. Write the handoff through the kb-mcp `create_handoff` tool (structured `frontmatter` + `body_md`).
+3. Write the operation note through the kb-mcp `create_operation_log` tool.
+4. Confirm every tool result reports `export.status == success`. If a result carries an `error`/`code` (`missing_args`, `not_found`, `conflict`, `lint_failed`, `export_failed`), fix the cause and retry that write.
 
 ## Common Lint Failures (preemptive fixes)
 
@@ -251,7 +251,7 @@ This skill specifies only:
 - **Role**: whoever the cron wrapper invokes (currently `opencode`).
 - **Content focus**: link to the produced wiki summary, list anomalies, set `status: ready` and a clear `## 9. Next handoff instructions` block for the next day or for the 09:00 digest.
 
-## Log Format (submit through `POST /api/operation-logs`)
+## Log Format (write through the kb-mcp `create_operation_log` tool)
 
 ```markdown
 
@@ -274,10 +274,10 @@ This skill specifies only:
 4. Read every `raw/ops/cron/{Y}/{M}/{TARGET}_*.log` except `{TARGET}_kb-cron-wrapup.log` — that file does not exist during the session (the shell wrapper writes and commits it after the session exits, so it is never available to read here)
    for non-zero exits, ERRORs, lock skips. Collect into Anomalies.
 5. Compute Status verdict (FAILED > DEGRADED > OK, first match wins).
-6. Fill `reference/templates/cron-wrapup-summary.md` and submit it through `POST /api/pages` with export path `wiki/summaries/{Y}/{M}/{TARGET}-cron-wrapup.md`.
-7. Write run handoff via `POST /api/handoffs` (subject = TARGET, role = invoker, status: ready).
-8. Append the operation note via `POST /api/operation-logs`.
-9. Confirm every response reports `export.status: success`.
+6. Fill `reference/templates/cron-wrapup-summary.md` and write it through the kb-mcp `upsert_page` tool (`type: summary`, structured `frontmatter` + `body_md`) with export path `wiki/summaries/{Y}/{M}/{TARGET}-cron-wrapup.md`.
+7. Write run handoff via the kb-mcp `create_handoff` tool (subject = TARGET, role = invoker, status: ready).
+8. Append the operation note via the kb-mcp `create_operation_log` tool.
+9. Confirm every tool result reports `export.status == success` (retry any write that returns an `error`/`code`).
 10. STOP. Do NOT commit or push `data/`; it is generated export.
 ```
 
@@ -304,10 +304,10 @@ If a required input is missing (e.g. memory page never wrote):
 
 - **One target per run.** Never extend scope implicitly to "and also the day before".
 - **Never edit raw files.** The wrap-up reads `data/raw/ops/cron/{Y}/{M}/{TARGET}_*.log` as read-only evidence, but must never modify their contents. Do not read other `data/raw/` subtrees.
-- **Replay caveat.** A wrapper rerunning for an already-written TARGET will append to a persisted log entry. If you must replay a job for a previously-run TARGET, use the DB API to manage the existing log entry before the wrapper runs.
+- **Replay caveat.** A wrapper rerunning for an already-written TARGET will append to a persisted log entry. If you must replay a job for a previously-run TARGET, use the kb-mcp tools to manage the existing log entry before the wrapper runs.
 - **Do not auto-promote** anything — wiki promotion is `wiki-approval`'s job.
 - **Do not use lint as analysis input** — run only the required final gate: `kb-lint all` once.
-- **Persist only through the DB API.** Never commit outer repo files or generated `data/` export.
+- **Persist only through the kb-mcp tools.** Never commit outer repo files or generated `data/` export.
 - **If blocked**, write the handoff with `status: ready` and the wrap-up with `Status: FAILED`, then exit non-zero.
 
 ## Red Flags — STOP and re-check
@@ -316,9 +316,9 @@ If a required input is missing (e.g. memory page never wrote):
 - About to inspect `git status` or prepare a data commit → STOP. DB rows are the source of truth.
 - About to re-render the full memory page into the wrap-up → STOP. Extract only concise insights and action items.
 - About to rename or reorder one of the seven H2 sections → STOP. The Slack digest will break.
-- About to create a wiki page by editing `data/wiki` directly → STOP. Submit `POST /api/pages`.
+- About to create a wiki page by editing `data/wiki` directly → STOP. Write through the kb-mcp `upsert_page` tool.
 - About to put `data/wiki/...` in `sources:` → drop the `data/` prefix
 - About to mark Status: OK while Anomalies list is non-empty → re-read the Status table; non-empty anomaly = DEGRADED at minimum
 - About to overwrite a prior cron-wrapup handoff with the same NN → bump NN, never overwrite handoffs
 - About to invoke this skill twice in one cron firing → STOP. One run, one wrap-up, one handoff.
-- About to run any `git commit` for generated KB data → STOP. Use the DB API.
+- About to run any `git commit` for generated KB data → STOP. Use the kb-mcp tools.

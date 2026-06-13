@@ -1,22 +1,21 @@
 ---
 name: handoff-document
-description: Use when writing or updating a DB-backed handoff document — covers export path, filename grammar, canonical body sections, and DB API submission.
+description: Use when writing or updating a DB-backed handoff document — covers export path, filename grammar, canonical body sections, and kb-mcp create_handoff submission.
 ---
 
 # handoff-document
 
 ## DB-Canonical Override
 
-Handoffs are DB rows. Submit handoffs through `POST /api/handoffs` with
-`Authorization: Bearer $KB_API_TOKEN`. Markdown under `data/handoffs/` is
-generated export. If any older instruction below says to write files or update README as a write gate,
-prefer the DB API.
+Handoffs are DB rows. Submit handoffs through the kb-mcp `create_handoff` tool.
+Markdown under `data/handoffs/` is generated export. If any older instruction below
+says to write files or update README as a write gate, prefer the kb-mcp tools.
 
 ## Overview
 
 Handoffs are this repo's operational state board. Every task that crosses an
-agent boundary, a session, or a workday writes a handoff row through the DB API.
-Markdown under `data/handoffs/` is generated export.
+agent boundary, a session, or a workday writes a handoff row through the kb-mcp
+`create_handoff` tool. Markdown under `data/handoffs/` is generated export.
 
 **Bundled reference (self-contained — do not consult docs/ at runtime):**
 - `reference/templates/task.md` — handoff template (copy this when starting a new handoff)
@@ -183,22 +182,22 @@ When you add a new handoff file, append a row to the index table. Bundled templa
 2. Determine role from your agent identity (claude_code|opencode|hermes)
 3. Find max <NN> for your role in the folder → use NN+1
 4. Pick subject (always required if role contains underscore; otherwise null)
-5. Build a JSON payload with frontmatter, body_md, and export_path
+5. Build the structured args for `create_handoff`: `frontmatter` as an object/dict (NOT yaml text), `body_md` as the body WITHOUT the `---` fence, plus `handoff_id`, `task_slug`, `role`, `handoff_seq` (integer), `status` (lifecycle value, e.g. draft/ready), and `export_path`
 6. Fill frontmatter with KST dates and matching handoff_id
 7. Fill all 10 body sections
 8. status: draft while writing; submit ready when done
-9. POST the row to `/api/handoffs` with Bearer auth
-10. Confirm the API response reports `export.status: success`
+9. Call the kb-mcp `create_handoff` tool with the structured args
+10. Confirm the tool result reports `export.status == success`; on an `error`/`code` result handle it (lint_failed → fix frontmatter/body and retry; conflict → handoff_id already exists)
 ```
 
 ## Validation
 
-```bash
-curl -fsS -X POST "$KB_API_URL/api/handoffs" \
-  -H "Authorization: Bearer $KB_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  --data @handoff.json
-```
+Call the kb-mcp `create_handoff` tool with the structured args
+(`handoff_id`, `task_slug`, `role`, `handoff_seq` integer, `status`, `frontmatter`
+object, `body_md` without the `---` fence, `export_path`; optional `subject`,
+`created_at`, `updated_at`). Lint runs inside the tool: a success result returns the
+handoff plus `"export": {"status": "success", "written": N}`; a failure returns
+`{"error": <msg>, "code": <missing_args|not_found|conflict|lint_failed|export_failed>, "detail": ...}`.
 
 Fix all ERRORs before considering the handoff complete. WARNs are negotiable — missing canonical sections, uncommon role values, on-disk files not in README index.
 
@@ -250,7 +249,7 @@ promotion: null
 …
 ```
 
-Then flip `status: draft` → `ready` when done. Validation is through DB API (POST /api/handoffs validates on submission). Append README row.
+Then flip `status: draft` → `ready` when done. Validation runs inside the kb-mcp `create_handoff` tool (returns `code: lint_failed` on failure). Append README row.
 
 ## Red Flags — stop and re-check
 

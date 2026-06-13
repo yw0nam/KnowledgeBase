@@ -665,7 +665,7 @@ def main(argv: list[str] | None = None) -> int:
     for key, path in outputs.items():
         print(f"- {key}: {path}")
     if args.lint:
-        print("lint: skipped; DB API validates and exports Markdown on write")
+        print("lint: skipped; service layer validates and exports Markdown on write")
     return 0
 
 
