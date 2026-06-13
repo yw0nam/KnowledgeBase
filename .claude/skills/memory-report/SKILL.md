@@ -1,6 +1,6 @@
 ---
 name: memory-report
-description: Use when running the daily, weekly, or monthly memory workflow — discovering period sources, writing summary + worthy wiki pages, writing the period handoff, and lint-clean uncommitted output. Covers raw discovery, period dispatch (daily/weekly/monthly), wiki page frontmatter, lint ordering, and canonical lint failures.
+description: Use when running the daily, weekly, or monthly memory workflow — discovering period sources, writing summary + worthy wiki pages through the kb-mcp tools, writing the period handoff, and lint-clean uncommitted output. Covers raw discovery, period dispatch (daily/weekly/monthly), wiki page frontmatter, lint ordering, and canonical lint failures.
 ---
 
 # memory-report
@@ -8,8 +8,11 @@ description: Use when running the daily, weekly, or monthly memory workflow — 
 ## DB-Canonical Override
 
 DB rows are the source of truth. Write summaries, pages, handoffs, and operation
-logs through the HTTP DB API with `Authorization: Bearer $KB_API_TOKEN`.
-**Reads** (source discovery in each Step 0) go directly to Postgres via `psql` —
+logs through the kb-mcp tools (`upsert_page`, `patch_page`, `create_handoff`,
+`create_operation_log`, `create_raw_source`) — these run inside the `opencode run`
+cron session where the kb-mcp MCP server is registered.
+**Reads** (source discovery in each Step 0) go directly to Postgres via `psql`
+(or the read-only kb-mcp `query_sql` tool) —
 schema + recipes in `docs/db_informations/state-db-schema-reference.md`.
 Markdown under `data/` is generated export. If any older instruction below says
 to write files, lint as a write gate, commit `data/`, or discover sources by
@@ -170,11 +173,18 @@ Body **must** contain `## Items` section with `- [ ] ...` task-list syntax. Lint
 
 ## DB Write Order
 
-1. Submit the summary page through `POST /api/pages`.
-2. Submit any new or updated evidence-derived wiki pages through `POST /api/pages`.
-3. Submit the run handoff through `POST /api/handoffs`.
-4. Submit the operation note through `POST /api/operation-logs`.
-5. Confirm every response reports `export.status: success`.
+The kb-mcp write tools take **structured args** — pass the `frontmatter` as an
+object (not YAML text) and `body_md` as the body without the `---` fence, plus
+`slug`, `type`, and `export_path`. The same applies to `create_handoff`.
+
+1. Submit the summary page through the kb-mcp `upsert_page` tool.
+2. Submit any new or updated evidence-derived wiki pages through the kb-mcp
+   `upsert_page` tool (use the kb-mcp `patch_page` tool for partial updates).
+3. Submit the run handoff through the kb-mcp `create_handoff` tool.
+4. Submit the operation note through the kb-mcp `create_operation_log` tool.
+5. Confirm each tool result reports `export.status == success`. On an
+   `error`/`code` result, handle it (`lint_failed` → fix and retry;
+   `conflict` → already exists).
 
 ## Common Lint Failures (preemptive fixes)
 
@@ -192,7 +202,7 @@ Body **must** contain `## Items` section with `- [ ] ...` task-list syntax. Lint
 
 Every run writes one handoff. Use the `handoff-document` skill for filename grammar, frontmatter, body sections, and lint. This skill only specifies the **task folder name** and **content focus** per period (see each period section).
 
-## Log Format (submit through `POST /api/operation-logs`, all periods)
+## Log Format (submit through the kb-mcp `create_operation_log` tool, all periods)
 
 ```markdown
 
@@ -210,7 +220,7 @@ Every run writes one handoff. Use the `handoff-document` skill for filename gram
 ## Workflow Discipline (all periods)
 
 - **One target per run.** Never extend scope implicitly to "and also yesterday/last week".
-- **Never edit raw files.** Raw sources are DB rows; add new raw evidence through `/api/raw-sources`.
+- **Never edit raw files.** Raw sources are DB rows; add new raw evidence through the kb-mcp `create_raw_source` tool.
 - **Do not auto-promote** wiki pages to `pending_for_approve` — that's the wiki-promote cron's job.
 - **Do not git commit.** Markdown is generated export from DB rows.
 - **If blocked**, write the handoff with `status: ready`, list the blocker in §8, and exit non-zero.
@@ -255,8 +265,8 @@ Never `find`/`ls`/`grep` under `data/` to discover sources — the export can la
    — leave uncertain items in handoff "Promotion Candidates"
 5. Mark prior daily handoff status: consumed IF its open items were handled
 6. Write new handoff via `handoff-document` under wiki-daily-build/
-7. Submit operation log through `POST /api/operation-logs`
-8. Confirm API export success for every write
+7. Submit operation log through the kb-mcp `create_operation_log` tool
+8. Confirm each kb-mcp tool result reports export.status == success; on an `error`/`code` result handle it (lint_failed → fix and retry; conflict → already exists)
 9. STOP. Do NOT git commit.
 ```
 
@@ -306,8 +316,8 @@ Sanity check: expect 7 daily memory summary rows. Document any missing day in th
 5. Mark consumed daily handoffs as status: consumed ONLY for items actually handled
 6. Write new handoff via `handoff-document` under wiki-weekly-build/
 7. Note monthly candidates in handoff §10 (which patterns are monthly-worthy)
-8. Submit operation log through `POST /api/operation-logs`
-9. Confirm API export success for every write
+8. Submit operation log through the kb-mcp `create_operation_log` tool
+9. Confirm each kb-mcp tool result reports export.status == success; on an `error`/`code` result handle it (lint_failed → fix and retry; conflict → already exists)
 10. STOP. Do NOT git commit.
 ```
 
@@ -364,8 +374,8 @@ uv run kb-lint wiki
 7. Mark consumed weekly handoffs as status: consumed for items handled
 8. Write monthly handoff via `handoff-document` under wiki-monthly-maintenance/
    — flag reusable automation as promotion: skill_candidate
-9. Submit operation log through `POST /api/operation-logs`
-10. Confirm API export success for every write
+9. Submit operation log through the kb-mcp `create_operation_log` tool
+10. Confirm each kb-mcp tool result reports export.status == success; on an `error`/`code` result handle it (lint_failed → fix and retry; conflict → already exists)
 11. STOP. Do NOT git commit.
 ```
 
@@ -381,9 +391,9 @@ uv run kb-lint wiki
 # Red Flags — STOP and re-check
 
 - About to `Read data/raw/<subdir>` for the 3rd time → use Step 0 find command for your period
-- About to create a wiki page but haven't checked `sources:` path is `data/`-relative → check before DB submit
+- About to create a wiki page but haven't checked `sources:` path is `data/`-relative → check before submitting via kb-mcp
 - About to write improvement page from `reference/templates/improvement.md` without filling the 6 extra fields → fill them or downgrade to entity/concept
-- About to lint exported markdown files instead of using DB API → STOP. Submit through the DB API.
+- About to lint exported markdown files instead of using the kb-mcp tools → STOP. Submit through the kb-mcp `upsert_page`/`create_handoff`/`create_operation_log` tools.
 - About to `git commit` → STOP. Markdown is generated export from DB rows.
 - Lint ERRORs on raw immutability → not your run's fault, log it in handoff §8 and PASS the run
 - About to mix periods in one run (e.g. "and also catch up last week's") → STOP. Run one period at a time

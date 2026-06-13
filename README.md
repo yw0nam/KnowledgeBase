@@ -11,7 +11,7 @@ KnowledgeBase separates code from data:
 
 ```
 KnowledgeBase/
-├── src/kb/                   CLI tools (lint, daily reports)
+├── src/kb/                   CLI tools, FastMCP server (kb-mcp), service layer
 ├── scripts/
 │   └── ingest-github.sh          GitHub source collection
 ├── .claude/skills/               Runtime workflow contracts + bundled templates
@@ -40,7 +40,7 @@ data/                             Generated Markdown export tree (Postgres is ca
 │   ├── improvements/             Open-ended improvements
 │   ├── checklists/               Operational checklists
 │   └── summaries/                Time/subject rollups
-├── rejected/                     Rejected wiki pages (created by DB API)
+├── rejected/                     Rejected wiki pages (created on reject via kb-mcp/service layer)
 └── log.md                        Operation record
 ```
 
@@ -83,7 +83,7 @@ kb-lint
 
 ### Commit
 
-Writes go through the DB API — Markdown files under `data/` are generated exports.
+Writes go through the `kb-mcp` MCP server tools (or the in-process `kb.service` layer used by cron CLIs) — Markdown files under `data/` are generated exports.
 Changes to the outer repo (code, docs, skills) are committed as usual.
 
 ## Files
@@ -94,7 +94,8 @@ Changes to the outer repo (code, docs, skills) are committed as usual.
 | `scripts/ingest-github.sh` | GitHub source collection |
 | `src/kb/cli/lint.py` | Wiki + handoff validation |
 | `src/kb/cli/db_ttl_sweep.py` | Auto-reject stale unprocessed pages |
-| `src/kb/web/` | DB-canonical API server (`kb-web`) |
+| `src/kb/mcp/` | DB-canonical MCP server (`kb-mcp`) |
+| `src/kb/service/` | In-process write path (lint → DB → export) |
 | `data/log.md` | Operation record |
 | `data/raw/` | Immutable sources |
 | `data/wiki/` | LLM-generated pages |

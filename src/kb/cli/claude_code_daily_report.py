@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from kb import REPO_ROOT as BASEDIR
-from kb.cli.db_api import submit_markdown_page, submit_metrics
+from kb.cli._submit import submit_page_and_metrics
 from kb.cli.usage_reports.render import _fmt, _int, _num, _pct
 
 DEFAULT_PROM = "http://127.0.0.1:9090"
@@ -612,14 +612,11 @@ def write_outputs(
     metrics["policy_compliance"] = _write_policy(report_path, report_path, report)
     report = render_daily_report(metrics)
     export_path = report_path.relative_to(base_dir / "data").as_posix()
-    submit_markdown_page(
-        markdown=report,
+    cc = metrics.get("claude_code", {})
+    submit_page_and_metrics(
+        report=report,
         export_path=export_path,
         slug=report_path.stem,
-        source="cli",
-    )
-    cc = metrics.get("claude_code", {})
-    submit_metrics(
         report_date=d,
         report_type="claude_code",
         metrics=metrics,
@@ -668,7 +665,7 @@ def main(argv: list[str] | None = None) -> int:
     for key, path in outputs.items():
         print(f"- {key}: {path}")
     if args.lint:
-        print("lint: skipped; DB API validates and exports Markdown on write")
+        print("lint: skipped; service layer validates and exports Markdown on write")
     return 0
 
 

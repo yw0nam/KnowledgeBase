@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from kb import REPO_ROOT as BASEDIR
-from kb.cli.db_api import submit_markdown_page, submit_metrics
+from kb.cli._submit import submit_page_and_metrics
 from kb.cli.usage_reports.collect import (
     DEFAULT_HERMES_DB,
     DEFERRED_METRICS,
@@ -168,14 +168,11 @@ def write_outputs(
     metrics["policy_compliance"] = _write_policy(report_path, report_path, report)
     report = render_report(metrics)
     export_path = report_path.relative_to(base_dir / "data").as_posix()
-    submit_markdown_page(
-        markdown=report,
+    he = metrics.get("hermes", {})
+    submit_page_and_metrics(
+        report=report,
         export_path=export_path,
         slug=report_path.stem,
-        source="cli",
-    )
-    he = metrics.get("hermes", {})
-    submit_metrics(
         report_date=d,
         report_type="hermes",
         metrics=metrics,
@@ -221,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     for key, path in outputs.items():
         print(f"- {key}: {path}")
     if args.lint:
-        print("lint: skipped; DB API validates and exports Markdown on write")
+        print("lint: skipped; service layer validates and exports Markdown on write")
     return 0
 
 

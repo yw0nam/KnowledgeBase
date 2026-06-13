@@ -23,7 +23,7 @@ kb-lint --strict # Treat warnings as errors
 
 ### kb-db-ttl-sweep
 
-Auto-reject stale unprocessed wiki pages via DB API.
+Auto-reject stale unprocessed wiki pages via the `kb.service` layer (in-process).
 
 ```bash
 kb-db-ttl-sweep           # Default 7-day window
@@ -63,50 +63,49 @@ Deterministic Claude Code daily usage report generator.
 kb-claude-code-daily-report --date YYYY-MM-DD [--dry-run] [--lint]
 ```
 
-### kb-web
+### kb-mcp
 
-FastAPI DB-canonical API server with Bearer auth.
+FastMCP DB-canonical server (streamable-http, binds `127.0.0.1:8765`, **no auth** — local only).
 
 ```bash
-kb-web [--reload] [--host HOST] [--port PORT]
+uv run kb-mcp --transport streamable-http [--host HOST] [--port PORT]
 ```
 
 Environment variables:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DATABASE_URL` | | Postgres URL (**required**) — also needed by host `kb-lint`, `alembic`, and `psql` reads |
+| `DATABASE_URL` | | Postgres URL (**required**) — also needed by `kb-lint`, `alembic`, and `psql` reads |
 | `KB_DATA_DIR` | `<repo>/data` | Markdown export tree (not the canonical store) |
-| `KB_WEB_HOST` | `127.0.0.1` | Bind address |
-| `KB_WEB_PORT` | `8765` | Listen port |
-| `KB_API_TOKEN` | | Bearer auth token (required for write endpoints) |
+| `KB_MCP_HOST` | `127.0.0.1` | Bind address |
+| `KB_MCP_PORT` | `8765` | Listen port |
 
-Postgres is the sole source of truth. **Reads** go directly to the DB
-(`psql "$DATABASE_URL" -c "…"`); see
+Postgres is the sole source of truth. **Reads** go via the `query_sql` / `get_schema` MCP tools
+or directly to the DB (`psql "$DATABASE_URL" -c "…"`); see
 [state DB schema reference](../db_informations/state-db-schema-reference.md).
-**Writes** go through the API endpoints below. Copy `.env.example` → `.env` to
-set `DATABASE_URL` for host-run tools.
+**Writes** go through the MCP tool calls below (each runs lint → DB write → Markdown export).
+Copy `.env.example` → `.env` to set `DATABASE_URL` for host-run tools.
 
-### API Endpoints (write)
+### MCP Tools
 
-All write endpoints require `Authorization: Bearer $KB_API_TOKEN`.
+Writes are also reachable in-process via the `kb.service` layer (used by the deterministic cron CLIs — no running server needed).
 
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/pages` | Create or replace a wiki page (upsert by slug; re-runs append an `update` revision) |
-| `PATCH` | `/api/pages/{slug}` | Partial update of a wiki page |
-| `POST` | `/api/pages/{slug}/promote` | not_processed → pending_for_approve |
-| `POST` | `/api/pages/{slug}/approve` | pending_for_approve → approved |
-| `POST` | `/api/pages/{slug}/reject` | Reject wiki page |
-| `POST` | `/api/pages/ttl-sweep` | Auto-reject stale unprocessed pages |
-| `POST` | `/api/raw-sources` | Create raw source |
-| `POST` | `/api/handoffs` | Create handoff document |
-| `POST` | `/api/operation-logs` | Create operation log |
-| `POST` | `/api/cron-runs` | Create cron run record |
-| `POST` | `/api/metrics` | Upsert a metrics record (one per `report_date` + `report_type`) |
-| `POST` | `/api/export/markdown` | Export all Markdown from DB |
-
-Swagger UI at `/api/docs`.
+| Tool | Purpose |
+|---|---|
+| `create_raw_source` | Ingest a raw source (insert + Markdown export) |
+| `upsert_page` | Create or update a wiki page (lint → DB → export) |
+| `patch_page` | Partially update an existing wiki page |
+| `promote_page` | Advance page: `not_processed` → `pending_for_approve` |
+| `approve_page` | Approve page: `pending_for_approve` → `approved` |
+| `reject_page` | Reject a wiki page (moves export path to `rejected/`) |
+| `ttl_sweep_pages` | Auto-reject stale unprocessed pages older than N days |
+| `create_handoff` | Create a handoff document (lint → DB → export) |
+| `create_operation_log` | Insert an operation log entry and export to `data/log.md` |
+| `create_cron_run` | Record a cron job execution |
+| `upsert_metrics` | Insert or update a metrics record for `(report_date, report_type)` |
+| `export_markdown` | Export all canonical DB rows to Markdown/JSON files |
+| `query_sql` | Run a read-only SELECT/WITH query against Postgres (row-capped) |
+| `get_schema` | Return table/column schema and example queries (no DB connection needed) |
 
 ## 3. Usage
 
@@ -125,9 +124,10 @@ Use this file to look up command names and flags. Use `.claude/skills/` for comm
 
 ### A. PatchNote
 
-- 2026-06-04: Postgres is the sole source of truth (SQLite removed). `DATABASE_URL` is required; reads use `psql` (see schema reference), writes use the API.
-- 2026-06-04: `POST /api/pages` and `POST /api/metrics` are now idempotent upserts (re-runs/backfills replace in place rather than 409 or duplicate); `kb-lint --strict` now actually fails on warnings.
+- 2026-06-12: Replaced `kb-web` (FastAPI + Bearer auth + HTTP endpoints) with `kb-mcp` (FastMCP, streamable-http, 127.0.0.1:8765, no auth). Replaced HTTP endpoint table with MCP tool reference table. Updated env vars (removed `KB_WEB_HOST/PORT`/`KB_API_TOKEN`; added `KB_MCP_HOST/PORT`). Added note that deterministic cron CLIs use the `kb.service` layer in-process without a running server.
+- 2026-06-04: Postgres is the sole source of truth (SQLite removed). `DATABASE_URL` is required; reads use `psql` (see schema reference), writes went through the API (replaced 2026-06-12 by `kb-mcp` tools).
+- 2026-06-04: `POST /api/pages` and `POST /api/metrics` were idempotent upserts; `kb-lint --strict` now actually fails on warnings.
 - 2026-06-04: DB-canonical rewrite — replaced kb-lint-wiki/kb-lint-handoff/kb-wiki-index/kb-wiki-review with kb-lint/kb-db-ttl-sweep/kb-submit-cron-run + daily report CLIs + kb-web + API endpoint reference.
-- 2026-05-20: Added `kb-web` command and `dev-web.sh` for the local FastAPI + Vite review console.
+- 2026-05-20: Added `kb-web` command and `dev-web.sh` for the local FastAPI + Vite review console — replaced 2026-06-12.
 - 2026-05-19: Added `kb-wiki-review` CLI (5 subcommands) for `review_status` lifecycle.
 - 2026-05-18: Added kb-wiki-index, removed kb-mcp.

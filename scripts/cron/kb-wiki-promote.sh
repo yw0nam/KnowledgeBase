@@ -22,7 +22,7 @@ RUN_EXIT=0
       --model "$KB_OPENCODE_MODEL" \
       --dangerously-skip-permissions \
       --dir '$KB_ROOT' \
-      'Run the KnowledgeBase wiki promotion workflow for $TARGET_DATE. Import and follow .claude/skills/wiki-approval/SKILL.md as the runtime contract. Import .claude/skills/wiki-authoring/SKILL.md only if page metadata/content fixes are needed before promotion. Do not read docs as runtime instructions. Promote worthy not_processed pages through the DB API, leave borderline pages for TTL, write the wiki-promote handoff and operation log through the DB API. Do not run git, commit data/, or push.'
+      'Run the KnowledgeBase wiki promotion workflow for $TARGET_DATE. Import and follow .claude/skills/wiki-approval/SKILL.md as the runtime contract. Import .claude/skills/wiki-authoring/SKILL.md only if page metadata/content fixes are needed before promotion. Do not read docs as runtime instructions. Promote worthy not_processed pages through the kb-mcp tools, leave borderline pages for TTL, write the wiki-promote handoff and operation log through the kb-mcp tools. Do not run git, commit data/, or push.'
   "
   status=$?
   set -e

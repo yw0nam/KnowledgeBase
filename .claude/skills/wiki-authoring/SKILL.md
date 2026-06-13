@@ -1,6 +1,6 @@
 ---
 name: wiki-authoring
-description: Use when creating or updating source-backed DB wiki pages — selecting entity/concept/decision/question/improvement/checklist/summary types, applying frontmatter schemas, validating wikilinks, and submitting writes through the DB API.
+description: Use when creating or updating source-backed DB wiki pages — selecting entity/concept/decision/question/improvement/checklist/summary types, applying frontmatter schemas, validating wikilinks, and submitting writes through kb-mcp tools.
 ---
 
 # Wiki Authoring
@@ -45,9 +45,9 @@ Daily summaries do not need a separate template; use the summary schema below.
 2. Choose wiki type and path
 3. Copy or follow the matching template
 4. Fill frontmatter and body from sources only
-5. Submit `POST /api/pages` or `PATCH /api/pages/{slug}` with Bearer auth
-6. Submit `POST /api/operation-logs` for the operation note
-7. Confirm the API response reports `export.status: success`
+5. Call the kb-mcp `upsert_page` tool (create or update by slug) or `patch_page` tool (partial update)
+6. Call the kb-mcp `create_operation_log` tool for the operation note
+7. Confirm the tool result reports `export.status == success`; on an `error`/`code` result handle it (lint_failed → fix frontmatter/body and retry; conflict → already exists; not_found → wrong slug)
 ```
 
 ## Type And Path
@@ -180,19 +180,18 @@ Create an atomic wiki page only when the content has durable future value. Other
 
 ## DB Write Contract
 
-Use the local API unless the environment specifies another base URL:
+Writes go through kb-mcp tools (registered in the `opencode run` session). For a new page or a full rewrite, call the kb-mcp `upsert_page` tool with **structured** args:
 
-```bash
-KB_API_URL="${KB_API_URL:-http://127.0.0.1:8765}"
-curl -fsS -X POST "$KB_API_URL/api/pages" \
-  -H "Authorization: Bearer $KB_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  --data @page.json
-```
+- `frontmatter` — an object/dict (NOT yaml text)
+- `body_md` — the body **without** the `---` fence
+- `slug`, `type`, `export_path`
 
-`page.json` must include `slug`, `type`, `frontmatter`, `body_md`, and
-`export_path`. The API appends a revision and exports Markdown immediately.
+Optional: `title`, `category`, `review_status`, `origin`, `created_at`, `updated_at`, `source`. For a partial update to an existing page, call the kb-mcp `patch_page` tool with `slug` plus only the fields to change (`title`, `body_md`, `frontmatter`, `category`, `review_status`, `source`, `note`).
+
+The tool appends a revision and exports Markdown immediately.
 Do not manually regenerate `INDEX.md`; it is generated export from the DB.
+
+Reads stay on `psql "$DATABASE_URL" -tAc "<SELECT ...>"` (or the read-only kb-mcp `query_sql` tool).
 
 Common fixes:
 
@@ -207,7 +206,7 @@ Common fixes:
 
 ## Log Format
 
-Submit to `POST /api/operation-logs`:
+Call the kb-mcp `create_operation_log` tool with this `body_md`:
 
 ```markdown
 
@@ -224,4 +223,4 @@ Submit to `POST /api/operation-logs`:
 - About to author from memory without a cited source path.
 - About to create a wikilink to a page that does not exist.
 - About to write an improvement without `kind`, `observed_at`, `domain`, `severity`, `issue_status`, and `related`.
-- About to lint before DB write — DB API validates on submission; INDEX.md is regenerated automatically.
+- About to lint before DB write — the kb-mcp `upsert_page` tool validates on submission (returns `code: lint_failed` on failure); INDEX.md is regenerated automatically.

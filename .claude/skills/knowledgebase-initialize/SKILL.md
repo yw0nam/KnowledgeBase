@@ -5,7 +5,7 @@ description: Use on a fresh clone, new machine, or new profile to create or repa
 
 # KnowledgeBase Initialize
 
-> **DB-Canonical Override**: The KnowledgeBase is DB-backed. `data/` is a generated Markdown export — do NOT create a nested `data/.git` repo or set up any Git sync for it. Bring up the Postgres `db` service (compose) and run migrations, and verify the API is reachable.
+> **DB-Canonical Override**: The KnowledgeBase is DB-backed. `data/` is a generated Markdown export — do NOT create a nested `data/.git` repo or set up any Git sync for it. Bring up the Postgres `db` service (compose) and run migrations, and verify the `kb-mcp` server entrypoint resolves and Postgres is reachable.
 
 Use this skill as the runtime contract for repository setup. Do not load `docs/` during execution; docs are design reference only.
 
@@ -17,7 +17,7 @@ Use this skill as the runtime contract for repository setup. Do not load `docs/`
 - Preserve existing `data/` contents; create only missing directories/files.
 - Do not install or edit crontab until the user approves the exact entries.
 - Memory cron jobs run lint and leave changes uncommitted for manual review.
-- Wiki promotion writes through the DB API; it does not commit or push from the AI session.
+- Wiki promotion writes through the kb-mcp tools; it does not commit or push from the AI session.
 - Prefer relative paths from repo root. Do not hard-code machine-specific absolute paths except when showing final crontab examples.
 
 ## Required Data Layout
@@ -89,8 +89,8 @@ set -a; . ./.env; set +a
 uv run alembic upgrade head
 ```
 
-`kb-web` (the `api` service) also runs `alembic upgrade head` on startup, so
-`docker compose up -d` is sufficient in deployment. `data/` remains as the
+In Docker deployment the `kb-mcp` service also runs `alembic upgrade head` on
+startup, so `docker compose up -d` is sufficient. `data/` remains as the
 Markdown export tree (`KB_DATA_DIR`), not the canonical store.
 
 Create missing required directories under `data/` (export tree only).
@@ -110,15 +110,18 @@ Do not create raw source files during initialization.
 Run from repo root:
 
 ```bash
-# Direct Postgres read smoke test (reads need no API):
+# Direct Postgres read smoke test (reads go straight to psql):
 psql "${DATABASE_URL/+psycopg/}" -tAc "SELECT count(*) FROM pages;"
 uv run kb-lint --help
 ```
 
-Verify the DB API is reachable (writes go through it):
+Writes go through the kb-mcp tools / the `kb.service` layer; Postgres is the
+canonical store. Verify the kb-mcp server entrypoint resolves and the DB is
+reachable:
 
 ```bash
-curl -fsS http://127.0.0.1:8765/api/docs
+uv run kb-mcp --help
+psql "${DATABASE_URL/+psycopg/}" -tAc "select 1"
 ```
 
 Fresh empty data may produce zero rows. Structural errors are blockers; existing user-data lint errors must be reported rather than auto-rewritten.
@@ -193,7 +196,9 @@ Wrapper prompt policy:
 - Wiki promotion wrapper imports `.claude/skills/wiki-approval/SKILL.md`.
 - Cron wrap-up wrapper imports `.claude/skills/cron-wrapup/SKILL.md` and writes a Slack-digest-stable `wiki/summaries/.../{date}-cron-wrapup.md` plus run handoff.
 - Usage setup/import prompts use `.claude/skills/usage-report-setup/SKILL.md`.
-- TTL sweep runs `uv run kb-db-ttl-sweep --days 7` so status changes go through the DB API.
+- TTL sweep runs `uv run kb-db-ttl-sweep --days 7`, applying status changes in-process through the `kb.service` layer.
+
+LLM cron jobs (memory-*, wiki-promote, cron-wrapup) reach the write surface via kb-mcp tools, so the `kb-mcp` server must be registered in opencode as a local stdio MCP. In `~/.config/opencode/opencode.json` under `mcp`, add an entry with type `local`, command `["uv","run","--directory","<KB_ROOT>","kb-mcp","--transport","stdio"]`, and `environment` carrying `DATABASE_URL` and `KB_DATA_DIR`. Deterministic jobs need no server (they call `kb.service` in-process).
 
 Only after approval:
 
@@ -250,12 +255,12 @@ Include:
 Run:
 
 ```bash
-# Handoff validation is through DB API (POST /api/handoffs validates on submission)
+# Handoff validation runs inside the kb-mcp create_handoff tool (returns code: lint_failed on failure)
 ```
 
 ## Phase 7: Log
 
-Submit the setup note through `POST /api/operation-logs` (the generated export may update `data/log.md`):
+Write the setup note through the kb-mcp `create_operation_log` tool (the generated export may update `data/log.md`):
 
 ```markdown
 
@@ -272,7 +277,7 @@ Submit the setup note through `POST /api/operation-logs` (the generated export m
 
 ## Done Criteria
 
-- Postgres `db` service is up (migrations applied) and the DB API is reachable.
+- Postgres `db` service is up (migrations applied) and the `kb-mcp` server entrypoint resolves.
 - Required directories and `data/log.md` exist.
 - CLI smoke tests ran or blockers are documented.
 - Global skills are symlinked into `~/.claude/skills/` or explicitly skipped.

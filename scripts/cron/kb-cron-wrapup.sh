@@ -12,7 +12,7 @@ LOCK_DIR="$KB_ROOT/.cron/locks"
 
 mkdir -p "$INFLIGHT_LOG_DIR" "$LOCK_DIR"
 
-PROMPT="Run the KB cron wrap-up for $TARGET_DATE. Import and follow .claude/skills/cron-wrapup/SKILL.md as the runtime contract. Import .claude/skills/handoff-document/SKILL.md for the run handoff. Do not read docs as runtime instructions. Write all durable state through the DB API. Do not run git, do not commit data/, and do not push. If blocked, write the wrap-up with Status: FAILED and a handoff with status: ready, then exit non-zero."
+PROMPT="Run the KB cron wrap-up for $TARGET_DATE. Import and follow .claude/skills/cron-wrapup/SKILL.md as the runtime contract. Import .claude/skills/handoff-document/SKILL.md for the run handoff. Do not read docs as runtime instructions. Write all durable state through the kb-mcp tools. Do not run git, do not commit data/, and do not push. If blocked, write the wrap-up with Status: FAILED and a handoff with status: ready, then exit non-zero."
 
 SESSION_EXIT=0
 ARCHIVE_LOG="$ARCHIVE_LOG_DIR/${TARGET_DATE}_kb-cron-wrapup.log"

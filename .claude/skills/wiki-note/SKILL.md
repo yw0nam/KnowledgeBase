@@ -7,10 +7,12 @@ description: Use when you (a human) want to capture a first-party note, insight,
 
 ## DB-Canonical Override
 
-Wiki notes are DB pages. Submit first-party notes through `POST /api/pages` with
-`Authorization: Bearer $KB_API_TOKEN`. Markdown under `data/wiki/` is generated
-export. If any older instruction below says to write files or lint as a write gate,
-prefer the DB API.
+Wiki notes are DB pages. Submit first-party notes through the kb-mcp `upsert_page`
+tool. Markdown under `data/wiki/` is generated export. If any older instruction below
+says to write files or lint as a write gate, prefer the kb-mcp tools.
+
+**Prerequisite:** the `kb-mcp` MCP server must be registered in your client (e.g. your
+opencode / Claude Code MCP config) so its tools are available.
 
 ## Overview
 
@@ -77,10 +79,10 @@ Use a stable ASCII kebab-case slug. To keep KB-specific notes grouped, a subfold
 fine (e.g. `data/wiki/concepts/knowledgebase/<stem>.md`) — DB-backed lint finds nested
 pages and does not require concepts to be flat.
 
-## Step 3 — Write the page through the DB API
+## Step 3 — Write the page through the kb-mcp upsert_page tool
 
 Use the matching `reference/templates/<type>.md` as the schema reference and submit
-the final page through `POST /api/pages`.
+the final page through the kb-mcp `upsert_page` tool with structured args.
 Every template already carries the first-party frontmatter — set the dates and `tags`,
 keep the rest:
 
@@ -113,18 +115,29 @@ Rules:
 
 ## Step 4 — Submit + verify export
 
-```bash
-curl -fsS -X POST "$KB_API_URL/api/pages" \
-  -H "Authorization: Bearer $KB_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  --data @page.json
-```
+Call the kb-mcp `upsert_page` tool with structured args — pass the frontmatter as an
+object/dict (not YAML text) and the body **without** the `---` fence:
 
-The API appends the revision and exports Markdown immediately.
+- `slug` — the stable kebab-case stem from Step 2
+- `type` — `concept` | `decision` | `entity` | `checklist` | `improvement`
+- `export_path` — the path from the Step 2 table (e.g. `data/wiki/concepts/<stem>.md`)
+- `frontmatter` — the object from Step 3 (`origin: "authored"`, `sources: []`, dates,
+  `tags`, and any type-specific fields)
+- `body_md` — the page body with no frontmatter fence
+- `origin` — `"authored"` (first-party authorship; keep it — it's why `sources` can be empty)
+- `review_status` — `"approved"` if born approved, else `"not_processed"`
+
+If you author the page born approved, you may instead pass `review_status="not_processed"`
+and then call the kb-mcp `approve_page` tool with the same `slug` — keep whichever
+lifecycle you chose in Step 3.
+
+On success the tool returns the page plus `"export": {"status": "success", "written": N}`,
+confirming Markdown was exported immediately. On failure it returns
+`{"error": ..., "code": ...}` (e.g. `lint_failed`, `conflict`) — fix and resubmit.
 
 ## Step 5 — Log (optional)
 
-Submit to `POST /api/operation-logs`:
+Write through the kb-mcp `create_operation_log` tool:
 
 ```markdown
 

@@ -18,7 +18,7 @@ flock -n "$LOCK_DIR/daily.lock" bash -c "
     --model "$KB_OPENCODE_MODEL" \
     --dangerously-skip-permissions \
     --dir '$KB_ROOT' \
-    'Run the daily memory workflow for $TARGET_DATE. Import and follow .claude/skills/memory-report/SKILL.md §Daily as the runtime contract. Import .claude/skills/wiki-authoring/SKILL.md for any wiki page edits and .claude/skills/handoff-document/SKILL.md for the handoff. Do not read docs as runtime instructions. Read canonical state from Postgres and write durable state through the DB API only. Do not run git or edit data/ as source of truth. If blocked, write a handoff with status: ready and submit an operation log through the DB API before exiting.'
+    'Run the daily memory workflow for $TARGET_DATE. Import and follow .claude/skills/memory-report/SKILL.md §Daily as the runtime contract. Import .claude/skills/wiki-authoring/SKILL.md for any wiki page edits and .claude/skills/handoff-document/SKILL.md for the handoff. Do not read docs as runtime instructions. Read canonical state from Postgres and write durable state through the kb-mcp tools only. Do not run git or edit data/ as source of truth. If blocked, write a handoff with status: ready and submit an operation log through the kb-mcp create_operation_log tool before exiting.'
 " >> "$LOG_FILE" 2>&1 || RUN_EXIT=$?
 kb_finish_cron_run "kb-memory-daily" "$TARGET_DATE" "$RUN_EXIT" "$LOG_FILE"
 exit $?

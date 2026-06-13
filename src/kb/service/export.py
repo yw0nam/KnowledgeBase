@@ -18,7 +18,7 @@ from kb.db.models import (
     Page,
     RawSource,
 )
-from kb.web._time import now_iso_kst
+from kb.service._time import now_iso_kst
 
 
 def _frontmatter_markdown(frontmatter: dict, body: str) -> str:

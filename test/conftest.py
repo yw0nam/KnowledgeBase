@@ -94,11 +94,10 @@ def database_url(pg_template: str, monkeypatch: pytest.MonkeyPatch) -> str:
 
 @pytest.fixture()
 def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Markdown export tree + API token env (no longer the canonical store)."""
+    """Markdown export tree root (no longer the canonical store)."""
     d = tmp_path / "data"
     d.mkdir()
     monkeypatch.setenv("KB_DATA_DIR", str(d))
-    monkeypatch.setenv("KB_API_TOKEN", "test-token")
     return d
 
 

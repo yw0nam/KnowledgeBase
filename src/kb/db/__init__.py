@@ -1,6 +1,6 @@
 """State DB foundation.
 
-Exposes the engine factory, session factory, and FastAPI dependency.
+Exposes the engine factory and session factory.
 Postgres is the sole source of truth; the SQLAlchemy URL comes from
 ``DATABASE_URL`` and is required (there is no SQLite fallback).
 """
@@ -8,9 +8,7 @@ Postgres is the sole source of truth; the SQLAlchemy URL comes from
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
 
-from fastapi import Request
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -44,7 +42,6 @@ __all__ = [
     "db_url",
     "make_engine",
     "make_session_factory",
-    "get_session",
 ]
 
 
@@ -70,13 +67,3 @@ def make_engine() -> Engine:
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     """Return a ``sessionmaker`` bound to ``engine``."""
     return sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-
-
-def get_session(request: Request) -> Iterator[Session]:
-    """FastAPI dependency yielding a session from ``app.state.session_factory``."""
-    session_factory: sessionmaker[Session] = request.app.state.session_factory
-    session = session_factory()
-    try:
-        yield session
-    finally:
-        session.close()

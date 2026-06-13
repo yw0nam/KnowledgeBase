@@ -15,17 +15,16 @@ services:
     ports:
       - "15432:5432"
 
-  api:
+  mcp:
     build:
       context: .
       dockerfile: Dockerfile
     user: "${COMPOSE_UID:-0}:${COMPOSE_GID:-0}"
     environment:
       DATABASE_URL: postgresql+psycopg://knowledgebase:knowledgebase@db:5432/knowledgebase
-      KB_API_TOKEN: knowledgebase-dev-token
       KB_DATA_DIR: /data
-      KB_WEB_HOST: 0.0.0.0
-      KB_WEB_PORT: 8765
+      KB_MCP_HOST: 0.0.0.0
+      KB_MCP_PORT: 8765
     depends_on:
       db:
         condition: service_healthy

@@ -18,4 +18,4 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8765
 
-CMD ["/app/.venv/bin/kb-web", "--host", "0.0.0.0", "--port", "8765"]
+CMD ["/app/.venv/bin/kb-mcp", "--transport", "streamable-http", "--host", "0.0.0.0", "--port", "8765"]

@@ -1,9 +1,10 @@
 """CRUD helpers for the ``dispatches`` table.
 
-Function-style — the route layer composes these directly. Exceptions
-raised here map to HTTP status codes in ``kb.web.routes.dispatches``;
-keeping the mapping out of this module lets CLI callers (e.g. the
-backfill) use the same helpers without depending on FastAPI.
+Function-style — callers compose these directly. Exceptions are typed
+domain errors (``DispatchNotFound``, ``TransitionViolation``, etc.) that
+callers translate to the appropriate response; keeping the mapping out of
+this module lets CLI and MCP callers use the same helpers without
+depending on any transport layer.
 """
 
 from __future__ import annotations

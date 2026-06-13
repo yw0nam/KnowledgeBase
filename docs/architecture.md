@@ -55,10 +55,10 @@ Six of the seven types (`entity`, `concept`, `decision`, `improvement`, `checkli
 The DB-canonical flow is:
 
 ```text
-data/raw/ -> FastAPI API -> Postgres write -> data/wiki/ (Markdown export) -> data/log.md -> lint
+data/raw/ -> kb-mcp tools / service layer -> Postgres write -> data/wiki/ (Markdown export) -> data/log.md -> lint
 ```
 
-Writes go through the DB API; Markdown files under `data/wiki/` are generated exports
+Writes go through the `kb-mcp` MCP server tools or the in-process `kb.service` layer (used by cron CLIs); Markdown files under `data/wiki/` are generated exports
 exported from Postgres. Handoffs sit beside the flow as the operational state
 board. They record what was processed, what is blocked, and what the next agent should do.
 
@@ -66,16 +66,17 @@ Postgres (reached via `DATABASE_URL`) is the canonical memory store — it owns 
 frontmatter, raw sources, citations, and revisions. Markdown under `data/` is generated
 from the DB. See `docs/db-canonical.md`.
 
-### DB-Canonical API Server
+### DB-Canonical MCP Server + Service Layer
 
-A local-only FastAPI server that serves wiki pages and review operations from
-Postgres via Bearer-auth REST API. Markdown files under `data/wiki/`
-are generated exports, not read surfaces.
+A local-only FastMCP server (streamable-http, `127.0.0.1:8765`, no auth) that exposes
+write operations as MCP tools. All writes follow the same invariant: lint → DB write → Markdown export.
+Reads go directly to Postgres via the `query_sql` MCP tool or `psql`; Markdown under `data/wiki/`
+is a generated export, not a read surface.
 
 | Component | Path | Role |
 |---|---|---|
-| FastAPI server | `src/kb/web/` | REST API over Postgres; write-gated endpoints (queue, pages, dashboard, promote/approve/reject) |
-| Dev script | `scripts/dev-web.sh` | Start FastAPI (`:8765`) |
+| `kb-mcp` FastMCP server | `src/kb/mcp/` | 12 write tools + `query_sql`/`get_schema` read tools over Postgres |
+| Service layer | `src/kb/service/` | In-process write path (lint → DB → export); called by cron CLIs without a running server |
 
 ## 3. Usage
 
@@ -97,10 +98,11 @@ When deciding where information belongs:
 
 ### A. PatchNote
 
-- 2026-06-04: Postgres is now the sole source of truth; SQLite (`state.db`) removed. Reads go directly to Postgres via `psql`; writes go through the FastAPI API. `data/` is a generated Markdown export, not canonical.
+- 2026-06-12: Replaced the FastAPI write API (`kb-web`) with the `kb-mcp` FastMCP server (`src/kb/mcp/`, streamable-http, 127.0.0.1:8765, no auth) plus an in-process `src/kb/service/` layer. Reads via `query_sql`/`get_schema` MCP tools or `psql`. Updated data-flow, components table, and PatchNotes accordingly.
+- 2026-06-04: Postgres is now the sole source of truth; SQLite (`state.db`) removed. Reads go directly to Postgres via `psql`; writes went through the FastAPI API (replaced 2026-06-12 by `kb-mcp`). `data/` is a generated Markdown export, not canonical.
 - 2026-06-04: Added DB-canonical target direction; Markdown/Git flow is now documented as legacy/current rather than the end state.
 - 2026-05-20: Removed workflow docs from the active documentation map; project skills are the runtime workflow layer.
 - 2026-05-20: Reframed workflow docs as design references and `.claude/skills/` as runtime operating instructions.
-- 2026-05-20: Added Web Review Console section (FastAPI + React SPA, `src/kb/web/`, `frontend/`, `scripts/dev-web.sh`).
+- 2026-05-20: Added Web Review Console section (FastAPI + React SPA, `src/kb/web/`, `frontend/`, `scripts/dev-web.sh`) — replaced 2026-06-12.
 - 2026-05-19: Added `data/rejected/` memory layer; noted `review_status` on six in-scope wiki types.
 - 2026-05-18: Initial architecture overview after docs restructuring.
